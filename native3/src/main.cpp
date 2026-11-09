@@ -112,6 +112,7 @@ static void idleInit(Csm::CubismModel* model) {
     gIdle.iAx = model->GetParameterIndex(m->GetId("ParamAngleX"));
     gIdle.iAz = model->GetParameterIndex(m->GetId("ParamAngleZ"));
     gIdle.iBz = model->GetParameterIndex(m->GetId("ParamBodyAngleZ"));
+    srand(static_cast<unsigned>(time(nullptr)));   // 不种的话每次启动抽到同一串数
     gIdle.ready = true;
     log_("[main] 待机参数索引 breath=%d angleX=%d angleZ=%d bodyZ=%d",
          gIdle.iBreath, gIdle.iAx, gIdle.iAz, gIdle.iBz);
@@ -135,10 +136,21 @@ static void idleTick(Csm::CubismModel* model, double now) {
     const float az = gIdle.fAz + (gIdle.tAz - gIdle.fAz) * s;
     const float bz = gIdle.fBz + (gIdle.tBz - gIdle.fBz) * s;
     const float br = 0.5f + 0.5f * sinf(static_cast<float>(now * 2.0 * 3.14159265358979 / 4.2));
-    if (gIdle.iBreath >= 0) model->AddParameterValue(gIdle.iBreath, br, 1.0f);
+    // 呼吸用 Set 不用 Add：ParamBreath 的默认值是 1.0，Add 上去直接顶到上限（实测一直 1.000）
+    if (gIdle.iBreath >= 0) model->SetParameterValue(gIdle.iBreath, br, 1.0f);
     if (gIdle.iAx >= 0)     model->AddParameterValue(gIdle.iAx, ax, 1.0f);
     if (gIdle.iAz >= 0)     model->AddParameterValue(gIdle.iAz, az, 1.0f);
     if (gIdle.iBz >= 0)     model->AddParameterValue(gIdle.iBz, bz, 1.0f);
+    // 诊断：每 2 秒打一行，**在 Add 之后**读（在之前读是上一帧 Load 重置后的 0，会骗人）
+    static double lastLog = -1e9;
+    if (now - lastLog > 2.0) {
+        lastLog = now;
+        log_("[idle] 算 ax=%.2f | 写入后模型 ax=%.2f az=%.2f br=%.3f",
+             ax,
+             gIdle.iAx >= 0 ? model->GetParameterValue(gIdle.iAx) : -999.0f,
+             gIdle.iAz >= 0 ? model->GetParameterValue(gIdle.iAz) : -999.0f,
+             gIdle.iBreath >= 0 ? model->GetParameterValue(gIdle.iBreath) : -999.0f);
+    }
 }
 
 int main() {
