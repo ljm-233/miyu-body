@@ -384,17 +384,22 @@ int main() {
     // ⚠️ 绝对不能加载：脱捕.motion3.json / 举手切默认手 / 狗尾草* / 竖手指* ——
     //    它们是给另一版模型做服装/体型切换的，播了会让人散架。
     const bool kNoIdle = std::getenv("MIYU_NO_IDLE") != nullptr;
-    // 2026-11-09 20:2x：默认**不播** IDLE.motion3 —— 拆开看过，它驱动的是电击/冒汗/
-    // 泪花/星星闪烁/光1~4 那套表情特效，不是站立微摆。想回退去播它就设 MIYU_IDLE_MOTION=1。
-    const bool kUseIdleMotion = std::getenv("MIYU_IDLE_MOTION") != nullptr;
+    // 2026-11-09 21:3x：默认播 Animation/脱捕.motion3 —— 13.15s、loop=true，
+    // 驱动 AngleX/Y/Z + PositionX/Y/Z + 手臂四关节 + 眼睛嘴 + 呆滞/光效，
+    // 是这整套素材里唯一一段「完整的动作」。之前把它当「会散架」是误判。
+    //   MIYU_IDLE_SINE=1   回退到我手写的正弦微动
+    //   MIYU_IDLE_MOTION=1 改播 IDLE.motion3（那是电击/冒汗/泪花的特效，不是待机）
+    const bool kUseSine = std::getenv("MIYU_IDLE_SINE") != nullptr;
+    const bool kUseLegacyIdle = std::getenv("MIYU_IDLE_MOTION") != nullptr;
     Csm::CubismMotionManager* motionManager = nullptr;
     Csm::CubismMotion* idleMotion = nullptr;
     if (kNoIdle) {
         log_("[main] 待机：MIYU_NO_IDLE 已设 —— 关");
-    } else if (!kUseIdleMotion) {
-        log_("[main] 待机：走自己写的微动（呼吸4.2s / 头±7° / 歪头±3.5° / 重心±2.5，3~8s 换一次姿态）");
+    } else if (kUseSine) {
+        log_("[main] 待机：手写正弦微动（MIYU_IDLE_SINE）");
     } else {
-        const std::string ip = std::string(kModelDir) + "Animation/IDLE.motion3.json";
+        const std::string ip = std::string(kModelDir) +
+            (kUseLegacyIdle ? "Animation/IDLE.motion3.json" : "Animation/脱捕.motion3.json");
         std::vector<char> ib = slurp(ip);
         if (ib.empty()) {
             log_("[main] 待机动作：读不到 %s", ip.c_str());
@@ -415,7 +420,7 @@ int main() {
             motionManager = new Csm::CubismMotionManager();
             const Csm::CubismMotionQueueEntryHandle h =
                 motionManager->StartMotionPriority(idleMotion, false /* autoDelete */, 1 /* priority */);
-            log_("[main] 待机动作：IDLE.motion3.json %zu 字节，时长 %.3fs，loop=1，句柄=%p",
+            log_("[main] 待机动作：%s %zu 字节，时长 %.3fs，loop=1，句柄=%p", ip.c_str(),
                  ib.size(), idleMotion->GetLoopDuration(), h);
         }
     }
@@ -503,7 +508,7 @@ int main() {
         // 参数算进顶点；反了就是不生效，而且不报错）。
         model->LoadParameters();
         if (motionManager) motionManager->UpdateMotion(model, dt);
-        else if (!kNoIdle) idleTick(model, now);   // 没有 motion 时走自己写的待机微动
+        else if (kUseSine) idleTick(model, now);   // 只有 MIYU_IDLE_SINE=1 才走手写正弦
         // 视线：夹在待机微动之后（叠在它上面，不覆盖）、眨眼之前。
         // 用逻辑尺寸归一化 —— platPointer 给的是 surface-local 逻辑 px，不是物理 px。
         int lw = 0, lh = 0;
