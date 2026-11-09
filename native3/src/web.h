@@ -38,6 +38,12 @@ struct Settings {
     int         fps    = 60;        // 15/30/60 帧率上限（省电）
     bool        voice  = false;     // 说话时出声（播 voice/*.wav，没有就静默）
     float       vol    = 0.8f;      // 0–1   音量（pw-play --volume）
+
+    // ── 第十七节新增：抗锯齿 + 后处理三件 ────────────────────────────
+    std::string ssaa   = "2x";      // off/2x/3x  离屏 FBO 倍率（抗锯齿）
+    float       shadow = 0.28f;     // 0–1   地面软阴影强度
+    float       rim    = 0.35f;     // 0–1   轮廓光强度
+    float       particles = 0.3f;   // 0–1   粒子数量倍率
 };
 
 // 一项设置改完要「真的生效」，重活在各层里（platform 重建 buffer、main 换绘制路径），

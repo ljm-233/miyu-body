@@ -17,6 +17,7 @@
 #include <cstring>
 #include <algorithm>
 #include <ctime>      // nanosleep：帧率上限（第十六节）
+#include <cmath>      // 后处理：lround / sin / sqrt（第十七节）
 #include <unistd.h>
 #include <dirent.h>   // scanExpressions：扫 model/Exp3 给「切个表情」按钮
 #include <string>
@@ -567,6 +568,566 @@ static void framePace(int cap, double now) {
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// 十七、离屏 FBO + SSAA + 后处理三件（地面软阴影 / 轮廓光 / 粒子）
+// 设计稿：NOTES 第十五节；实现决定与实测：NOTES 第十七节。
+//
+// 四个关键决定（每个都有代价，写在这里免得下次又试一遍）：
+//  ① 代码顺序是「模型先画、背景三件后垫」：三件用 blend(ONE_MINUS_DST_ALPHA, ONE)
+//     画到模型**下面**（dst 盖住 src）。视觉上和设计稿的「画在模型之前」逐像素等价
+//     （被模型挡住的地方 src 贡献 0），但换来两件设计稿当时没想到的东西：
+//       · 抄给轮廓光的 alpha 是**纯模型 alpha**，阴影/粒子的 alpha 不会被当成她的轮廓去膨胀；
+//       · 输入区（点击穿透掩码）可以继续用阈值 8，影子不会在桌面垫出一块假的可点区域。
+//  ② 轮廓光读的是**上一帧**抄下来的 prevTex：715 个 drawable 再画一遍 ≈2ms CPU，
+//     那是这层最贵的一块。一帧延迟在「每帧位移 <1px」的呼吸/待机里看不出来。
+//  ③ alpha 全程 premultiplied：所有 pass 用 (ONE, ONE_MINUS_SRC_ALPHA)，合成那一趟
+//     是「纹理 × 颜色」全乘（GL_MODULATE），RGB 和 A 一起缩 —— 边缘不发黑。
+//  ④ FBO 重建（改 scale / 改 ssaa / 换屏换尺寸）在帧内同步做完，失败就退回直接画窗口，
+//     不丢帧、不崩。
+// ══════════════════════════════════════════════════════════════════════
+namespace postfx {
+
+struct P { float bx, y, vy, ph, freq, amp, r, life, age; };
+
+struct Ctx {
+    // 离屏目标（SSAA）
+    GLuint fbo = 0, tex = 0;
+    int    dw = 0, dh = 0;
+    // 上一帧的**纯模型**合成图 + 它的 FBO（轮廓光取 alpha、输入区也取它）
+    GLuint prevTex = 0, prevFbo = 0;
+    int    pw = 0, ph = 0;
+    // 输入区用的降采样目标（窗口物理尺寸，和以前从窗口 buffer 读回来的东西等价）
+    GLuint alphaTex = 0, alphaFbo = 0;
+    int    aw = 0, ah = 0;
+    bool   prevValid = false;
+
+    GLuint shadowTex = 0;
+    GLuint progRim = 0, progPt = 0;
+    GLuint vaoQuad = 0, vboQuad = 0;
+    GLuint vaoPt = 0, vboPt = 0;
+    GLint  uRimTex = -1, uRimTexel = -1, uRimR = -1, uRimColor = -1, uRimStr = -1;
+    GLint  uPtColor = -1;
+
+    // 坐标系：lw/lh = 逻辑（surface-local，y 向下）；ww/wh = 窗口物理；
+    // dw/dh = FBO 尺寸（只在 offscreen 时有意义）；tw/th = **本帧实际在画的那块**的尺寸
+    // （ssaa=off 时等于窗口物理尺寸 —— capturePrev 必须按它抄，按 dw 抄会越界读成垃圾）
+    int    lw = 1, lh = 1, ww = 1, wh = 1, tw = 1, th = 1;
+    float  pxl = 1.0f;          // 绘制像素 / 逻辑像素
+
+    std::vector<P> ps;
+    int    lastCount = -1;
+    bool   warnedPrev = false;
+};
+static Ctx C;
+
+static float rnd01() { return float(rand()) / float(RAND_MAX); }
+static float rnd(float a, float b) { return a + (b - a) * rnd01(); }
+
+// 逻辑坐标（左上原点、y 向下）→ NDC
+static float nx(float lx) { return (lx / float(C.lw)) * 2.0f - 1.0f; }
+static float ny(float ly) { return 1.0f - (ly / float(C.lh)) * 2.0f; }
+
+static int factorOf(const std::string& s) {
+    if (s == "off") return 1;
+    if (s == "3x")  return 3;
+    return 2;                    // 默认 2x
+}
+
+static GLuint mkShader(GLenum t, const char* src, const char* tag) {
+    GLuint s = glCreateShader(t);
+    glShaderSource(s, 1, &src, nullptr);
+    glCompileShader(s);
+    GLint ok = 0;
+    glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char b[1024];
+        GLsizei n = 0;
+        glGetShaderInfoLog(s, static_cast<GLsizei>(sizeof b), &n, b);
+        log_("[post] %s 着色器编译失败: %s", tag, b);
+        glDeleteShader(s);
+        return 0;
+    }
+    return s;
+}
+
+static GLuint mkProgram(const char* vs, const char* fs, const char* tag) {
+    const GLuint v = mkShader(GL_VERTEX_SHADER, vs, tag);
+    const GLuint f = mkShader(GL_FRAGMENT_SHADER, fs, tag);
+    if (v == 0 || f == 0) {
+        if (v) glDeleteShader(v);
+        if (f) glDeleteShader(f);
+        return 0;
+    }
+    const GLuint p = glCreateProgram();
+    glAttachShader(p, v);
+    glAttachShader(p, f);
+    glLinkProgram(p);
+    glDeleteShader(v);
+    glDeleteShader(f);
+    GLint ok = 0;
+    glGetProgramiv(p, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char b[1024];
+        GLsizei n = 0;
+        glGetProgramInfoLog(p, static_cast<GLsizei>(sizeof b), &n, b);
+        log_("[post] %s 链接失败: %s", tag, b);
+        glDeleteProgram(p);
+        return 0;
+    }
+    return p;
+}
+
+// ── 阴影渐变贴图：单位圆、premultiplied、峰值 alpha 0.55 ─────────────
+// 峰值压到 0.55 是因为「强度 = 设置值」要能拉到 1：真按 1.0 就是一块硬黑饼，
+// 而且在浅色壁纸上会像贴了张纸。0.55 × 1.0 在 #0a0c14 下已经够沉，0.55 × 0.28（默认）是柔的一层。
+static const int    kShadowN = 128;
+static const float  kShadowPeak = 0.55f;
+
+static void buildShadowTex() {
+    std::vector<unsigned char> px(static_cast<size_t>(kShadowN) * kShadowN * 4);
+    // 颜色 #0a0c14
+    const float cr = 10.0f / 255.0f, cg = 12.0f / 255.0f, cb = 20.0f / 255.0f;
+    for (int y = 0; y < kShadowN; ++y) {
+        for (int x = 0; x < kShadowN; ++x) {
+            const float u = (x + 0.5f) / kShadowN * 2.0f - 1.0f;
+            const float v = (y + 0.5f) / kShadowN * 2.0f - 1.0f;
+            float a = 1.0f - std::sqrt(u * u + v * v);
+            if (a < 0.0f) a = 0.0f;
+            a = a * a * (3.0f - 2.0f * a);          // smoothstep，边缘软
+            a *= kShadowPeak;
+            unsigned char* o = &px[(static_cast<size_t>(y) * kShadowN + x) * 4];
+            o[0] = static_cast<unsigned char>(cr * a * 255.0f + 0.5f);
+            o[1] = static_cast<unsigned char>(cg * a * 255.0f + 0.5f);
+            o[2] = static_cast<unsigned char>(cb * a * 255.0f + 0.5f);
+            o[3] = static_cast<unsigned char>(a * 255.0f + 0.5f);
+        }
+    }
+    glGenTextures(1, &C.shadowTex);
+    glBindTexture(GL_TEXTURE_2D, C.shadowTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, kShadowN, kShadowN, 0, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static const char* kRimVS =
+    "#version 330\n"
+    "layout(location=0) in vec2 aPos;\n"
+    "out vec2 vUV;\n"
+    "void main(){ vUV = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }\n";
+
+// 8 方向膨胀 − 原 alpha = 边缘环。掩码用 smoothstep(0.02,0.30)：prevTex 里除了她
+// 只有背景透明，0.02 以上就算「有东西」，软边不硬切。
+static const char* kRimFS =
+    "#version 330\n"
+    "in vec2 vUV;\n"
+    "uniform sampler2D uTex;\n"
+    "uniform vec2 uTexel;\n"
+    "uniform float uR;\n"
+    "uniform vec3 uColor;\n"
+    "uniform float uStrength;\n"
+    "out vec4 o;\n"
+    "float m(vec2 uv){ return smoothstep(0.02, 0.30, texture(uTex, uv).a); }\n"
+    "void main(){\n"
+    "  float c = m(vUV);\n"
+    "  float d = 0.0;\n"
+    "  vec2 r = uTexel * uR;\n"
+    "  float k = 0.70710678;\n"
+    "  d = max(d, m(vUV + vec2( r.x, 0.0)));\n"
+    "  d = max(d, m(vUV + vec2(-r.x, 0.0)));\n"
+    "  d = max(d, m(vUV + vec2(0.0,  r.y)));\n"
+    "  d = max(d, m(vUV + vec2(0.0, -r.y)));\n"
+    "  d = max(d, m(vUV + vec2( r.x*k,  r.y*k)));\n"
+    "  d = max(d, m(vUV + vec2(-r.x*k,  r.y*k)));\n"
+    "  d = max(d, m(vUV + vec2( r.x*k, -r.y*k)));\n"
+    "  d = max(d, m(vUV + vec2(-r.x*k, -r.y*k)));\n"
+    "  float ring = d * (1.0 - c);\n"
+    "  if (ring < 0.004) discard;\n"
+    "  float a = ring * uStrength;\n"
+    "  o = vec4(uColor * a, a);\n"          // premultiplied
+    "}\n";
+
+static const char* kPtVS =
+    "#version 330\n"
+    "layout(location=0) in vec2  aPos;\n"
+    "layout(location=1) in float aSize;\n"
+    "layout(location=2) in float aAlpha;\n"
+    "out float vA;\n"
+    "out float vS;\n"
+    "void main(){ gl_Position = vec4(aPos, 0.0, 1.0); gl_PointSize = aSize; vA = aAlpha; vS = aSize; }\n";
+
+static const char* kPtFS =
+    "#version 330\n"
+    "in float vA;\n"
+    "in float vS;\n"
+    "uniform vec3 uColor;\n"
+    "out vec4 o;\n"
+    "void main(){\n"
+    "  vec2 d = gl_PointCoord * 2.0 - 1.0;\n"
+    "  float r = length(d);\n"
+    "  float feather = 2.0 / max(vS, 2.0);\n"      // 边缘 1 物理像素过渡
+    "  float a = 1.0 - smoothstep(1.0 - feather, 1.0, r);\n"
+    "  a *= vA;\n"
+    "  if (a <= 0.002) discard;\n"                 // 圆外丢掉
+    "  o = vec4(uColor * a, a);\n"
+    "}\n";
+
+static bool init() {
+    if (C.progRim != 0 || C.shadowTex != 0) return true;
+    buildShadowTex();
+    C.progRim = mkProgram(kRimVS, kRimFS, "rim");
+    C.progPt  = mkProgram(kPtVS, kPtFS, "particles");
+    if (C.progRim) {
+        C.uRimTex   = glGetUniformLocation(C.progRim, "uTex");
+        C.uRimTexel = glGetUniformLocation(C.progRim, "uTexel");
+        C.uRimR     = glGetUniformLocation(C.progRim, "uR");
+        C.uRimColor = glGetUniformLocation(C.progRim, "uColor");
+        C.uRimStr   = glGetUniformLocation(C.progRim, "uStrength");
+    }
+    if (C.progPt) C.uPtColor = glGetUniformLocation(C.progPt, "uColor");
+
+    // 全屏四边形（rim 用）—— 直接 NDC，不走矩阵
+    {
+        static const float q[8] = {-1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
+        glGenVertexArrays(1, &C.vaoQuad);
+        glGenBuffers(1, &C.vboQuad);
+        glBindVertexArray(C.vaoQuad);
+        glBindBuffer(GL_ARRAY_BUFFER, C.vboQuad);
+        glBufferData(GL_ARRAY_BUFFER, sizeof q, q, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+    // 粒子：一次一条 VBO，stride 5 float（x,y,size,alpha,pad）
+    {
+        glGenVertexArrays(1, &C.vaoPt);
+        glGenBuffers(1, &C.vboPt);
+        glBindVertexArray(C.vaoPt);
+        glBindBuffer(GL_ARRAY_BUFFER, C.vboPt);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                              reinterpret_cast<const void*>(0));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                              reinterpret_cast<const void*>(2 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                              reinterpret_cast<const void*>(3 * sizeof(float)));
+        glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+    log_("[post] 就绪：阴影贴图 %d²（峰值 alpha %.2f）| rim=%s | particles=%s",
+         kShadowN, double(kShadowPeak), C.progRim ? "ok" : "失败", C.progPt ? "ok" : "失败");
+    return C.progRim != 0;
+}
+
+static GLuint targetFbo() { return C.fbo; }
+
+// 每帧一次：告诉这层「这次画多大、逻辑多大」。
+static void setMetrics(int ww, int wh, int lw, int lh) {
+    C.ww = ww > 0 ? ww : 1;
+    C.wh = wh > 0 ? wh : 1;
+    C.lw = lw > 0 ? lw : 1;
+    C.lh = lh > 0 ? lh : 1;
+    C.pxl = float(C.ww) / float(C.lw);
+}
+
+// 本帧的绘制目标尺寸（FBO 或窗口）。必须在绑目标之后、抓 alpha 之前调一次。
+static void setDrawSize(int w, int h) {
+    C.tw = w > 0 ? w : 1;
+    C.th = h > 0 ? h : 1;
+}
+
+static void destroyTargets() {
+    if (C.fbo) { glDeleteFramebuffers(1, &C.fbo); C.fbo = 0; }
+    if (C.tex) { glDeleteTextures(1, &C.tex); C.tex = 0; }
+    C.dw = C.dh = 0;
+}
+
+static bool ensureTargets(int dw, int dh) {
+    if (C.fbo != 0 && C.dw == dw && C.dh == dh) return true;
+    destroyTargets();
+    glGenTextures(1, &C.tex);
+    glBindTexture(GL_TEXTURE_2D, C.tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, dw, dh, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenFramebuffers(1, &C.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, C.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, C.tex, 0);
+    const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    if (st != GL_FRAMEBUFFER_COMPLETE) {
+        log_("[post] FBO 不完整（0x%04x），这一帧退回直接画窗口", static_cast<unsigned>(st));
+        destroyTargets();
+        return false;
+    }
+    C.dw = dw;
+    C.dh = dh;
+    log_("[post] FBO 重建 %dx%d（窗口 %dx%d × SSAA %dx），显存约 %.1f MB",
+         dw, dh, C.ww, C.wh, C.ww > 0 ? dw / C.ww : 1,
+         double(dw) * double(dh) * 4.0 / 1048576.0);
+    return true;
+}
+
+// 每帧画完模型立刻调：把「纯模型」这一张抄成纹理，下一帧轮廓光和输入区都吃它。
+static void capturePrev() {
+    const int w = C.tw;
+    const int h = C.th;
+    GLint drawFb = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &drawFb);   // 建 prevFbo 会改绑定，之后要还回去
+    if (!C.prevTex || C.pw != w || C.ph != h) {
+        if (C.prevTex) { glDeleteTextures(1, &C.prevTex); C.prevTex = 0; }
+        if (C.prevFbo) { glDeleteFramebuffers(1, &C.prevFbo); C.prevFbo = 0; }
+        glGenTextures(1, &C.prevTex);
+        glBindTexture(GL_TEXTURE_2D, C.prevTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenFramebuffers(1, &C.prevFbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, C.prevFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, C.prevTex, 0);
+        C.pw = w;
+        C.ph = h;
+        C.prevValid = false;
+        C.warnedPrev = false;
+        glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(drawFb));
+    }
+    glBindTexture(GL_TEXTURE_2D, C.prevTex);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    C.prevValid = true;
+}
+
+// 把 2D 层的状态复位（Cubism 的 program / 纹理绑定还留着）。
+static void begin2D() {
+    glUseProgram(0);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glBindVertexArray(0);
+}
+
+// 背景三件统一用「垫到模型下面」的混合：dst 盖 src。
+//   out = src*(1-dstA) + dst   → 模型不透明的像素上 src 贡献 0
+static void beginUnder() {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE_MINUS_DST_ALPHA, GL_ONE);
+}
+
+// ── B. 地面软阴影 ────────────────────────────────────────────────────
+// 中心 = 她 alpha bbox 的底边中点，rx = 0.35×bbox宽、ry = 0.18×rx，颜色 #0a0c14。
+// 每帧都从 platPersonBox 重新取 → 拖动、待机、缩放之后它自己就跟上了。
+static void drawShadow(float strength, int cx, int cy, int hw, int hh) {
+    if (C.shadowTex == 0 || strength <= 0.004f) return;
+    const float rx = 0.35f * float(2 * hw);
+    const float ry = 0.18f * rx;
+    if (rx < 1.5f || ry < 0.6f) return;
+    const float yc = float(cy + hh);
+    const float x0 = nx(float(cx) - rx), x1 = nx(float(cx) + rx);
+    const float y0 = ny(yc + ry),         y1 = ny(yc - ry);
+    glUseProgram(0);
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, C.shadowTex);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    const float a = strength;               // MODULATE 把 RGB 和 A 一起乘 → premultiplied 一致
+    glColor4f(a, a, a, a);
+    beginUnder();
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f); glVertex2f(x0, y0);
+    glTexCoord2f(1.0f, 0.0f); glVertex2f(x1, y0);
+    glTexCoord2f(1.0f, 1.0f); glVertex2f(x1, y1);
+    glTexCoord2f(0.0f, 1.0f); glVertex2f(x0, y1);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+// ── D. 粒子 ─────────────────────────────────────────────────────────
+static void spawnOne(P& p, int cx, int cy, int hw, int hh) {
+    const float top = float(cy) + 0.2f * float(hh);    // 下部 40%：cy+0.2hh .. cy+hh
+    const float bot = float(cy + hh);
+    p.bx   = rnd(float(cx - hw), float(cx + hw));
+    p.y    = rnd(top, bot);
+    p.vy   = rnd(8.0f, 20.0f);
+    p.ph   = rnd(0.0f, 6.2831853f);
+    p.freq = rnd(0.7f, 1.7f);
+    p.amp  = rnd(2.0f, 7.0f);
+    p.r    = rnd(1.0f, 3.0f);
+    p.life = rnd(4.0f, 8.0f);
+    p.age  = 0.0f;
+}
+
+static void drawParticles(float strength, float dt, int cx, int cy, int hw, int hh) {
+    int want = static_cast<int>(std::lround(24.0f * strength));
+    if (want < 0) want = 0;
+    if (want > 24) want = 24;
+    if (want != C.lastCount) {
+        const int old = C.lastCount;
+        C.lastCount = want;
+        C.ps.resize(static_cast<size_t>(want));
+        for (int i = (old < 0 ? 0 : old); i < want; ++i) {
+            spawnOne(C.ps[static_cast<size_t>(i)], cx, cy, hw, hh);
+            C.ps[static_cast<size_t>(i)].age = rnd(0.0f, C.ps[static_cast<size_t>(i)].life);
+        }
+        log_("[post] 粒子 %d 颗（particles=%.2f，只在 bbox 下部 40%% 生成）", want, double(strength));
+    }
+    if (C.ps.empty() || C.progPt == 0) return;
+
+    static std::vector<float> v;
+    v.clear();
+    v.reserve(C.ps.size() * 5);
+    for (P& p : C.ps) {
+        p.age += dt;
+        p.y   -= p.vy * dt;
+        if (p.age >= p.life || p.y < float(cy) - 0.2f * float(hh)) {
+            spawnOne(p, cx, cy, hw, hh);          // 出屏 / 寿终 → 随机新位置
+            continue;
+        }
+        const float t = p.age / p.life;
+        float env = 1.0f;
+        if (t < 0.18f) env = t / 0.18f;           // 渐入
+        else if (t > 0.72f) env = (1.0f - t) / 0.28f;   // 渐出
+        if (env < 0.0f) env = 0.0f;
+        const float a = 0.5f * env;               // 峰值 0.5
+        const float x = p.bx + p.amp * std::sin(p.ph + p.freq * p.age);
+        v.push_back(nx(x));
+        v.push_back(ny(p.y));
+        v.push_back(2.0f * p.r * C.pxl);          // gl_PointSize 是绘制像素
+        v.push_back(a);
+        v.push_back(0.0f);
+    }
+    if (v.empty()) return;
+
+    glUseProgram(C.progPt);
+    glUniform3f(C.uPtColor, 0.70f, 0.86f, 1.0f);
+    glActiveTexture(GL_TEXTURE0);
+    beginUnder();
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    glBindVertexArray(C.vaoPt);
+    glBindBuffer(GL_ARRAY_BUFFER, C.vboPt);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * sizeof(float)),
+                 v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(v.size() / 5));
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glDisable(GL_PROGRAM_POINT_SIZE);
+    glUseProgram(0);
+}
+
+// ── C. 轮廓光 ────────────────────────────────────────────────────────
+static void drawRim(float strength, float uiScale) {
+    if (strength <= 0.004f || C.progRim == 0) return;
+    if (!C.prevValid) {
+        if (!C.warnedPrev) {
+            C.warnedPrev = true;
+            log_("[post] 轮廓光等第一帧 alpha（本帧先不画）");
+        }
+        return;
+    }
+    const float rDraw = (1.0f + 2.0f * uiScale) * C.pxl;   // 半径：1+2*scale 逻辑 px
+    glUseProgram(C.progRim);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, C.prevTex);
+    glUniform1i(C.uRimTex, 0);
+    glUniform2f(C.uRimTexel, 1.0f / float(C.pw), 1.0f / float(C.ph));
+    glUniform1f(C.uRimR, rDraw);
+    glUniform3f(C.uRimColor, 0x8f / 255.0f, 0xb8 / 255.0f, 0xff / 255.0f);
+    glUniform1f(C.uRimStr, strength);
+    beginUnder();
+    glBindVertexArray(C.vaoQuad);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+    glUseProgram(0);
+}
+
+// ── 合成：FBO → 窗口 buffer（顺带把 alpha 乘进去）────────────────────
+// 全乘（GL_MODULATE）：RGB 和 A 一起缩，premultiplied 一致；缩放就是双线性。
+static void composite(float alpha, int w, int h) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w, h);
+    glUseProgram(0);
+    glDisable(GL_BLEND);
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, C.tex);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    const float a = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
+    glColor4f(a, a, a, a);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, -1.0f);
+    glTexCoord2f(1.0f, 0.0f); glVertex2f( 1.0f, -1.0f);
+    glTexCoord2f(1.0f, 1.0f); glVertex2f( 1.0f,  1.0f);
+    glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f,  1.0f);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+// 输入区：从**纯模型 alpha**（prevTex）里读，不再读窗口 buffer。
+// 好处是影子 / 粒子 / 边缘环都不可能把掩码撑大（它们画在模型下面，不写在 prevTex 里）。
+// GPU 先 blit 降到窗口物理尺寸（和以前读回来的东西一模一样），再 glReadPixels。
+static bool readAlpha(std::vector<unsigned char>& out, int* ow, int* oh) {
+    if (!C.prevValid || C.prevFbo == 0) return false;
+    const int w = C.ww, h = C.wh;
+    if (w <= 0 || h <= 0) return false;
+    if (C.alphaFbo == 0 || C.aw != w || C.ah != h) {
+        if (C.alphaFbo) { glDeleteFramebuffers(1, &C.alphaFbo); C.alphaFbo = 0; }
+        if (C.alphaTex) { glDeleteTextures(1, &C.alphaTex); C.alphaTex = 0; }
+        glGenTextures(1, &C.alphaTex);
+        glBindTexture(GL_TEXTURE_2D, C.alphaTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glGenFramebuffers(1, &C.alphaFbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, C.alphaFbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, C.alphaTex, 0);
+        C.aw = w;
+        C.ah = h;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, C.prevFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, C.alphaFbo);
+    glBlitFramebuffer(0, 0, C.pw, C.ph, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, C.alphaFbo);
+    out.resize(static_cast<size_t>(w) * static_cast<size_t>(h) * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (ow) *ow = w;
+    if (oh) *oh = h;
+    return true;
+}
+
+static void shutdown() {
+    destroyTargets();
+    if (C.prevFbo) { glDeleteFramebuffers(1, &C.prevFbo); C.prevFbo = 0; }
+    if (C.prevTex) { glDeleteTextures(1, &C.prevTex); C.prevTex = 0; }
+    if (C.alphaFbo) { glDeleteFramebuffers(1, &C.alphaFbo); C.alphaFbo = 0; }
+    if (C.alphaTex) { glDeleteTextures(1, &C.alphaTex); C.alphaTex = 0; }
+    if (C.shadowTex) { glDeleteTextures(1, &C.shadowTex); C.shadowTex = 0; }
+    if (C.progRim) { glDeleteProgram(C.progRim); C.progRim = 0; }
+    if (C.progPt) { glDeleteProgram(C.progPt); C.progPt = 0; }
+    if (C.vboQuad) { glDeleteBuffers(1, &C.vboQuad); C.vboQuad = 0; }
+    if (C.vaoQuad) { glDeleteVertexArrays(1, &C.vaoQuad); C.vaoQuad = 0; }
+    if (C.vboPt) { glDeleteBuffers(1, &C.vboPt); C.vboPt = 0; }
+    if (C.vaoPt) { glDeleteVertexArrays(1, &C.vaoPt); C.vaoPt = 0; }
+}
+
+}  // namespace postfx
+
 // ── 本地设置页（web.cpp）真正生效的那一半 ────────────────────────────
 // web 只管「收 HTTP → 改值 → 落盘」，然后喊一声 key；重活按 key 分给下面：
 //   scale  → 重建 wl_egl_window + buffer_scale（platform）
@@ -892,6 +1453,30 @@ int main() {
             continue;
         }
 
+        // ── 十七：选这一帧画到哪儿（SSAA）───────────────────────────
+        // ssaa=off 就画窗口 buffer（等于改动之前那样）；2x/3x 画进离屏 FBO，
+        // 最后一趟双线性降采样合成回窗口。FBO 尺寸跟着窗口物理尺寸变（scale /
+        // 跨屏 / 换 output 都会变），重建在帧内同步做完，失败立刻退回直接画。
+        postfx::init();
+        const int ssaaMul = postfx::factorOf(ws.ssaa);
+        bool offscreen = ssaaMul > 1;
+        int LW = 0, LH = 0;
+        platGetLogicalSize(&LW, &LH);
+        int DW = W, DH = H;
+        postfx::setMetrics(W, H, LW, LH);      // 先告诉这层坐标系，日志/尺寸才准
+        if (offscreen) {
+            DW = W * ssaaMul;
+            DH = H * ssaaMul;
+            if (!postfx::ensureTargets(DW, DH)) { offscreen = false; DW = W; DH = H; }
+        }
+        postfx::setDrawSize(DW, DH);           // ssaa=off 时就是窗口尺寸
+        if (offscreen) {
+            glBindFramebuffer(GL_FRAMEBUFFER, postfx::targetFbo());
+            glViewport(0, 0, DW, DH);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+
         // 2026-11-09：投影必须按**窗口宽高比**校正，光用画布尺寸会把模型拉扁。
         // 做法：先把画布等比缩放到窗口的 95%，再换成 NDC 系数。
         const float sH = static_cast<float>(H) * 0.95f / canvasH;
@@ -992,6 +1577,23 @@ int main() {
         renderer->SetMvpMatrix(&proj);
         renderer->DrawModel();
 
+        // ── 十七：抄模型 alpha → 垫背景三件 → 合成回窗口 ───────────────
+        // 顺序不能换：capturePrev 必须紧跟在 DrawModel 后面（这时目标里只有她，
+        // 抄下来的 alpha 才是干净的）；三件必须在这里画（它们在模型下面，见
+        // postfx 顶部注释①）；合成必须在 swap 之前。
+        postfx::capturePrev();
+        {
+            int pcx = 0, pcy = 0, phw = 0, phh = 0;
+            const bool hb = platPersonBox(&pcx, &pcy, &phw, &phh);
+            postfx::begin2D();
+            if (hb) {
+                postfx::drawShadow(ws.shadow, pcx, pcy, phw, phh);
+                postfx::drawParticles(ws.particles, dt, pcx, pcy, phw, phh);
+            }
+            postfx::drawRim(ws.rim, ws.scale);
+        }
+        if (offscreen) postfx::composite(ws.alpha, W, H);
+
         // ── 整体不透明度（网页设置页的 alpha，第 14 节）───────────────────
         // 「乘到最终颜色上」用一次全屏乘算做完，别去动每个 drawable 的 opacity：
         // 桌面 GL 的 framebuffer 带 alpha，混合是 premultiplied（GL_ONE,
@@ -1001,7 +1603,8 @@ int main() {
         // 固定管线在 3.3 兼容画像里还在（EGL context 就是 COMPATIBILITY，见 platform），
         // 但 Cubism 那边留着 program 和 GL_TEXTURE_2D 绑定，得先拆掉。
         // 只在 k<1 时做：k=1 时这一趟纯属浪费（每帧一次全屏写）。
-        if (ws.alpha < 0.999f) {
+        // SSAA 那一趟已经在合成里乘过 alpha 了，这里只处理「直接画窗口」的情况。
+        if (!offscreen && ws.alpha < 0.999f) {
             glUseProgram(0);
             glDisable(GL_TEXTURE_2D);
             glBlendFunc(GL_ZERO, GL_SRC_COLOR);
@@ -1052,11 +1655,22 @@ int main() {
             if (!dragging &&
                 (justReleased || justShown || frameNo == 1 || frameNo % 10 == 0 ||
                  W != lastRW || H != lastRH)) {
+                // 十七：掩码改成从「纯模型 alpha」（prevTex）读，不再读窗口 buffer。
+                // 三个理由：① 影子/粒子/边缘环画在模型下面，不会混进掩码把可点区域撑大；
+                // ② SSAA 的降采样在 GPU 上做（blit），读回来的还是窗口物理尺寸，
+                //    platform 那边除以 buffer scale 的算法一个字都不用改；
+                // ③ 阈值仍然是 8（她身上 3% 以上不透明就算可点），和改动前完全一致。
                 static std::vector<unsigned char> pix;
-                pix.resize(static_cast<size_t>(W) * static_cast<size_t>(H) * 4);
-                glPixelStorei(GL_PACK_ALIGNMENT, 1);
-                glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pix.data());
-                platSetInputRegionFromAlpha(pix.data(), W, H, 8);
+                int aw = W, ah = H;
+                if (!postfx::readAlpha(pix, &aw, &ah)) {
+                    // 第一帧（prevTex 还没抄下来）：退回读窗口 buffer，和改动前一样
+                    aw = W;
+                    ah = H;
+                    pix.resize(static_cast<size_t>(W) * static_cast<size_t>(H) * 4);
+                    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pix.data());
+                }
+                platSetInputRegionFromAlpha(pix.data(), aw, ah, 8);
                 if (W != lastRW || H != lastRH || justReleased || justShown)
                     log_("[main] 输入区重算（第 %lu 帧，framebuffer %dx%d%s，拖动期间跳过 %lu 帧）",
                          frameNo, W, H, justReleased ? "，刚松手" : (justShown ? "，刚取消隐藏" : ""),
@@ -1073,6 +1687,7 @@ int main() {
         framePace(ws.fps, platTime());
     }
     web::shutdown();   // 先关设置页的监听，下面才是窗口/GL
+    postfx::shutdown();   // 十七：FBO / 纹理 / 着色器（必须在窗口销毁之前，GL 还活着）
     platShutdown();
 
     // ── 收尾：拿到的都还回去（顺序：渲染器 → 模型 → moc → 框架）────

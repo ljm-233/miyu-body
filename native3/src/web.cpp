@@ -152,7 +152,17 @@ const char* kHtml = R"HTML(<!doctype html>
        opts:[['quiet','安静（几乎不动）'],['natural','自然'],['lively','活泼（明显在晃）']],
        d:'quiet 几乎不动、只剩呼吸；lively 会明显晃，换姿势也更快'},
       {k:'idle', t:'range', min:0, max:3, step:0.1, label:'待机幅度',
-       d:'在风格之上再乘一个倍数，0 = 完全定住只剩呼吸'}
+       d:'在风格之上再乘一个倍数，0 = 完全定住只剩呼吸'},
+      // ── 第十七节：抗锯齿 + 后处理三件 ──────────────────────────
+      {k:'ssaa', t:'select', label:'抗锯齿',
+       opts:[['off','关（最省，边缘有锯齿）'],['2x','2 倍（默认）'],['3x','3 倍（最细）']],
+       d:'离屏按 N 倍画再缩回来，头发丝和裙边不再糊成锯齿；代价是显存 ×N²'},
+      {k:'shadow', t:'range', min:0, max:1, step:0.05, label:'地面阴影',
+       d:'脚下的软阴影，0 关掉她又像贴纸了'},
+      {k:'rim', t:'range', min:0, max:1, step:0.05, label:'轮廓光',
+       d:'边缘那一圈淡光，深色壁纸上尤其有用'},
+      {k:'particles', t:'range', min:0, max:1, step:0.05, label:'气泡',
+       d:'身后飘的气泡，0 关掉'}
     ]},
     {g:'行为', items:[
       {k:'look', t:'range', min:0, max:2, step:0.1, label:'视线跟随强度',
@@ -471,7 +481,11 @@ void saveSettings() {
           << ",\"voice\":" << (gSet.voice ? "true" : "false")
           << ",\"vol\":" << gSet.vol
           << ",\"corner\":\"" << gSet.corner << "\""
-          << ",\"hide\":" << (gSet.hide ? "true" : "false") << "}\n";
+          << ",\"hide\":" << (gSet.hide ? "true" : "false")
+          << ",\"ssaa\":\"" << gSet.ssaa << "\""
+          << ",\"shadow\":" << gSet.shadow
+          << ",\"rim\":" << gSet.rim
+          << ",\"particles\":" << gSet.particles << "}\n";
     }
     if (std::rename(tmp.c_str(), gPath.c_str()) != 0)
         logw("设置存不下来（rename 失败）：%s", gPath.c_str());
@@ -510,13 +524,23 @@ void loadSettings() {
             const std::string c = v.s;
             if (c == "tl" || c == "tr" || c == "bl" || c == "br" || c == "free") gSet.corner = c;
         }
+        // ── 第十七节：抗锯齿 + 后处理三件 ──────────────────────────
+        else if (k == "shadow" && v.t == VNum) gSet.shadow = clampf(float(v.n), 0.0f, 1.0f);
+        else if (k == "rim" && v.t == VNum) gSet.rim = clampf(float(v.n), 0.0f, 1.0f);
+        else if (k == "particles" && v.t == VNum) gSet.particles = clampf(float(v.n), 0.0f, 1.0f);
+        else if (k == "ssaa" && v.t == VStr) {
+            const std::string c = v.s;
+            if (c == "off" || c == "2x" || c == "3x") gSet.ssaa = c;
+        }
     }
     logw("读回 %s：scale=%.2f alpha=%.2f tap=%d expr=%d idle=%.2f(%s) corner=%s hide=%d "
-         "look=%.2f/%d blink=%.2f mouth=%.2f exprHold=%.2f fps=%d voice=%d vol=%.2f",
+         "look=%.2f/%d blink=%.2f mouth=%.2f exprHold=%.2f fps=%d voice=%d vol=%.2f "
+         "ssaa=%s shadow=%.2f rim=%.2f particles=%.2f",
          gPath.c_str(), gSet.scale, gSet.alpha, int(gSet.tap), int(gSet.expr),
          gSet.idle, gSet.idleStyle.c_str(), gSet.corner.c_str(), int(gSet.hide),
          gSet.look, int(gSet.lookOn), gSet.blink, gSet.mouth, gSet.exprHold,
-         gSet.fps, int(gSet.voice), gSet.vol);
+         gSet.fps, int(gSet.voice), gSet.vol,
+         gSet.ssaa.c_str(), gSet.shadow, gSet.rim, gSet.particles);
 }
 
 // ── 往 ctl 的 socket 推一条（说一句话 / 切个表情）────────────────────
@@ -593,6 +617,10 @@ std::string stateJson() {
     s += ",\"vol\":" + std::to_string(gSet.vol);
     s += ",\"corner\":\"" + gSet.corner + "\"";
     s += ",\"hide\":" + std::string(gSet.hide ? "true" : "false");
+    s += ",\"ssaa\":\"" + gSet.ssaa + "\"";
+    s += ",\"shadow\":" + std::to_string(gSet.shadow);
+    s += ",\"rim\":" + std::to_string(gSet.rim);
+    s += ",\"particles\":" + std::to_string(gSet.particles);
     s += ",\"port\":" + std::to_string(gPort);
     s += ",\"expr_next\":\"" + jsonEsc(gExprs.empty() ? "" : gExprs[gExprIdx % gExprs.size()]) + "\"";
     s += "}";
@@ -703,6 +731,31 @@ std::string handleSet(const std::string& body, bool logIt) {
             }
             continue;
         }
+        // ── 第十七节新增四项 ────────────────────────────────────
+        if (k == "shadow" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 1.0f);
+            if (nv != gSet.shadow) { gSet.shadow = nv; changed.push_back("shadow"); }
+            continue;
+        }
+        if (k == "rim" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 1.0f);
+            if (nv != gSet.rim) { gSet.rim = nv; changed.push_back("rim"); }
+            continue;
+        }
+        if (k == "particles" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 1.0f);
+            if (nv != gSet.particles) { gSet.particles = nv; changed.push_back("particles"); }
+            continue;
+        }
+        if (k == "ssaa" && v.t == VStr) {
+            const std::string c = v.s;
+            if (c != "off" && c != "2x" && c != "3x") {
+                if (logIt) logw("POST /set ssaa=%s 只认 off/2x/3x，忽略", c.c_str());
+            } else if (c != gSet.ssaa) {
+                gSet.ssaa = c; changed.push_back("ssaa");
+            }
+            continue;
+        }
         if (k == "say" && v.t == VStr) { say = v.s; haveSay = true; continue; }
         if (k == "mood" && v.t == VNum) { mood = v.n; continue; }
         if (k == "action" && v.t == VStr) {
@@ -724,7 +777,7 @@ std::string handleSet(const std::string& body, bool logIt) {
         static const char* kAll[] = {
             "scale", "alpha", "tap", "expr", "idle", "corner", "hide",
             "idleStyle", "look", "lookOn", "blink", "mouth", "exprHold", "fps",
-            "voice", "vol",
+            "voice", "vol", "ssaa", "shadow", "rim", "particles",
         };
         changed.clear();
         for (const char* k : kAll) changed.push_back(k);
