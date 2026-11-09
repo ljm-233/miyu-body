@@ -10,10 +10,10 @@
 #     **上一级输入**（Chest* 的 Input.Source 就是 ParamBodyAngleX；
 #     SkirtX* 的 Input.Source 是 HipAngleX）。拨它 = 让物理自己算 Chest*/Skirt*，
 #     不是把结果顶掉。他 02:1x 验过的就是这条（ParamBodyAngleX 0→25，胸部变 86%）。
-P	head	AngleX	67	5.000	OX 控制器；实测头 8692 px / 别的最大 1296（6.7×）
-P	head	AngleY	52	4.000	OY 控制器；点头方向，轻一点
-P	chest	ParamBodyAngleX	20	3.000	胸物理的 X 输入（Setting64 的 Input.Source）；胸 5124 / 手臂 2509
-P	arm	ParamBodyAngleZ	10	2.500	手臂物理吃身体侧倾（Setting72/73 weight 10）；幅度压小
-P	skirt	HipAngleX	20	3.500	裙 X 物理的输入（Setting67/70 weight 50）；裙 2295 / 腿 11577
-P	leg	HipAngleX	28	4.000	盆骨 X → HipAngleX → 双腿；腿 11577 / 尾 4120（2.8×）
-P	tail	ParamBreath	92	0.500	呼吸；尾 11709 / 别的最大 1266（9.2×）
+P	head	AngleX	67	15.000	OX 控制器；实测头 8692 px / 别的最大 1296（6.7×）
+P	head	AngleY	67	12.000	OY 控制器；点头方向，轻一点
+P	chest	ParamBodyAngleX	20	12.000	胸物理的 X 输入（Setting64 的 Input.Source）；胸 5124 / 手臂 2509
+P	arm	ParamBodyAngleZ	10	8.750	手臂物理吃身体侧倾（Setting72/73 weight 10）；幅度压小
+P	skirt	HipAngleX	20	10.500	裙 X 物理的输入（Setting67/70 weight 50）；裙 2295 / 腿 11577
+P	leg	HipAngleX	28	12.000	盆骨 X → HipAngleX → 双腿；腿 11577 / 尾 4120（2.8×）
+P	tail	ParamBreath	92	1.000	呼吸；尾 11709 / 别的最大 1266（9.2×）
