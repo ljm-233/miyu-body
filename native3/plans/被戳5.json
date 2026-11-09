@@ -1,0 +1,50 @@
+{
+ "version": 1,
+ "title": "被戳·腿",
+ "view": "full",
+ "expr": "＞＜",
+ "actions": [
+  {
+   "kind": "trajectory",
+   "duration": 1.6,
+   "frames": [
+    {
+     "time": 0.0,
+     "values": {
+      "AngleX": 0,
+      "AngleY": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthOpenY": 0
+     }
+    },
+    {
+     "time": 0.22,
+     "values": {
+      "AngleX": -14,
+      "AngleY": -9,
+      "ParamEyeBallY": -0.85,
+      "ParamMouthOpenY": 0.55
+     }
+    },
+    {
+     "time": 1.0,
+     "values": {
+      "AngleX": -11,
+      "AngleY": -6,
+      "ParamEyeBallY": -0.7,
+      "ParamMouthOpenY": 0.35
+     }
+    },
+    {
+     "time": 1.6,
+     "values": {
+      "AngleX": 0,
+      "AngleY": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthOpenY": 0
+     }
+    }
+   ]
+  }
+ ]
+}

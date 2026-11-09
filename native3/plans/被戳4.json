@@ -1,0 +1,50 @@
+{
+ "version": 1,
+ "title": "被戳·脸",
+ "view": "full",
+ "expr": "脸红",
+ "actions": [
+  {
+   "kind": "trajectory",
+   "duration": 1.5,
+   "frames": [
+    {
+     "time": 0.0,
+     "values": {
+      "AngleZ": 0,
+      "AngleX": 0,
+      "ParamEyeBallX": 0,
+      "ParamMouthOpenY": 0
+     }
+    },
+    {
+     "time": 0.18,
+     "values": {
+      "AngleZ": -8,
+      "AngleX": -3,
+      "ParamEyeBallX": -0.7,
+      "ParamMouthOpenY": 0.2
+     }
+    },
+    {
+     "time": 0.9,
+     "values": {
+      "AngleZ": -6,
+      "AngleX": -2,
+      "ParamEyeBallX": -0.55,
+      "ParamMouthOpenY": 0.12
+     }
+    },
+    {
+     "time": 1.5,
+     "values": {
+      "AngleZ": 0,
+      "AngleX": 0,
+      "ParamEyeBallX": 0,
+      "ParamMouthOpenY": 0
+     }
+    }
+   ]
+  }
+ ]
+}

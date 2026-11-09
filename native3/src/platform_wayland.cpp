@@ -279,14 +279,29 @@ static void tapFire(int lx, int ly) {
             gTapN, lx, ly, gTapCoolUntil - now);
         return;
     }
-    // 点左半边 → 被戳（低头躲）；点右半边 → 被戳2（抬头侧偏）；
-    // 每第 3 次换成 被戳3（往上一惊、眼珠甩开、嘴微张）—— 那一下算「换个表情」。
+    // 2026-11-09 22:3x：按**身体部位**分，不再按左右半边（他说那样太糙）。
+    // 用她本人 bbox 把 y 归一化成 0..1，从上往下四段：
+    //   <0.26 头 → 被戳（＞＜ 躲）     <0.46 脸/胸 → 被戳4（脸红）
+    //   <0.72 腰/裙 → 被戳2（侧偏）   ≥0.72 腿/脚 → 被戳5（低头看你 + ＞＜）
+    // 同一部位连点第 3 次换「一惊」（被戳3），避免看腻。
     int pcx = 0, pcy = 0, phw = 0, phh = 0;
     const bool haveBox = platPersonBox(&pcx, &pcy, &phw, &phh);
-    const bool left = haveBox ? (lx < pcx) : (lx < W.reqW / 2);
     const char* file;
-    if (gTapN % 3 == 0) file = "被戳3.json";
-    else                file = left ? "被戳.json" : "被戳2.json";
+    if (gTapN % 3 == 0 && haveBox) {
+        file = "被戳3.json";               // 每第 3 次：整个人一惊
+    } else if (!haveBox) {
+        file = "被戳.json";
+    } else {
+        const int top = pcy - phh;
+        float t = (phh > 0) ? float(ly - top) / float(2 * phh) : 0.5f;
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+        if (t < 0.26f)      file = "被戳.json";    // 头
+        else if (t < 0.46f) file = "被戳4.json";   // 脸 / 胸
+        else if (t < 0.72f) file = "被戳2.json";   // 腰 / 裙
+        else                file = "被戳5.json";   // 腿 / 脚
+        LOG("[tap] 部位 t=%.2f（0 头 1 脚）", t);
+    }
     std::string body;
     if (!tapLoadPlan(file, &body)) return;
     gTapCoolUntil = now + TAP_COOL_S;
