@@ -337,7 +337,12 @@ static Csm::CubismExpressionMotionManager* gExprMgr = nullptr;   // 前置声明
 static void exprPlay(const std::string& name);                   // 同上（定义在后面）
 
 static void planTick(Csm::CubismModel* model, double now) {
-    if (!plan::active()) return;
+    // 2026-11-09 22:3x：动作播完要把表情收回默认 —— 不然点一次脸红就一直红着。
+    static bool wasActive = false;
+    const bool isActive = plan::active();
+    if (wasActive && !isActive) exprPlay("默认");
+    wasActive = isActive;
+    if (!isActive) return;
     if (!gPlanRig.ready) planInit(model);
 
     // 换了新计划就看它有没有指定表情（"expr":"＞＜"），有就切一次。
