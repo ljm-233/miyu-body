@@ -64,6 +64,8 @@ const char* kHtml = R"HTML(<!doctype html>
   .status b{color:var(--accent2);font-weight:500}
   .card{background:#10151d;border:1px solid var(--line);border-radius:12px;
         padding:6px 14px;margin-bottom:14px}
+  .gh{font-size:11px;letter-spacing:.18em;color:var(--accent2);
+      padding:13px 0 3px;text-transform:uppercase}
   .row{padding:13px 0;border-bottom:1px solid var(--line)}
   .row:last-child{border-bottom:0}
   .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
@@ -105,63 +107,18 @@ const char* kHtml = R"HTML(<!doctype html>
 <body><div class="wrap">
   <h1>米鱼 · 设置</h1>
   <p class="status" id="status">连接中…</p>
-
-  <div class="card">
-    <div class="row">
-      <div class="top"><span class="k">大小</span><span class="v" id="v-scale">1.00</span></div>
-      <input type="range" id="scale" min="0.4" max="1.6" step="0.05">
-      <div class="d">重建 buffer，窗口视觉大小跟着变，位置保持</div>
-    </div>
-    <div class="row">
-      <div class="top"><span class="k">不透明度</span><span class="v" id="v-alpha">1.00</span></div>
-      <input type="range" id="alpha" min="0.3" max="1.0" step="0.05">
-      <div class="d">乘到最终颜色上，桌面还是透过去</div>
-    </div>
-    <div class="row">
-      <div class="top"><span class="k">待机幅度</span><span class="v" id="v-idle">1.00</span></div>
-      <input type="range" id="idle" min="0" max="3" step="0.1">
-      <div class="d">0 = 完全不摆，只留呼吸</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="row">
-      <div class="top"><span class="k">点击反应</span>
-        <label class="sw"><input type="checkbox" id="tap"><span class="sl"></span></label></div>
-      <div class="d">关掉后戳她没反应（拖动还照旧）</div>
-    </div>
-    <div class="row">
-      <div class="top"><span class="k">表情切换</span>
-        <label class="sw"><input type="checkbox" id="expr"><span class="sl"></span></label></div>
-      <div class="d">关掉所有表情切换（含动作计划里的）</div>
-    </div>
-    <div class="row">
-      <div class="top"><span class="k">隐藏</span>
-        <label class="sw"><input type="checkbox" id="hide"><span class="sl"></span></label></div>
-      <div class="d">整个隐藏，进程还在，点击直接穿过去</div>
-    </div>
-    <div class="row">
-      <div class="top"><span class="k">贴角</span>
-        <select id="corner">
-          <option value="free">自由（不动）</option>
-          <option value="tl">左上</option><option value="tr">右上</option>
-          <option value="bl">左下</option><option value="br">右下</option>
-        </select></div>
-      <div class="d">吸到副屏四角之一</div>
-    </div>
-  </div>
+  <div id="groups"></div>
 
   <div class="btns">
     <button id="call">叫她一下</button>
     <button id="exprnext">切个表情</button>
-    <button id="restart" class="wide warn">重启服务</button>
+    <button id="reset">恢复默认</button>
+    <button id="restart" class="warn">重启服务</button>
   </div>
   <div class="hint" id="hint"></div>
 </div>
 <script>
 (function(){
-  var cur = {};
-  var timers = {};
   var hintEl = document.getElementById('hint');
   function hint(t, ok){
     hintEl.textContent = t;
@@ -172,8 +129,8 @@ const char* kHtml = R"HTML(<!doctype html>
     return fetch('/set', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(obj)}).then(function(r){ return r.json(); });
   }
-  function push(k, v){
-    // 300ms 防抖：一路拖滑块只发最后那一个值
+  var timers = {};
+  function push(k, v, wait){
     clearTimeout(timers[k]);
     var o = {}; o[k] = v;
     timers[k] = setTimeout(function(){
@@ -181,32 +138,150 @@ const char* kHtml = R"HTML(<!doctype html>
         if (d && d.ok) hint('已应用：' + d.applied.join(', '), true);
         else hint('没生效', false);
       }).catch(function(){ hint('连不上（服务在重启？）', false); });
-    }, 300);
+    }, wait);
   }
-  function setVal(k, el, txt){
-    cur[k] = el.type === 'checkbox' ? el.checked : (el.type === 'range' ? parseFloat(el.value) : el.value);
-    if (txt) txt.textContent = el.type === 'range' ? parseFloat(el.value).toFixed(2) : '';
+
+  // 每项：k=键名 t=控件类型 label=名字 d=这一项到底改了什么
+  var SCHEMA = [
+    {g:'外观', items:[
+      {k:'scale', t:'range', min:0.4, max:1.6, step:0.05, label:'大小',
+       d:'整块窗口放大缩小（重建 buffer），位置不动'},
+      {k:'alpha', t:'range', min:0.3, max:1.0, step:0.05, label:'不透明度',
+       d:'乘到最终颜色上，越低桌面从她身上透出来越多'},
+      {k:'idleStyle', t:'select', label:'待机风格',
+       opts:[['quiet','安静（几乎不动）'],['natural','自然'],['lively','活泼（明显在晃）']],
+       d:'quiet 几乎不动、只剩呼吸；lively 会明显晃，换姿势也更快'},
+      {k:'idle', t:'range', min:0, max:3, step:0.1, label:'待机幅度',
+       d:'在风格之上再乘一个倍数，0 = 完全定住只剩呼吸'}
+    ]},
+    {g:'行为', items:[
+      {k:'look', t:'range', min:0, max:2, step:0.1, label:'视线跟随强度',
+       d:'她看鼠标的幅度（眼珠 + 身体微倾），0 = 不看'},
+      {k:'lookOn', t:'bool', label:'视线总开关',
+       d:'关掉她完全不跟鼠标，眼睛回正'},
+      {k:'blink', t:'range', min:0, max:2, step:0.1, label:'眨眼频率',
+       d:'2 = 眨得很勤，1 = 默认，0 = 一直睁着不眨'},
+      {k:'mouth', t:'range', min:0.5, max:3, step:0.1, label:'嘴动时长',
+       d:'说完一句话嘴还在动的时长倍数（张合快慢不变）'},
+      {k:'exprHold', t:'range', min:0.2, max:5, step:0.1, label:'表情停留',
+       d:'表情挂多久后自己淡回默认（动作计划自带的表情不受它管）'},
+      {k:'tap', t:'bool', label:'点击反应', d:'关掉后戳她没反应（拖动还照旧）'},
+      {k:'expr', t:'bool', label:'表情切换', d:'关掉所有表情切换（含动作计划里的）'},
+      {k:'corner', t:'select', label:'贴角',
+       opts:[['free','自由（不动）'],['tl','左上'],['tr','右上'],['bl','左下'],['br','右下']],
+       d:'吸到副屏四角之一'},
+      {k:'hide', t:'bool', label:'隐藏', d:'整个隐藏，进程还在，点击直接穿过去'}
+    ]},
+    {g:'性能', items:[
+      {k:'fps', t:'select', label:'帧率上限',
+       opts:[['15','15（最省电）'],['30','30'],['60','60（默认）']],
+       d:'每帧睡到该来的时刻，上下限就是它，数字越低越省 CPU'}
+    ]},
+    {g:'声音', items:[
+      {k:'voice', t:'bool', label:'说话出声',
+       d:'说话时播 voice/*.wav 里预生成的短句，没有这句就静默'},
+      {k:'vol', t:'range', min:0, max:1, step:0.05, label:'音量',
+       d:'pw-play 的 --volume，0 = 有声音但不响'}
+    ]}
+  ];
+
+  var els = {};
+  function addRow(card, it){
+    var row = document.createElement('div'); row.className = 'row';
+    var top = document.createElement('div'); top.className = 'top';
+    var k = document.createElement('span'); k.className = 'k'; k.textContent = it.label;
+    var v = null;
+    if (it.t === 'range') { v = document.createElement('span'); v.className = 'v'; v.textContent = '—'; }
+    top.appendChild(k);
+    if (v) top.appendChild(v); else {
+      var box = document.createElement('span'); box.style.flex = '0 0 auto'; top.appendChild(box);
+    }
+    row.appendChild(top);
+
+    if (it.t === 'range') {
+      var r = document.createElement('input');
+      r.type = 'range'; r.min = it.min; r.max = it.max; r.step = it.step;
+      r.addEventListener('input', function(){
+        v.textContent = Number(r.value).toFixed(2);
+        push(it.k, parseFloat(r.value), 300);     // 300ms 防抖
+      });
+      row.appendChild(r);
+      els[it.k] = {el: r, out: v, type: 'range'};
+    } else if (it.t === 'bool') {
+      var lab = document.createElement('label'); lab.className = 'sw';
+      var cb = document.createElement('input'); cb.type = 'checkbox';
+      var sl = document.createElement('span'); sl.className = 'sl';
+      lab.appendChild(cb); lab.appendChild(sl);
+      top.removeChild(top.lastChild); top.appendChild(lab);
+      cb.addEventListener('change', function(){
+        var o = {}; o[it.k] = cb.checked;
+        post(o).then(function(d){
+          if (d && d.ok) hint('已应用：' + it.k, true); else hint('没生效', false);
+        }).catch(function(){});
+      });
+      els[it.k] = {el: cb, type: 'bool'};
+    } else {
+      var sel = document.createElement('select');
+      it.opts.forEach(function(o2){
+        var op = document.createElement('option'); op.value = o2[0]; op.textContent = o2[1];
+        sel.appendChild(op);
+      });
+      top.removeChild(top.lastChild); top.appendChild(sel);
+      sel.addEventListener('change', function(){
+        var o = {}; o[it.k] = (it.k === 'fps') ? parseInt(sel.value, 10) : sel.value;
+        post(o).then(function(d){
+          if (d && d.ok) hint('已应用：' + it.k, true); else hint('没生效', false);
+        }).catch(function(){});
+      });
+      els[it.k] = {el: sel, type: 'select'};
+    }
+
+    var d = document.createElement('div'); d.className = 'd'; d.textContent = it.d;
+    row.appendChild(d);
+    card.appendChild(row);
   }
-  ['scale','alpha','idle'].forEach(function(k){
-    var el = document.getElementById(k), txt = document.getElementById('v-' + k);
-    el.addEventListener('input', function(){
-      txt.textContent = parseFloat(el.value).toFixed(2);
-      push(k, parseFloat(el.value));
-    });
+
+  var root = document.getElementById('groups');
+  SCHEMA.forEach(function(sec){
+    var card = document.createElement('div'); card.className = 'card';
+    var h = document.createElement('div'); h.className = 'gh'; h.textContent = sec.g;
+    card.appendChild(h);
+    sec.items.forEach(function(it){ addRow(card, it); });
+    root.appendChild(card);
   });
-  ['tap','expr','hide'].forEach(function(k){
-    document.getElementById(k).addEventListener('change', function(e){
-      var o = {}; o[k] = e.target.checked;
-      post(o).then(function(d){
-        if (d && d.ok) hint('已应用：' + k, true); else hint('没生效', false);
-      }).catch(function(){});
+
+  function fill(s){
+    document.getElementById('status').innerHTML =
+      '<b>运行中</b> · PID ' + s.pid + ' · 输出 ' + s.output + ' · 窗口 ' + s.window;
+    SCHEMA.forEach(function(sec){
+      sec.items.forEach(function(it){
+        var e = els[it.k]; if (!e) return;
+        var val = s[it.k];
+        if (e.type === 'range') {
+          e.el.value = val;
+          e.out.textContent = Number(val).toFixed(2);
+        } else if (e.type === 'bool') {
+          e.el.checked = !!val;
+        } else {
+          e.el.value = String(val);
+        }
+      });
     });
-  });
-  document.getElementById('corner').addEventListener('change', function(e){
-    post({corner: e.target.value}).then(function(d){
-      if (d && d.ok) hint('已贴到 ' + e.target.value, true); else hint('没生效', false);
+  }
+  function load(){
+    fetch('/state').then(function(r){ return r.json(); }).then(fill).catch(function(){
+      document.getElementById('status').textContent = '连不上服务';
+    });
+  }
+  load();
+  // 5 秒只刷状态行：不动控件值（不然正拖滑块会被服务端值拽回去）
+  setInterval(function(){
+    fetch('/state').then(function(r){ return r.json(); }).then(function(s){
+      document.getElementById('status').innerHTML =
+        '<b>运行中</b> · PID ' + s.pid + ' · 输出 ' + s.output + ' · 窗口 ' + s.window;
     }).catch(function(){});
-  });
+  }, 5000);
+
   document.getElementById('call').addEventListener('click', function(){
     post({say:'在', mood:60}).then(function(){ hint('叫了：在', true); }).catch(function(){
       hint('连不上', false); });
@@ -216,6 +291,11 @@ const char* kHtml = R"HTML(<!doctype html>
       if (d && d.ok) hint('换了个表情', true); else hint('没换成', false);
     }).catch(function(){ hint('连不上', false); });
   });
+  document.getElementById('reset').addEventListener('click', function(){
+    post({action:'reset'}).then(function(d){
+      if (d && d.ok) { hint('已恢复默认', true); load(); } else hint('没恢复', false);
+    }).catch(function(){ hint('连不上', false); });
+  });
   document.getElementById('restart').addEventListener('click', function(){
     hint('重启中…', false);
     fetch('/set', {method:'POST', body: JSON.stringify({action:'restart'})})
@@ -223,31 +303,6 @@ const char* kHtml = R"HTML(<!doctype html>
         setTimeout(function(){ hint('服务重启中，几秒后刷新', false); }, 400);
       });
   });
-  function load(){
-    fetch('/state').then(function(r){ return r.json(); }).then(function(s){
-      document.getElementById('status').innerHTML =
-        '<b>运行中</b> · PID ' + s.pid + ' · 输出 ' + s.output + ' · 窗口 ' + s.window;
-      document.getElementById('scale').value = s.scale;
-      document.getElementById('alpha').value = s.alpha;
-      document.getElementById('idle').value = s.idle;
-      document.getElementById('v-scale').textContent = Number(s.scale).toFixed(2);
-      document.getElementById('v-alpha').textContent = Number(s.alpha).toFixed(2);
-      document.getElementById('v-idle').textContent = Number(s.idle).toFixed(2);
-      document.getElementById('tap').checked = !!s.tap;
-      document.getElementById('expr').checked = !!s.expr;
-      document.getElementById('hide').checked = !!s.hide;
-      document.getElementById('corner').value = s.corner;
-    }).catch(function(){
-      document.getElementById('status').textContent = '连不上服务';
-    });
-  }
-  load();
-  setInterval(function(){
-    fetch('/state').then(function(r){ return r.json(); }).then(function(s){
-      document.getElementById('status').innerHTML =
-        '<b>运行中</b> · PID ' + s.pid + ' · 输出 ' + s.output + ' · 窗口 ' + s.window;
-    }).catch(function(){});
-  }, 5000);
 })();
 </script>
 </body></html>
@@ -406,6 +461,15 @@ void saveSettings() {
           << ",\"tap\":" << (gSet.tap ? "true" : "false")
           << ",\"expr\":" << (gSet.expr ? "true" : "false")
           << ",\"idle\":" << gSet.idle
+          << ",\"idleStyle\":\"" << gSet.idleStyle << "\""
+          << ",\"look\":" << gSet.look
+          << ",\"lookOn\":" << (gSet.lookOn ? "true" : "false")
+          << ",\"blink\":" << gSet.blink
+          << ",\"mouth\":" << gSet.mouth
+          << ",\"exprHold\":" << gSet.exprHold
+          << ",\"fps\":" << gSet.fps
+          << ",\"voice\":" << (gSet.voice ? "true" : "false")
+          << ",\"vol\":" << gSet.vol
           << ",\"corner\":\"" << gSet.corner << "\""
           << ",\"hide\":" << (gSet.hide ? "true" : "false") << "}\n";
     }
@@ -427,14 +491,32 @@ void loadSettings() {
         else if (k == "tap" && v.t == VBool) gSet.tap = v.b;
         else if (k == "expr" && v.t == VBool) gSet.expr = v.b;
         else if (k == "hide" && v.t == VBool) gSet.hide = v.b;
+        else if (k == "lookOn" && v.t == VBool) gSet.lookOn = v.b;
+        else if (k == "voice" && v.t == VBool) gSet.voice = v.b;
+        else if (k == "look" && v.t == VNum) gSet.look = clampf(float(v.n), 0.0f, 2.0f);
+        else if (k == "blink" && v.t == VNum) gSet.blink = clampf(float(v.n), 0.0f, 2.0f);
+        else if (k == "mouth" && v.t == VNum) gSet.mouth = clampf(float(v.n), 0.5f, 3.0f);
+        else if (k == "exprHold" && v.t == VNum) gSet.exprHold = clampf(float(v.n), 0.2f, 5.0f);
+        else if (k == "vol" && v.t == VNum) gSet.vol = clampf(float(v.n), 0.0f, 1.0f);
+        else if (k == "fps" && v.t == VNum) {
+            const int n = int(v.n);
+            if (n == 15 || n == 30 || n == 60) gSet.fps = n;
+        }
+        else if (k == "idleStyle" && v.t == VStr) {
+            const std::string c = v.s;
+            if (c == "quiet" || c == "natural" || c == "lively") gSet.idleStyle = c;
+        }
         else if (k == "corner" && v.t == VStr) {
             const std::string c = v.s;
             if (c == "tl" || c == "tr" || c == "bl" || c == "br" || c == "free") gSet.corner = c;
         }
     }
-    logw("读回 %s：scale=%.2f alpha=%.2f tap=%d expr=%d idle=%.2f corner=%s hide=%d",
+    logw("读回 %s：scale=%.2f alpha=%.2f tap=%d expr=%d idle=%.2f(%s) corner=%s hide=%d "
+         "look=%.2f/%d blink=%.2f mouth=%.2f exprHold=%.2f fps=%d voice=%d vol=%.2f",
          gPath.c_str(), gSet.scale, gSet.alpha, int(gSet.tap), int(gSet.expr),
-         gSet.idle, gSet.corner.c_str(), int(gSet.hide));
+         gSet.idle, gSet.idleStyle.c_str(), gSet.corner.c_str(), int(gSet.hide),
+         gSet.look, int(gSet.lookOn), gSet.blink, gSet.mouth, gSet.exprHold,
+         gSet.fps, int(gSet.voice), gSet.vol);
 }
 
 // ── 往 ctl 的 socket 推一条（说一句话 / 切个表情）────────────────────
@@ -500,6 +582,15 @@ std::string stateJson() {
     s += ",\"tap\":" + std::string(gSet.tap ? "true" : "false");
     s += ",\"expr\":" + std::string(gSet.expr ? "true" : "false");
     s += ",\"idle\":" + std::to_string(gSet.idle);
+    s += ",\"idleStyle\":\"" + gSet.idleStyle + "\"";
+    s += ",\"look\":" + std::to_string(gSet.look);
+    s += ",\"lookOn\":" + std::string(gSet.lookOn ? "true" : "false");
+    s += ",\"blink\":" + std::to_string(gSet.blink);
+    s += ",\"mouth\":" + std::to_string(gSet.mouth);
+    s += ",\"exprHold\":" + std::to_string(gSet.exprHold);
+    s += ",\"fps\":" + std::to_string(gSet.fps);
+    s += ",\"voice\":" + std::string(gSet.voice ? "true" : "false");
+    s += ",\"vol\":" + std::to_string(gSet.vol);
     s += ",\"corner\":\"" + gSet.corner + "\"";
     s += ",\"hide\":" + std::string(gSet.hide ? "true" : "false");
     s += ",\"port\":" + std::to_string(gPort);
@@ -521,7 +612,7 @@ std::string handleSet(const std::string& body, bool logIt) {
     std::string say;
     bool haveSay = false;
     double mood = -1.0;
-    bool wantRestart = false, wantExprNext = false;
+    bool wantRestart = false, wantExprNext = false, wantReset = false;
 
     for (auto& [k, v] : kv) {
         if (k == "scale" && v.t == VNum) {
@@ -537,6 +628,58 @@ std::string handleSet(const std::string& body, bool logIt) {
         if (k == "idle" && v.t == VNum) {
             const float nv = clampf(float(v.n), 0.0f, 3.0f);
             if (nv != gSet.idle) { gSet.idle = nv; changed.push_back("idle"); }
+            continue;
+        }
+        // ── 第十五节新增的九项 ──────────────────────────────────────
+        if (k == "look" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 2.0f);
+            if (nv != gSet.look) { gSet.look = nv; changed.push_back("look"); }
+            continue;
+        }
+        if (k == "blink" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 2.0f);
+            if (nv != gSet.blink) { gSet.blink = nv; changed.push_back("blink"); }
+            continue;
+        }
+        if (k == "mouth" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.5f, 3.0f);
+            if (nv != gSet.mouth) { gSet.mouth = nv; changed.push_back("mouth"); }
+            continue;
+        }
+        if (k == "exprHold" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.2f, 5.0f);
+            if (nv != gSet.exprHold) { gSet.exprHold = nv; changed.push_back("exprHold"); }
+            continue;
+        }
+        if (k == "vol" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 1.0f);
+            if (nv != gSet.vol) { gSet.vol = nv; changed.push_back("vol"); }
+            continue;
+        }
+        if (k == "fps" && v.t == VNum) {
+            const int nv = int(v.n + (v.n < 0 ? -0.5 : 0.5));
+            if (nv != 15 && nv != 30 && nv != 60) {
+                if (logIt) logw("POST /set fps=%d 只认 15/30/60，忽略", nv);
+            } else if (nv != gSet.fps) {
+                gSet.fps = nv; changed.push_back("fps");
+            }
+            continue;
+        }
+        if (k == "idleStyle" && v.t == VStr) {
+            const std::string c = v.s;
+            if (c != "quiet" && c != "natural" && c != "lively") {
+                if (logIt) logw("POST /set idleStyle=%s 不认识，忽略", c.c_str());
+            } else if (c != gSet.idleStyle) {
+                gSet.idleStyle = c; changed.push_back("idleStyle");
+            }
+            continue;
+        }
+        if (k == "lookOn" && v.t == VBool) {
+            if (v.b != gSet.lookOn) { gSet.lookOn = v.b; changed.push_back("lookOn"); }
+            continue;
+        }
+        if (k == "voice" && v.t == VBool) {
+            if (v.b != gSet.voice) { gSet.voice = v.b; changed.push_back("voice"); }
             continue;
         }
         if (k == "tap" && v.t == VBool) {
@@ -565,10 +708,27 @@ std::string handleSet(const std::string& body, bool logIt) {
         if (k == "action" && v.t == VStr) {
             if (v.s == "restart") wantRestart = true;
             else if (v.s == "expr_next") wantExprNext = true;
+            else if (v.s == "reset") wantReset = true;
             continue;
         }
         // 不认识的键：记一行，别把整包丢掉（页面/脚本将来多传字段不该报错）
         if (logIt) logw("POST /set 不认识的键：%s", k.c_str());
+    }
+
+    // ── reset：全部回默认，并且**每一项都回调一遍**（否则页面显示对、行为还是旧的）──
+    if (wantReset) {
+        const Settings d;               // 结构体默认值就是出厂设置
+        gSet = d;
+        // MIYU_NO_TAP 是命令行上的一次性覆盖，reset 也得听它的（和启动时同一套规矩）
+        if (getenv("MIYU_NO_TAP")) gSet.tap = false;
+        static const char* kAll[] = {
+            "scale", "alpha", "tap", "expr", "idle", "corner", "hide",
+            "idleStyle", "look", "lookOn", "blink", "mouth", "exprHold", "fps",
+            "voice", "vol",
+        };
+        changed.clear();
+        for (const char* k : kAll) changed.push_back(k);
+        logw("reset：全部设置恢复默认（%zu 项）", changed.size());
     }
 
     if (!changed.empty()) persist = true;

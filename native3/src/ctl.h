@@ -34,6 +34,12 @@ bool takePlan(std::string& out);
 // 最近一次 mood（0..100），没设过是 -1。
 int mood();
 
+// 第十五节：网页设置页的两项（main 每帧喂一次，改了就下一句生效）。
+//   setMouthScale：说话时嘴动时长倍率（0.5–3，超范围就地夹紧）
+//   setVoice：说话时要不要出声 + 音量 0–1（播预生成 wav，没有就静默）
+void setMouthScale(float s);
+void setVoice(bool on, float vol);
+
 // socket 路径，日志用。
 const char* sockPath();
 

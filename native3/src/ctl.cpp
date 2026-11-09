@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -25,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 
 namespace ctl {
@@ -61,6 +63,11 @@ std::string gPlanReq;
 bool gPlanPending = false;
 
 int gMood = -1;
+
+// 第十五节：网页上的两个倍率/开关。都由 main 每帧喂进来（ctl 不反向 include web）。
+float gMouthScale = 1.0f;    // 嘴动时长倍率 0.5–3
+bool  gVoiceOn = false;      // 说话时要不要出声
+float gVol = 0.8f;           // 音量 0–1
 
 void log_(const char* fmt, ...) {
     va_list ap;
@@ -174,6 +181,56 @@ int takeObjText(const std::string& s, const char* key, std::string& out) {
     return 0;
 }
 
+// ── 出声（第十五节）────────────────────────────────────
+// 只播**预生成**的短句（CosyVoice 合成一句要几十秒，实时不划算），和 tools/body-voice.sh
+// 同一套约定：文件名 = md5(文本) 前 10 位 + .wav，索引在 $VOICE/index.tsv（key\ttab文本）。
+// 拿不到文件 / 没有 pw-play → 一行日志，静默继续（绝不影响说话和渲染）。
+//
+// 用 double fork：孙进程 exec pw-play，子进程立刻退出并由父回收 —— 主循环一秒都不等它，
+// 也不会攒一屋子僵尸。
+void voicePlay(const std::string& text) {
+    const char* env = std::getenv("MIYU_VOICE_DIR");
+    const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
+
+    std::string key;
+    {
+        std::ifstream f(dir + "/index.tsv");
+        if (!f) { log_("[voice] 没有 %s/index.tsv（静默）", dir.c_str()); return; }
+        std::string line;
+        while (std::getline(f, line)) {
+            const size_t tab = line.find('\t');
+            if (tab == std::string::npos) continue;
+            if (line.compare(tab + 1, std::string::npos, text) == 0) {
+                key = line.substr(0, tab);
+                break;
+            }
+        }
+    }
+    if (key.empty()) { log_("[voice] 没有预生成「%s」（静默）", text.c_str()); return; }
+
+    const std::string path = dir + "/" + key + ".wav";
+    if (::access(path.c_str(), R_OK) != 0) {
+        log_("[voice] index 里有 %s 但文件不在（静默）", key.c_str());
+        return;
+    }
+    char volbuf[16];
+    std::snprintf(volbuf, sizeof volbuf, "%.2f", gVol);
+    const pid_t pid = ::fork();
+    if (pid < 0) { log_("[voice] fork 失败（静默）"); return; }
+    if (pid == 0) {
+        const pid_t p2 = ::fork();
+        if (p2 != 0) ::_exit(0);                   // 中间子进程立刻走，孙进程被 init 收养
+        ::freopen("/dev/null", "w", stdout);
+        ::freopen("/dev/null", "w", stderr);
+        const std::string volarg = std::string("--volume=") + volbuf;
+        ::execlp("pw-play", "pw-play", volarg.c_str(), path.c_str(), (char*)nullptr);
+        ::_exit(127);                               // 没有 pw-play 就走这条，什么都不响
+    }
+    int st = 0;
+    ::waitpid(pid, &st, 0);                        // 只等中间子进程（毫秒级）
+    log_("[voice] 播 %s.wav（vol %.2f）: %s", key.c_str(), gVol, text.c_str());
+}
+
 // ── 一行命令 ────────────────────────────────────────────
 void handleLine(const std::string& raw, double now) {
     const std::string line = trim(raw);
@@ -204,7 +261,11 @@ void handleLine(const std::string& raw, double now) {
             gSayDur = dur;
             gSayT0 = now;
             gTalking = true;
-            log_("[ctl] say %.1fs: %s", dur, say.c_str());
+            // 第十五节的「嘴动时长倍率」：这里不改 gSayDur（那是这句话的原始时长），
+            // 只报告实际会动多久，mouth() 里乘同一个系数。
+            log_("[ctl] say %.1fs（×%.2f -> 嘴动 %.1fs）: %s",
+                 dur, gMouthScale, dur * gMouthScale, say.c_str());
+            if (gVoiceOn) voicePlay(say);
         }
     }
 
@@ -374,7 +435,10 @@ void poll(double now) {
 float mouth(double now) {
     if (!gTalking) return -1.0f;
     const double t = now - gSayT0;
-    if (t < 0.0 || t >= gSayDur) {
+    // 第十五节：嘴动时长 = 原始时长 × 网页上的 mouth 倍率（0.5–3）。
+    // 张合频率（0.22s 一张一合）不变，只是「这句话她动多久嘴」变了。
+    const double dur = gSayDur * static_cast<double>(gMouthScale);
+    if (t < 0.0 || t >= dur) {
         gTalking = false;
         return -1.0f;
     }
@@ -383,7 +447,7 @@ float mouth(double now) {
     // 整体淡入淡出（前 0.15 渐入、最后 0.2 渐出）
     double env = 1.0;
     if (t < kFadeIn) env = t / kFadeIn;
-    const double left = gSayDur - t;
+    const double left = dur - t;
     if (left < kFadeOut) env = left / kFadeOut;   // 收尾取更小的那个
     if (env < 0.0) env = 0.0;
     v *= env;
@@ -409,6 +473,25 @@ bool takePlan(std::string& out) {
 }
 
 int mood() { return gMood; }
+
+// 第十五节：网页设置页的两项，由 main 每帧喂进来。
+//   · mouth 倍率只影响「接下来的」说话时长；正在说话的这句当场生效（t 和 dur 同一把尺）
+//   · voice/vol 在说话那一刻读，改了下一句就变
+void setMouthScale(float s) {
+    if (s < 0.1f) s = 0.1f;
+    if (s > 5.0f) s = 5.0f;
+    if (s == gMouthScale) return;
+    gMouthScale = s;
+    log_("[ctl] 嘴动时长倍率 %.2f", gMouthScale);
+}
+
+void setVoice(bool on, float vol) {
+    if (vol < 0.0f) vol = 0.0f;
+    if (vol > 1.0f) vol = 1.0f;
+    if (on != gVoiceOn || vol != gVol) log_("[ctl] 声音 %s，音量 %.2f", on ? "开" : "关", vol);
+    gVoiceOn = on;
+    gVol = vol;
+}
 
 const char* sockPath() { return gPath.empty() ? "(未建)" : gPath.c_str(); }
 
