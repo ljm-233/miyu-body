@@ -334,6 +334,7 @@ static void planTakeover(double now) {
 }
 
 static Csm::CubismExpressionMotionManager* gExprMgr = nullptr;   // 前置声明：planTick 要用
+static void exprPlay(const std::string& name);                   // 同上（定义在后面）
 
 static void planTick(Csm::CubismModel* model, double now) {
     if (!plan::active()) return;
@@ -348,17 +349,10 @@ static void planTick(Csm::CubismModel* model, double now) {
         const char* en = plan::expr();
         log_("[plan] 起播「%s」%s%s", plan::title()[0] ? plan::title() : "(无题)",
              (en && *en) ? " 附带表情：" : "", (en && *en) ? en : "");
-        if (en && *en && gExprMgr) {
-            const std::string ep = std::string(kModelDir) + "Exp3/" + en + ".exp3.json";
-            std::vector<char> eb = slurp(ep);
-            if (!eb.empty()) {
-                Csm::CubismExpressionMotion* e = Csm::CubismExpressionMotion::Create(
-                    reinterpret_cast<const Csm::csmByte*>(eb.data()),
-                    static_cast<Csm::csmSizeInt>(eb.size()));
-                if (e) { gExprMgr->StartMotion(e, false); log_("[plan] 表情切到 %s", en); }
-            } else {
-                log_("[plan] 表情读不到：%s", ep.c_str());
-            }
+        if (en && *en) {
+            // 走 exprPlay —— 和 MIYU_EXPR / ctl::takeExpr 是同一条路（自己 Create 那套
+            // 不设 fadeIn、不进池子，实测切了看不出来）。
+            exprPlay(en);
         }
     }
 
