@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>米鱼的身体 · v5（新库）</title>
+<style>
+  html,body{margin:0;height:100%;background:linear-gradient(180deg,#0b1220,#1a2440);overflow:hidden}
+  #stage{width:100vw;height:100vh;display:block}
+  #tip{position:fixed;left:12px;bottom:10px;color:#8fa6c8;font:12px/1.6 system-ui;user-select:none}
+  #err{position:fixed;left:12px;top:12px;color:#ff8080;font:13px/1.6 ui-monospace;white-space:pre-wrap;max-width:90vw}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="tip">点一下会切动作 · 鼠标移动会看过来</div>
+<div id="err"></div>
+
+<!-- Cubism 4 Core：必须最先加载，pixi-live2d-display 靠它解析 moc3 -->
+<script src="./live2dcubismcore.min.js"></script>
+<script src="./node_modules/pixi.js/dist/pixi.min.js"></script>
+<script src="./node_modules/pixi-live2d-display-lipsyncpatch/dist/cubism4.min.js"></script>
+<script>
+const errBox = document.getElementById('err')
+const fail = (m) => { errBox.textContent += m + '\n'; console.error(m) }
+window.addEventListener('error', e => fail('页面错误：' + (e.message || e)))
+
+;(async () => {
+  try {
+    const app = new PIXI.Application({
+      view: document.getElementById('stage'),
+      autoStart: true,
+      resizeTo: window,
+      backgroundAlpha: 0,
+      antialias: true,
+    })
+
+    const model = await PIXI.live2d.Live2DModel.from('./model/大肥鱼.model3.json', {
+      motionPreload: 'IDLE',
+      autoInteract: false,
+    })
+    app.stage.addChild(model)
+
+    // 缩到屏幕高度的一大半，站在右下角
+    const fit = () => {
+      // 2026-11-09 第二次修：`model.anchor` 在这个库里不生效（Live2DModel 自带 transform，
+      // 不认 PIXI 的 anchor），所以 x/y 一直是**左上角**。我上一版按「底部中心」算 y=0.99H，
+      // 模型高 862，等于整个人停在屏幕下沿外——只剩一个角露出来。
+      // 现在老老实实按左上角算。
+      const sx = model.scale.x || 1, sy = model.scale.y || 1
+      const raw = model.width / sx
+      const rawH = model.height / sy
+      const k = Math.min(app.screen.height * 0.86 / rawH, app.screen.width * 0.45 / raw)
+      const w = raw * k, h = rawH * k
+      model.scale.set(k)
+      model.x = app.screen.width - w - 24        // 右边留 24px
+      model.y = app.screen.height - h            // 底边贴屏幕底
+      document.getElementById('tip').textContent =
+        `x=${model.x.toFixed(0)} y=${model.y.toFixed(0)} w=${w.toFixed(0)} h=${h.toFixed(0)} scale=${k.toFixed(3)}`
+    }
+    window.addEventListener('resize', fit)
+
+    // 鼠标移动 → 看过来
+    window.addEventListener('pointermove', (e) => {
+      const cx = app.screen.width / 2, cy = app.screen.height / 2
+      const x = (e.clientX - cx) / cx, y = (e.clientY - cy) / cy
+      try { model.focus(x, -y) } catch {}
+    })
+
+    // 点一下切一个动作
+    const motions = ['IDLE', '举手切默认手', '竖手指切出来动画', '狗尾草切换出来']
+    let i = 0
+    window.addEventListener('click', () => {
+      try {
+        model.motion(motions[i % motions.length])
+        i += 1
+      } catch (e) { fail('切动作失败：' + e.message) }
+    })
+
+    document.getElementById('tip').textContent =
+      `加载好了 · ${model.width.toFixed(0)}×${model.height.toFixed(0)} · 点一下切动作`
+  } catch (e) {
+    fail('加载失败：' + (e && e.stack || e))
+  }
+})()
+</script>
+</body>
+</html>

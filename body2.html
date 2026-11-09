@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>米鱼的身体 · 预演 v2</title>
+<style>
+  html,body{margin:0;height:100%;background:linear-gradient(180deg,#0b1220,#1a2440);overflow:hidden}
+  #stage{width:100vw;height:100vh;display:block}
+  #tip{position:fixed;left:12px;bottom:10px;color:#8fa6c8;font:12px/1.6 system-ui;user-select:none}
+  #err{position:fixed;left:12px;top:12px;color:#ff8080;font:13px/1.6 ui-monospace;white-space:pre-wrap;max-width:90vw}
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="tip">点一下会切动作 · 鼠标移动会看过来</div>
+<div id="err"></div>
+
+<!-- Cubism 4 Core：必须最先加载，pixi-live2d-display 靠它解析 moc3 -->
+<script src="./live2dcubismcore.min.js"></script>
+<script src="./node_modules/pixi.js/dist/browser/pixi.min.js"></script>
+<script src="./node_modules/pixi-live2d-display/dist/cubism4.min.js"></script>
+<script>
+const errBox = document.getElementById('err')
+const fail = (m) => { errBox.textContent += m + '\n'; console.error(m) }
+window.addEventListener('error', e => fail('页面错误：' + (e.message || e)))
+
+;(async () => {
+  try {
+    const app = new PIXI.Application({
+      view: document.getElementById('stage'),
+      autoStart: true,
+      resizeTo: window,
+      backgroundAlpha: 0,
+      antialias: true,
+    })
+
+    const model = await PIXI.live2d.Live2DModel.from('./model/大肥鱼.model3.json', {
+      motionPreload: 'IDLE',
+      autoInteract: false,
+    })
+    app.stage.addChild(model)
+
+    // 缩到屏幕高度的一大半，站在右下角
+    const fit = () => {
+      // 2026-11-09 修：原来 x/y 用 model.width 再乘一次 k，可 PIXI 的 width 是**缩放后**的，
+      // 等于缩了两遍，人越缩越小最后跑出屏幕。改成锚点定位，不碰 model.width 的语义。
+      model.anchor.set(0.5, 1)          // 底部中心为锚点
+      const raw = model.width / (model.scale.x || 1)   // 反推原始宽度
+      const rawH = model.height / (model.scale.y || 1)
+      const k = Math.min(app.screen.height * 0.86 / rawH, app.screen.width * 0.5 / raw)
+      model.scale.set(k)
+      model.x = app.screen.width * 0.76                 // 右侧约四分之一
+      model.y = app.screen.height * 0.99                // 贴底
+      document.getElementById('tip').textContent =
+        `x=${model.x.toFixed(0)} y=${model.y.toFixed(0)} scale=${k.toFixed(2)} raw=${raw.toFixed(0)}×${rawH.toFixed(0)}`
+    }
+    window.addEventListener('resize', fit)
+
+    // 鼠标移动 → 看过来
+    window.addEventListener('pointermove', (e) => {
+      const cx = app.screen.width / 2, cy = app.screen.height / 2
+      const x = (e.clientX - cx) / cx, y = (e.clientY - cy) / cy
+      try { model.focus(x, -y) } catch {}
+    })
+
+    // 点一下切一个动作
+    const motions = ['IDLE', '举手切默认手', '竖手指切出来动画', '狗尾草切换出来']
+    let i = 0
+    window.addEventListener('click', () => {
+      try {
+        model.motion(motions[i % motions.length])
+        i += 1
+      } catch (e) { fail('切动作失败：' + e.message) }
+    })
+
+    document.getElementById('tip').textContent =
+      `加载好了 · ${model.width.toFixed(0)}×${model.height.toFixed(0)} · 点一下切动作`
+  } catch (e) {
+    fail('加载失败：' + (e && e.stack || e))
+  }
+})()
+</script>
+</body>
+</html>

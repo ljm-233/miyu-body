@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>v10 · Cubism5 引擎</title>
+<style>
+  html,body{margin:0;height:100%;background:transparent;background-image:none;overflow:hidden}
+  /* 2026-11-09：原来这里是一层深色渐变，桌面浮层上会露出一个比壁纸暗一圈的矩形。
+     现在只在 pet 里用，直接全透明。 */
+  #stage{background:transparent}
+  canvas{display:block}
+  #tip{position:fixed;left:12px;bottom:10px;color:#8fa6c8;font:12px/1.6 system-ui;user-select:none}
+  #err{position:fixed;left:12px;top:12px;color:#ff8080;font:13px/1.6 ui-monospace;white-space:pre-wrap;max-width:92vw}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "pixi.js": "./v8lib/node_modules/pixi.js/dist/pixi.min.mjs",
+    "untitled-pixi-live2d-engine": "./v8lib/node_modules/untitled-pixi-live2d-engine/dist/cubism.es.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="tip">加载中…</div>
+
+<!-- Cubism 5 Core：引擎要靠它解析 moc3，必须先于 module 加载 -->
+<script src="./live2dcubismcore.min.js"></script>
+<div id="err"></div>
+
+<script type="module">
+import { Application, extensions } from 'pixi.js'
+import { configureCubismSDK, Live2DModel, Live2DPlugin } from 'untitled-pixi-live2d-engine'
+
+const PET = new URLSearchParams(location.search).has('pet')
+if (PET) {
+  document.documentElement.style.background = 'transparent'
+  document.body.style.background = 'transparent'
+  document.documentElement.style.backgroundImage = 'none'
+  document.body.style.backgroundImage = 'none'
+  // canvas 铺满窗口时不留底色；窗口本身在 layer-shell 上是透明的
+  const st = document.createElement('style')
+  st.textContent = 'html,body{background:transparent !important;background-image:none !important} canvas{background:transparent !important}'
+  document.head.appendChild(st)
+  const t = document.getElementById('tip'); if (t) t.style.display = 'none'
+  const e2 = document.getElementById('err'); if (e2) e2.style.display = 'none'
+}
+const tip = document.getElementById('tip')
+const errBox = document.getElementById('err')
+const fail = (m) => { errBox.textContent += m + '\n'; console.error(m) }
+window.addEventListener('error', e => fail('页面错误：' + (e.message || e)))
+window.addEventListener('unhandledrejection', e => fail('Promise 错误：' + (e.reason && e.reason.message || e.reason)))
+
+try {
+  // 模型很大（16MB moc3 + 5 张 4096 贴图），工作内存给足
+  configureCubismSDK({ memorySizeMB: 64 })
+  extensions.add(Live2DPlugin)
+
+  const app = new Application()
+  await app.init({
+    resizeTo: window,
+    preference: 'webgl',
+    autoDensity: true,
+    resolution: window.devicePixelRatio || 1,
+    backgroundAlpha: 0,
+    antialias: true,
+  })
+  document.body.appendChild(app.canvas)
+  // 2026-11-09：pixi 8 光靠 init 的 backgroundAlpha:0 不保险，渲染器那层背景还要清一次，
+  // 否则桌面浮层上会看到一圈比壁纸暗的矩形。
+  try {
+    // 只把 alpha 清零；color 千万别碰，碰了就是把背景涂成黑色
+    if (app.renderer?.background) app.renderer.background.alpha = 0
+  } catch {}
+
+  const model = await Live2DModel.from('./model/大肥鱼.model3.json', {
+    textureOptions: { lod: 'single-auto' },   // 4096 大图按屏幕实际大小降采样，省显存
+  })
+  app.stage.addChild(model)
+
+  // 参数归位：引擎可能也把参数初始化成 0，逐个拨回 moc3 的默认值
+  try {
+    const core = model.internalModel?.coreModel
+    const P = core?._model?.parameters
+    if (P && core.setParameterValueByIndex) {
+      for (let i = 0; i < P.count; i++) core.setParameterValueByIndex(i, P.defaultValues[i])
+    }
+  } catch (e) { fail('参数归位失败：' + e.message) }
+
+  // 这个引擎支持 anchor，直接底部中心定位
+  model.anchor.set(0.5, 1)
+  const fit = () => {
+    // rawW/rawH 要算「scale=1 时的原生尺寸」。不要用 model.width（那是已经缩过的），
+    // 否则窗口改尺寸后 k 会被自己越算越小——之前头被切就是这个。
+    const rawW = model.width / (model.scale.x || 1)
+    const rawH = model.height / (model.scale.y || 1)
+    const k = Math.min(app.screen.height * 0.97 / rawH, app.screen.width * 0.97 / rawW)
+    model.scale.set(k)
+    // 2026-11-09：anchor 是 (0.5,1)，x 是**中心点**。原来写 width-120 等于把中心推到右边界外，
+    // 她就被截掉一截。居中放，右边距交给窗口本身（pet.py 里 margin=24）。
+    if (!moved) {
+      model.x = app.screen.width / 2
+      model.y = app.screen.height - 4
+    } else {
+      // 拖过就保留相对位置，但夹在窗口内，别跑出去
+      const halfW = rawW * k / 2
+      model.x = Math.max(halfW, Math.min(app.screen.width - halfW, model.x))
+      const h = rawH * k
+      model.y = Math.max(h, Math.min(app.screen.height, model.y))
+    }
+    tip.textContent = `x=${model.x.toFixed(0)} y=${model.y.toFixed(0)} k=${k.toFixed(3)}`
+  }
+
+
+  // ── 状态桥：每 2 秒问一次 DSH 那边「我刚才说了什么」 ────────────────────
+  // 2026-11-09：桌宠不再只是摆设。pet.py 起了个 8101 的小端点，
+  // 有新话就做口型 + 挑一个动作；心情低就垂着，心情好就精神点。
+  let lastSayAt = 0
+  const MOUTH = ['ParamMouthOpenY', 'ParamMouthForm']
+  const pickMouth = () => {
+    try {
+      const core = model.internalModel?.coreModel
+      if (!core) return null
+      const P = core._model?.parameters
+      if (!P) return null
+      for (const name of MOUTH) {
+        for (let i = 0; i < P.count; i++) if (P.ids[i] === name) return { core, idx: i, name }
+      }
+    } catch {}
+    return null
+  }
+  const mouth = pickMouth()
+  const pageLog = (m) => { try { fetch('http://127.0.0.1:8101/log', { method: 'POST', body: String(m) }) } catch {} }
+  pageLog('mouth=' + (mouth ? ('idx=' + mouth.idx + ' name=' + mouth.name) : 'null') +
+          ' core=' + (model.internalModel?.coreModel ? 'y' : 'n') +
+          ' hasOn=' + (typeof model.internalModel?.on))
+
+  // 口型：参数必须写在引擎的 beforeModelUpdate 里，否则每帧被动作覆盖回去
+  let talkUntil = 0
+  const talk = (ms = 1400) => { talkUntil = performance.now() + ms }
+  try {
+    model.internalModel.on('beforeModelUpdate', () => {
+      if (!mouth || performance.now() > talkUntil) return
+      const dt = performance.now()
+      const v = Math.abs(Math.sin(dt / 90)) * 0.7 + Math.abs(Math.sin(dt / 41)) * 0.25
+      try {
+        const c = mouth.core
+        if (typeof c.setParameterValueById === 'function') {
+          c.setParameterValueById('ParamMouthOpenY', Math.min(1, v))
+        } else {
+          c.setParameterValueByIndex(mouth.idx, Math.min(1, v))
+        }
+      } catch (e) { pageLog('设参数失败 ' + e.message) }
+    })
+  } catch (e) { pageLog('挂钩子失败 ' + e.message) }
+  const _unusedTalkOld = (ms = 1400) => {
+    if (!mouth) return
+    const t0 = performance.now()
+    const step = () => {
+      const dt = performance.now() - t0
+      if (dt > ms) { try { mouth.core.setParameterValueByIndex(mouth.idx, 0) } catch {} ; return }
+      // 开合用一个不规则的正弦，看着像在说话
+      const v = Math.abs(Math.sin(dt / 90)) * 0.75 + Math.abs(Math.sin(dt / 37)) * 0.2
+      try {
+        const c = mouth.core
+        if (typeof c.setParameterValueById === 'function') {
+          c.setParameterValueById('ParamMouthOpenY', Math.min(1, v))
+        } else {
+          c.setParameterValueByIndex(mouth.idx, Math.min(1, v))
+        }
+      } catch (e) { pageLog('设参数失败 ' + e.message) }
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }
+
+  const pollBridge = async () => {
+    try {
+      const r = await fetch('http://127.0.0.1:8101/state', { cache: 'no-store' })
+      const d = await r.json()
+      if (PET) {
+        const e = document.getElementById('err')
+        if (e) e.textContent = `bridge at=${d && d.at} lastAt=${lastSayAt} mouth=${mouth ? mouth.idx : 'null'} talkUntil=${Math.round(talkUntil)}`
+      }
+      pageLog('poll at=' + (d && d.at) + ' mood=' + (d && d.mood) + ' last=' + lastSayAt + ' talkUntil=' + Math.round(talkUntil))
+      if (d && d.at && d.at > lastSayAt) {
+        lastSayAt = d.at
+        talk(Math.min(4000, 600 + String(d.say || '').length * 90))
+        // 心情好的时候挑个活泼动作，低的时候只眨眼
+        if (Number(d.mood) >= 45) {
+          try { model.motion('竖手指切出来动画') } catch {}
+        }
+      }
+    } catch {}
+  }
+  setInterval(pollBridge, 2000)
+  pollBridge()
+
+  // ── 位置记忆：拖过就存，下次开还在那儿 ───────────────────────────────
+  const POSKEY = 'miyu-body-pos-v2'   // 2026-11-09 改过定位规则，旧坐标作废
+  const savePos = () => { try { localStorage.setItem(POSKEY, JSON.stringify({ x: model.x, y: model.y, k: model.scale.x })) } catch {} }
+  const loadPos = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(POSKEY) || 'null')
+      if (v && typeof v.x === 'number') { model.x = v.x; model.y = v.y; return true }
+    } catch {}
+    return false
+  }
+
+  // ── 随机小动作：每隔 18~40 秒自己动一下，像有呼吸的活物 ────────────────
+  const idleMotions = ['IDLE', '狗尾草切换出来', '竖手指切出来动画', '举手切默认手']
+  let idleTimer = null
+  const scheduleIdle = () => {
+    idleTimer = setTimeout(() => {
+      if (!dragging) { try { model.motion(idleMotions[Math.floor(Math.random() * idleMotions.length)]) } catch {} }
+      scheduleIdle()
+    }, 18000 + Math.random() * 22000)
+  }
+
+  // 拖动
+  let moved = false, dragging = false, dx = 0, dy = 0, ox = 0, oy = 0, dragged = false
+  const hit = (x, y) => {
+    const b = model.getBounds()
+    return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
+  }
+  app.canvas.style.touchAction = 'none'
+  app.canvas.addEventListener('pointerdown', (e) => {
+    // 2026-11-09：不再要求 Ctrl。窗口的输入区域本来就只盖她身体那块，不会误触。
+    if (!hit(e.clientX, e.clientY)) return
+    dragging = true; dragged = false
+    dx = e.clientX; dy = e.clientY; ox = model.x; oy = model.y
+    app.canvas.setPointerCapture?.(e.pointerId)
+    app.canvas.style.cursor = 'grabbing'
+  })
+  window.addEventListener('pointermove', (e) => {
+    if (!dragging) { app.canvas.style.cursor = hit(e.clientX, e.clientY) ? 'grab' : 'default'; return }
+    const mx = e.clientX - dx, my = e.clientY - dy
+    if (Math.abs(mx) > 3 || Math.abs(my) > 3) { dragged = true; moved = true }
+    model.x = ox + mx; model.y = oy + my
+  })
+  window.addEventListener('pointerup', () => { if (dragging) { dragging = false; app.canvas.style.cursor = 'grab'; savePos() } })
+
+  // ── Ctrl + 滚轮：缩放 ────────────────────────────────────────────────
+  window.addEventListener('wheel', (e) => {
+    // 同理：不再要求 Ctrl
+    e.preventDefault()
+    const f = e.deltaY < 0 ? 1.06 : 1 / 1.06
+    const k = Math.max(0.02, Math.min(3, model.scale.x * f))
+    model.scale.set(k)
+    savePos()
+    tip.textContent = `scale=${k.toFixed(3)}`
+  }, { passive: false })
+
+  // 鼠标移动 → 看过来
+  window.addEventListener('pointermove', (e) => {
+    const cx = app.screen.width / 2, cy = app.screen.height / 2
+    try { model.focus?.((e.clientX - cx) / cx, -(e.clientY - cy) / cy) } catch {}
+  })
+
+  // 点一下切动作（拖过就不算点击）
+  const motions = ['IDLE', '举手切默认手', '竖手指切出来动画', '狗尾草切换出来']
+  let mi = 0
+  window.addEventListener('click', () => {
+    if (dragged) { dragged = false; return }
+    try { model.motion(motions[mi % motions.length]); mi++ } catch (e) { fail('切动作失败：' + e.message) }
+  })
+
+  // 2026-11-09：顺序很重要——先 fit 定好大小和默认位置，再用记住的位置覆盖。
+  // 反过来做（在 loadPos 里调 fit）会因为模型还没布局完算崩，人就消失。
+  // 模型刚 from() 回来时 width/height 可能还是 0，直接 fit 会算成 0 倍缩放、人就不见了。
+  // 先试一次，再排两次延迟兜底。
+  fit()
+  requestAnimationFrame(() => { fit(); loadPos() })
+  setTimeout(() => fit(), 300)
+  setTimeout(() => fit(), 1200)
+  scheduleIdle()
+  tip.textContent = '加载好了'
+} catch (e) {
+  fail('启动失败：' + (e && e.stack || e))
+}
+</script>
+</body>
+</html>

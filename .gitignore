@@ -1,0 +1,47 @@
+# ---- 大件不进仓（本地还在，只是不跟踪）----
+node_modules/
+build/
+build-*/
+model/
+psd/
+v8lib/
+oldlib/
+
+# Cubism 官方 SDK 与第三方库：体积大、有自己的许可，不进这个仓
+native/Core/
+native/Framework/
+native/lib/
+native/stb/
+native2/Core/
+native2/Framework/
+native2/lib/
+native2/stb/
+native3/Core/
+native3/Framework/
+native3/lib/
+native3/stb/
+native/Core
+native2/FrameworkShaders/
+native3/FrameworkShaders/
+wayland-probe/*.o
+alpha-probe/*.o
+
+# 截图与实验产物（体积大，结论写在 md 里就够了）
+*.png
+*.jpg
+*.log
+*.bin
+
+# 编译中间物
+*.o
+*.a
+probe
+selftest
+alpha-probe/probe
+wayland-probe/probe
+input-probe/test_region
+
+# 实验里编出来的可执行文件
+alpha-probe/bg
+input-probe/clicker
+input-probe/input-probe
