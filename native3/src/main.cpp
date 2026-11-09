@@ -190,6 +190,22 @@ static void lookInit(Csm::CubismModel* model) {
 static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int lh) {
     if (!gLook.ready) lookInit(model);
     if (!gLook.on) return;
+    // 排查用：MIYU_FORCE_PARAM="参数名=值" 直接把某个参数按死，看它到底驱动什么
+    if (const char* spec = std::getenv("MIYU_FORCE_PARAM")) {
+        char name[128] = {0};
+        float val = 0.0f;
+        if (sscanf(spec, "%127[^=]=%f", name, &val) == 2) {
+            const Csm::csmInt32 idx =
+                model->GetParameterIndex(Csm::CubismFramework::GetIdManager()->GetId(name));
+            static const char* lastSpec = nullptr;
+            if (spec != lastSpec) {
+                lastSpec = spec;
+                log_("[probe] 按死参数 %s = %.2f（index=%d）", name, val, idx);
+            }
+            if (idx >= 0) model->SetParameterValue(idx, val, 1.0f);
+        }
+        return;
+    }
 
     float nx = 0.0f, ny = 0.0f;   // 不在窗口内 → 目标就是 0，同一个平滑慢慢回正
     float px = 0.0f, py = 0.0f;
@@ -217,10 +233,10 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     const float preAx = gLook.iAx >= 0 ? model->GetParameterValue(gLook.iAx) : -999.0f;
 
     const float a = (dt * 6.0f > 1.0f) ? 1.0f : dt * 6.0f;
-    gLook.cx += (nx * 10.0f - gLook.cx) * a;
-    gLook.cy += (ny * 6.0f - gLook.cy) * a;
-    gLook.ex += (nx * 0.7f - gLook.ex) * a;
-    gLook.ey += (ny * 0.7f - gLook.ey) * a;
+    gLook.cx += (nx * 26.0f - gLook.cx) * a;   // 10 太轻，实测头只偏 1.7 度看不出来
+    gLook.cy += (ny * 16.0f - gLook.cy) * a;
+    gLook.ex += (nx * 1.0f - gLook.ex) * a;
+    gLook.ey += (ny * 1.0f - gLook.ey) * a;
 
     // 头用 Add：待机微动也写 ParamAngleX，Add 才是「叠在它上面」（实测 Add 前读到的
     // 恰好是 idle 本帧算的值，说明这两个参数每帧确实被 LoadParameters 归零了）。
