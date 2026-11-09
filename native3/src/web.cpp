@@ -184,8 +184,8 @@ const char* kHtml = R"HTML(<!doctype html>
     ]},
     {g:'性能', items:[
       {k:'fps', t:'select', label:'帧率上限',
-       opts:[['15','15（最省电）'],['30','30'],['60','60（默认）']],
-       d:'每帧睡到该来的时刻，上下限就是它，数字越低越省 CPU'}
+       opts:[['30','30（最省电）'],['60','60（默认）'],['120','120'],['200','200（副屏上限）'],['240','240（主屏上限）']],
+       d:'每帧睡到该来的时刻，数字越低越省 CPU；副屏是 200Hz，240 档只有挪到主屏才跑得满'}
     ]},
     {g:'声音', items:[
       {k:'voice', t:'bool', label:'说话出声',
@@ -514,7 +514,7 @@ void loadSettings() {
         else if (k == "vol" && v.t == VNum) gSet.vol = clampf(float(v.n), 0.0f, 1.0f);
         else if (k == "fps" && v.t == VNum) {
             const int n = int(v.n);
-            if (n == 15 || n == 30 || n == 60) gSet.fps = n;
+            if (n == 30 || n == 60 || n == 120 || n == 200 || n == 240) gSet.fps = n;
         }
         else if (k == "idleStyle" && v.t == VStr) {
             const std::string c = v.s;
@@ -686,8 +686,10 @@ std::string handleSet(const std::string& body, bool logIt) {
         }
         if (k == "fps" && v.t == VNum) {
             const int nv = int(v.n + (v.n < 0 ? -0.5 : 0.5));
-            if (nv != 15 && nv != 30 && nv != 60) {
-                if (logIt) logw("POST /set fps=%d 只认 15/30/60，忽略", nv);
+            // 2026-11-09 23:4x：他要五档。副屏 HDMI-A-3 是 200Hz、主屏 eDP-1 是 240Hz，
+            // 所以 240 只在主屏有意义（副屏会被 vsync 卡在 200）。
+            if (nv != 30 && nv != 60 && nv != 120 && nv != 200 && nv != 240) {
+                if (logIt) logw("POST /set fps=%d 只认 30/60/120/200/240，忽略", nv);
             } else if (nv != gSet.fps) {
                 gSet.fps = nv; changed.push_back("fps");
             }
