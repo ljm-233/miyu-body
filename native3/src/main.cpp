@@ -471,7 +471,12 @@ static void exprPlay(const std::string& name) {
     // 2026-11-09 22:4x：**必须先清队列**。StartMotion 是排队不是替换，切三次以后
     // 队列里堆着好几个表情同时按权重写同一批参数，表现就是「换不了、也回不去默认」。
     // 清了之后权重从 0 起，配上 0.35s 的 fadeIn 正好是「松手回弹」那种过渡。
+    // 2026-11-09 22:3x：**池子原来只进不出**（日志里一晚上涨到 34 个）。
+    // StopAllMotions 已经把队列清空、管理器不再引用旧对象，所以这里可以放心回收。
+    // autoDelete 仍是 false —— 本体的生死由这个池子管，管理器只管队列。
     gExprMgr->StopAllMotions();
+    for (Csm::ACubismMotion* old : gExprPool) Csm::ACubismMotion::Delete(old);
+    gExprPool.clear();
     gExprMgr->StartMotion(m, false /* autoDelete：归 gExprPool 管 */);
     gExprPool.push_back(m);
     gExprName = label;
