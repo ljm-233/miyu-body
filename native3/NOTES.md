@@ -1558,3 +1558,113 @@ ssaa2x 的硬跳变更多（74 vs 54）才是「更锐」的来源（贴图不�
 - 这台机器**没有能跑的浏览器**（他的 Edge 在另一个 namespace，直接 exec `/proc/<pid>/root/...` 报
   ICU fd 错），所以页面截图是靠 `niri msg action spawn -- xdg-open <url>` 让**他的浏览器**开新标签、
   再 `grim` 抓的 —— 副作用是浏览器里多了几个 `米鱼 · 设置` 标签页。
+
+---
+
+## 十九、SMAA 抗锯齿（`aa=smaa`，2026-11-10 00:5x）
+
+18.5 里那句「SMAA 没做，要官方查找表」作废：两张官方表已经放进 `assets/smaa/`，这一节就是把它接进去的
+全部决定和实测。**默认仍是 `ssaa2x`**（他喜欢锐），`smaa` 是并列的第五档。
+
+### 19.1 查找表：最朴素的 DDS，128 字节头 + 原始像素
+
+两张表都是 `flags=0x81007`、无 fourcc、无压缩、无 mipmap，所以不需要任何图像库，按偏移读就行：
+
+| 文件 | 头里读到 | 实际排布 | 上传成 |
+| --- | --- | --- | --- |
+| `AreaTexDX10.dds` | h=560 w=160 bpp=24，文件 268928 = 128 + 160×560×3 | 见下（**BGR 序**） | `GL_RGB8` + `GL_LINEAR` + `GL_CLAMP_TO_EDGE` |
+| `SearchTex.dds` | h=16 w=64 bpp=8，文件 1152 = 128 + 64×16 | 单字节灰度，值只有 {0,127,254} | `GL_R8` + 同上 |
+
+容易踩的一条：AreaTex 的像素头写的是 `Rmask=0x00ff0000 / Gmask=0x0000ff00 / Bmask=0x000000ff`，
+**小端下 byte0 是 B、byte2 是 R**。实测 `byte0`（B）全 0、`byte1/byte2` 才有数据 —— 也就是说
+「R/G 两个通道装了两份面积表、B 是补位的 0」。上传前把 b0/b2 对调（`std::swap`，89600 个像素，一次性），
+就不用依赖 `GL_BGR`。判据：拿 Python 数一遍通道分布，B 通道 distinct=1（全 0）就是它。
+
+不动点：**不建 mipmap**、`GL_LINEAR`（SearchTex 的 2×2 打包查询和 edgesTex 的 1.25 像素 gather 都靠线性过滤）。
+
+### 19.2 三遍 pass，挂在 FXAA 同一条缝
+
+输入 `targetTex()`（模型 + 垫在下面的影子/粒子/轮廓光都在里面），输出 `smaaOutTex` 交给 `composite`。
+和 `applyFxaa` 完全同位置、同接口（`aaMul=1` 的 offscreen）：
+
+| pass | 目标 | 做什么 |
+| --- | --- | --- |
+| ① edges | `RG8` 500×900 | luma 边缘检测（`SMAA_THRESHOLD 0.1`）：r = 西边有边、g = 北边有边。平坦区 `discard`（目标每帧先清 0） |
+| ② weights | `RGBA8` 500×900 | `SearchTex` 决定沿 x/y 各走多长（最多 8 步、一次跨 2 px），`AreaTex` 把（左距、右距、两端的交叉边）换成两侧覆盖面积：r/g = 左右，b/a = 上下 |
+| ③ neigh | `RGBA8` 500×900 | 用 weights 对**原始颜色**只混一个像素，且只往权重更大的那一边 |
+
+三个目标的显存：`RG8 + 2×RGBA8 = 8 B/px`，500×900 = **3.4 MB**（日志有打印）。
+
+### 19.3 两个移植上的坑
+
+- **y 轴朝向**。官方 `SMAA.hlsl` 假设 texcoord y 向下；我们这个 FBO 的 `v=0` 在 NDC −1（屏幕上朝下），
+  也就是 **y 向上**。整条链自己是一致的（edges/weights/neigh 都吃同一套坐标，面积表只区分「两侧」不区分
+  「上下」），但 weights 那遍里 `±y` 的四个偏移（`-0.25/0.125`、`-0.125/-1.25`）和 neigh 的
+  `offset.y = a.g > a.r ? -a.g : a.r` 是**带符号**的，翻错就是竖边往反方向拉丝。做法：照 three.js 的
+  WebGL 移植版抄（同一份算法，注释里逐条标了 `Changed sign`），不自己推。
+- **premultiplied + gamma**。参考实现的 neigh 那遍有 `pow(2.2) → mix → pow(1/2.2)`，那是给线性工作流准备
+  的。我们的颜色是**预乘**的（rgb 已经被 alpha 缩过），pow 一遍等于把「颜色×alpha」拆开再拼，边上会偏色，
+  所以这一趟直接 `mix()` 两个预乘色 —— 和 FXAA 现在的做法一致，实测整块平均亮度 off 91.25 → smaa 90.49
+  （−0.8%，只是边缘像素的插值差，没有整体漂移）。
+
+### 19.4 设置链路
+
+| 层 | 改了什么 |
+| --- | --- |
+| `postfx` | `smaaWanted(v)`（用户的意思）/ `smaaAvailable()`（表 + shader 在不在）/ `applySmaa(DW,DH)` / `smaaTex()` |
+| `main` | 每帧探一次可用性（只探一次）：`web::setSmaaOk(...)`，不可用就 `web::aaFallback()`（写回 ssaa2x 并落盘、日志一句话） |
+| `web.h/cpp` | `normAa` 收 `smaa`；页面下拉加 `['smaa','smaa（只沿边缘混，比 fxaa 清楚）']`；`/state` 多一个 `smaa_ok`，页面拿到 `false` 就把这一项从下拉里删掉；`POST aa=smaa` 而不可用时按 ssaa2x 落 |
+
+「不可用」是**两级**处理，缺一不可：日志（给人看）+ 设置回落（不然重启一次还是它、每次都白转一圈）。
+启动读盘那一步**不**过滤 smaa —— 那时还不知道表在不在，先吃进来，等 GL 起来再判断。
+
+### 19.5 实测（1920×1080 HDMI-A-3，窗口 500×900，scale=1.0）
+
+**画质**：她头顶那一块 40×40（自动挑的「她身上梯度最强」的框，四档同一个框，先按 SAD 对齐到 ±0 像素），
+6 倍放大并排 → `state/shot-smaa-compare.png`；脸 72×72（左眼 + 颊 + 一缕头发）算拉普拉斯方差：
+
+| aa | 脸 72×72 拉普拉斯方差 | 过渡像素/行（40×40 内，覆盖率 0.05–0.95） |
+| --- | --- | --- |
+| off | **3038.5** | 5.90 |
+| fxaa | 1460.0 | 6.79 |
+| **smaa** | **2710.0** | 6.70 |
+| ssaa2x | 3045.3 | 6.01 |
+
+- smaa 保住 off 的 **89%** 锐度，fxaa 只有 48%（和 18 节「他一试就说 fxaa 糊」对得上）。
+- 过渡像素这一项四档差别很小（5.9–6.8），原因写在这里免得下个人当成 bug：**这个模型的边本身就是贴图里的
+  alpha 渐变（4 px 左右）**，换成头顶那条更干净的边再量是 4.07–4.59，还是分不开。真正分开四档的是
+  拉普拉斯方差和图里的锯齿。
+- 重复性：同一档截两次，脸方差 3038.5 / 2905.7（±4%），过渡像素 5.90 / 6.63 —— 她的呼吸一帧一帧在动，
+  这是**测量噪声**，不是这一档不稳。
+
+**帧率**（`fps=200` 上限，每档等 8 秒，取 `[fps] 实测`）：off **178.0** / fxaa **177.3** /
+smaa **165.4** / ssaa2x **167.8**。全部够不到 200：这台机器整帧是 CPU 侧（模型 715 个 drawable）卡在 178，
+所以四档的差别就是 GPU 侧那点后处理的差别 —— smaa 比 off 贵 **7%**，和 ssaa2x 基本同级。
+
+**切换安全**：`ssaa2x → smaa → off → smaa → ssaa2x → smaa` 连切 5 次，主进程 pid 一直 1548471 没变，
+每次截图她都在（变化像素 127903–128244），不崩、不黑屏、不错位。
+
+**落盘**：`aa=smaa` 写进 `state/settings.json`，`systemctl --user restart miyu-body` 之后日志
+`读回 … aa=smaa`，`/state` 也是 `smaa`。
+
+**找不到查找表**（把 `assets/smaa/` 改名为 `assets/smaa.off` 再重启）：
+`[post] smaa 不可用：assets/smaa/ 下没有（或不是）AreaTexDX10.dds …（读到 area=0 0x0 0bpp）` →
+`[post] 就绪：… | smaa=不可用` → `[web] smaa 不可用：抗锯齿下拉里不留这一档，请求 smaa 的一律按 ssaa2x 走` →
+`[web] smaa 不可用 → aa 回落到 ssaa2x（已写回 …settings.json）`。进程 active、PID 换了新的、
+她照样在（128300 像素）、`/state` = `aa=ssaa2x / smaa_ok=false`、`settings.json` 也变成 `ssaa2x`。
+把目录改回来重启，`smaa=ok`。
+
+**编译**：`cmake --build build --clean-first` 两个 target **0 warning / 0 error**（顺手把 17 节留下的
+`tIn/tAll` 两个没用到的变量删了，不然 `-Wall` 不干净）。
+
+### 19.6 边界 / 没做的
+
+- **没有对角检测（diag）和圆角（corner rounding）**：现在是 SMAA 1x **Medium** 预设（`MAX_SEARCH_STEPS 8`、
+  只看横竖）。diag 那两段要 `SMAADecodeDiagBilinearAccess` 那套 0.25 偏移解码，抄错的方向不是崩而是
+  「斜边往一边拉丝」，风险比收益大；真要加，把 `SMAACalculateDiagWeights` 整段搬进 weights 那遍即可
+  （`e.g > 0` 分支里先算 diag，`weights.r + weights.g == 0` 才走横竖）。
+- **edges/weights 没有降到半分辨率**。任务里写「半分辨率即可」，但这里 500×900 全分辨率也就多花 7% 帧率，
+  而降分辨率要在 edges 与 neigh 之间多一套 texel 换算（weights 的 uv 全在 edges 的像素网格上），
+  很容易把 `pixcoord` 那几行算错 —— 先在真机上量完，不值得为 3% 再冒一次错位的风险。
+- `aa=smaa` 和 `aa=fxaa` 都多一组同尺寸目标；`aa=off` 仍然**一个 FBO 都不建**（最省那条路没变）。
+- 拾取/输入区、拖动、跨屏、标题 `native2-test`、service 文件、socket 协议：**一个字没动**。

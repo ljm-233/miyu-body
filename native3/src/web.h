@@ -46,6 +46,8 @@ struct Settings {
     // 2026-11-10 00:1x：默认从 fxaa 改回 ssaa2x —— 他一试就说「fxaa 开了变模糊」。
     // fxaa 按亮度在整条边缘带上做宽带混合，这个模型的边本身就是贴图里的 alpha 渐变，
     // 一混就是 3–4 像素的糊。ssaa2x 反而更锐（贴图接近 1:1、不走 mipmap，见 17.6）。
+    // 十九：新增 smaa（三遍：边缘检测 → 混合权重 → 邻域混合，只沿边缘混）。
+    // 默认仍是 ssaa2x —— 他喜欢锐，SSAA 实测细节保留最好，SMAA 是可选档。
     std::string aa     = "ssaa2x";  // off/ssaa2x/ssaa3x/fxaa/smaa
     float       shadow = 0.0f;      // 0–1   地面软阴影强度（默认关：深色壁纸上基本看不见）
     float       rim    = 0.35f;     // 0–1   轮廓光强度
@@ -58,6 +60,15 @@ using ApplyFn = void (*)(const char* key);
 
 // 读回 state/settings.json（没有就用默认值）+ 起监听。失败只记日志。
 void init(ApplyFn apply);
+
+// ── 十九：smaa 的可用性（main 在 postfx::init() 之后调一次）────────────
+// false 时：页面「抗锯齿」下拉里不留 smaa 这一项，POST 传来 smaa 也按 ssaa2x 落。
+// 默认 true —— 没调之前「表还没试过」不等于「不可用」，别在启动读盘那一步
+// 把 settings.json 里的 smaa 吃掉。
+void setSmaaOk(bool ok);
+
+// 请求的是 smaa 但这一版用不了：写成 ssaa2x 并落盘（日志一句话，由 main 触发）。
+void aaFallback();
 
 // 每帧一次：非阻塞收一个连接。
 void poll(double now);

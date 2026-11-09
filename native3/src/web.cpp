@@ -183,7 +183,7 @@ const char* kHtml = R"HTML(<!doctype html>
   }
 
   var CORNER = {free:'自由', tl:'左上', tr:'右上', bl:'左下', br:'右下'};
-  var AA = {off:'关', fxaa:'fxaa', ssaa2x:'2×', ssaa3x:'3×'};
+  var AA = {off:'关', fxaa:'fxaa', smaa:'smaa', ssaa2x:'2×', ssaa3x:'3×'};
   var IDLE = {quiet:'安静', natural:'自然', lively:'活泼'};
   function pick(m){ return function(v){ return m[v] || String(v); }; }
 
@@ -202,8 +202,9 @@ const char* kHtml = R"HTML(<!doctype html>
     ]},
     {g:'外观', items:[
       {k:'aa', t:'select', label:'抗锯齿',
-       opts:[['off','关'],['ssaa2x','ssaa 2 倍'],['ssaa3x','ssaa 3 倍'],['fxaa','fxaa']],
-       d:'ssaa2x 最锐（贴图不走 mipmap），代价是帧率；fxaa 最快但糊——它按亮度整块混合；off 最省',
+       opts:[['off','关'],['ssaa2x','ssaa 2 倍'],['ssaa3x','ssaa 3 倍'],['fxaa','fxaa'],
+             ['smaa','smaa（只沿边缘混，比 fxaa 清楚）']],
+       d:'ssaa2x 最锐（贴图不走 mipmap），代价是帧率；fxaa 最快但糊——它按亮度整块混合；smaa 只混边缘、比 fxaa 清楚，代价是 1x 上多跑三遍全屏；off 最省',
        show:pick(AA)},
       {k:'rim', t:'range', min:0, max:1, step:0.05, label:'轮廓光',
        d:'她身边一圈淡蓝光，深色壁纸上更好看'},
@@ -323,6 +324,12 @@ const char* kHtml = R"HTML(<!doctype html>
   }
   function fill(s){
     statusLine(s);
+    // 十九：查找表没读到 / shader 编不过 → 下拉里不留 smaa（选了也不会生效）
+    var aaSel = els.aa && els.aa.el;
+    if (aaSel && s.smaa_ok === false) {
+      for (var i = aaSel.options.length - 1; i >= 0; i--)
+        if (aaSel.options[i].value === 'smaa') aaSel.remove(i);
+    }
     SCHEMA.forEach(function(sec){
       sec.items.forEach(function(it){
         var e = els[it.k]; if (!e) return;
@@ -497,12 +504,13 @@ std::string jsonEsc(const std::string& in) {
 float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 // ── 十八：aa 的取值归一 ─────────────────────────────────────────────
-// 只认四档：off / fxaa / ssaa2x / ssaa3x。
+// 只认五档：off / fxaa / smaa / ssaa2x / ssaa3x。
 // 老 key `ssaa` 的写法（off / 2x / 3x）和直接写 "2x"/"3x" 一起收 —— 旧的 settings.json、
 // 旧脚本、旧书签里的 POST 都不会炸。返回 false = 不认识，调用方忽略（不写坏值）。
 bool normAa(const std::string& in, std::string& out) {
     if (in == "off")  { out = "off";    return true; }
     if (in == "fxaa") { out = "fxaa";   return true; }
+    if (in == "smaa") { out = "smaa";   return true; }
     if (in == "ssaa2x" || in == "2x") { out = "ssaa2x"; return true; }
     if (in == "ssaa3x" || in == "3x") { out = "ssaa3x"; return true; }
     return false;
@@ -517,6 +525,7 @@ std::string gOutput   = "?";
 int         gWinW     = 0, gWinH = 0;
 double      gFps      = -1.0;    // 十八：main 的 framePace 每 5 秒喂一次实测帧率
 std::string gPath     = "settings.json";
+bool        gSmaaOk   = true;    // 十九：postfx 报告 smaa 能不能用（main 启动时喂一次）
 std::vector<std::string> gExprs;
 size_t      gExprIdx  = 0;
 
@@ -698,6 +707,8 @@ std::string stateJson() {
     s += ",\"corner\":\"" + gSet.corner + "\"";
     s += ",\"hide\":" + std::string(gSet.hide ? "true" : "false");
     s += ",\"aa\":\"" + gSet.aa + "\"";
+    // 十九：页面靠它决定「下拉里留不留 smaa 这一项」
+    s += ",\"smaa_ok\":" + std::string(gSmaaOk ? "true" : "false");
     s += ",\"shadow\":" + std::to_string(gSet.shadow);
     s += ",\"rim\":" + std::to_string(gSet.rim);
     s += ",\"particles\":" + std::to_string(gSet.particles);
@@ -834,8 +845,15 @@ std::string handleSet(const std::string& body, bool logIt) {
         if ((k == "aa" || k == "ssaa") && v.t == VStr) {
             std::string c;
             if (!normAa(v.s, c)) {
-                if (logIt) logw("POST /set %s=%s 只认 off/fxaa/ssaa2x/ssaa3x（旧写法 off/2x/3x 也认），忽略",
+                if (logIt) logw("POST /set %s=%s 只认 off/fxaa/smaa/ssaa2x/ssaa3x"
+                                "（旧写法 off/2x/3x 也认），忽略",
                                 k.c_str(), v.s.c_str());
+            } else if (c == "smaa" && !gSmaaOk) {
+                // 查找表没读到：不能留一个「选了但什么也不发生」的档
+                if (logIt) logw("POST /set %s=smaa 但 smaa 不可用（查找表没读到），按 ssaa2x 落",
+                                k.c_str());
+                c = "ssaa2x";
+                if (c != gSet.aa) { gSet.aa = c; changed.push_back("aa"); }
             } else if (c != gSet.aa) {
                 gSet.aa = c; changed.push_back("aa");
             }
@@ -997,6 +1015,20 @@ std::string resolveStatePath() {
 // ── 对外 ────────────────────────────────────────────────────────────
 Settings&       settings()  { return gSet; }
 const Settings& settingsC() { return gSet; }
+
+// ── 十九：smaa 可用性 + 回落 ────────────────────────────────────────
+void setSmaaOk(bool ok) {
+    if (gSmaaOk == ok) return;
+    gSmaaOk = ok;
+    if (!ok) logw("smaa 不可用：抗锯齿下拉里不留这一档，请求 smaa 的一律按 ssaa2x 走");
+}
+
+void aaFallback() {
+    if (gSet.aa != "smaa") return;
+    gSet.aa = "ssaa2x";
+    saveSettings();
+    logw("smaa 不可用 → aa 回落到 ssaa2x（已写回 %s）", gPath.c_str());
+}
 
 void setStatus(const char* output, int w, int h) {
     if (output) gOutput = output;

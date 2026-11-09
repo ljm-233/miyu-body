@@ -608,6 +608,20 @@ struct Ctx {
     GLuint progFxaa = 0;
     GLint  uFxTex = -1, uFxTexel = -1;
 
+    // 十九：SMAA 1x —— 两张官方查找表 + 三遍 pass + 三个同尺寸目标。
+    // edges 是 RG8（r = 西边、g = 北边有边），weights 是 RGBA8（r/g 左右、b/a 上下），
+    // out 是最终结果（交给 composite 当 src，和 fxTex 一个角色）。
+    GLuint smaaAreaTex = 0, smaaSearchTex = 0;
+    bool   smaaOk = false;                  // 表读到了 && 三个 shader 都编出来了
+    GLuint progSmaaEdge = 0, progSmaaBlend = 0, progSmaaNeigh = 0;
+    GLint  uSeTex = -1, uSeTexel = -1;
+    GLint  uSbEdges = -1, uSbArea = -1, uSbSearch = -1, uSbTexel = -1, uSbSize = -1;
+    GLint  uSnColor = -1, uSnBlend = -1, uSnTexel = -1;
+    GLuint smaaEdgesTex = 0, smaaEdgesFbo = 0;
+    GLuint smaaBlendTex = 0, smaaBlendFbo = 0;
+    GLuint smaaOutTex = 0, smaaOutFbo = 0;
+    int    smaaW = 0, smaaH = 0;
+
     GLuint shadowTex = 0;
     GLuint progRim = 0, progPt = 0;
     GLuint vaoQuad = 0, vboQuad = 0;
@@ -644,6 +658,9 @@ static int factorOf(const std::string& s) {
 }
 
 static bool fxaaWanted(const std::string& s) { return s == "fxaa"; }
+// 十九：aa=smaa。查找表没读到时这里仍然是 true（用户的意思），可用性由
+// smaaAvailable() 单独回答 —— 两件事别混，否则日志里说不清是「没选」还是「坏了」。
+static bool smaaWanted(const std::string& s) { return s == "smaa"; }
 
 static GLuint mkShader(GLenum t, const char* src, const char* tag) {
     GLuint s = glCreateShader(t);
@@ -832,6 +849,365 @@ static const char* kFxaaFS =
     "  o = (lB < lMin || lB > lMax) ? a : b;\n"    // 混过头就退回短核
     "}\n";
 
+// ══════════════════════════════════════════════════════════════════════
+// 十九、SMAA 1x（可选档 aa=smaa）
+//
+// 三遍 pass，全部在**和 targetTex 同尺寸**（1x）上做，位置和 FXAA 一模一样：
+//   ① edges   : 亮度边缘检测 → RG8（r = 西边有边，g = 北边有边）。平坦区 discard。
+//   ② weights : 查 AreaTex（按左右/上下距离 + 交叉边取预计算的覆盖面积）
+//               和 SearchTex（同行/同列还要沿着线走几步）→ RGBA8
+//                （r/g = 左右两个混合权重，b/a = 上下两个）。
+//   ③ neigh   : 拿 weights 对**原始 FBO 颜色**做一次混合 —— 只沿边缘混，
+//                所以不像 FXAA 那样把整条边带糊成 3–4 px。
+//
+// 和这个工程的三条约定（踩过才写）：
+//   · 输入是 targetTex()（模型 + 垫在下面的影子/粒子/轮廓光都在里面），输出另起
+//     一个同尺寸纹理交给 composite —— 和 applyFxaa 同一条缝，合成那一趟不用改。
+//   · 颜色是 premultiplied：邻域混合直接对 RGBA 一起 lerp。**不做 gamma 展平**
+//     （参考实现里有 pow(2.2) 那一步，但那是给「非预乘、线性工作流」准备的；
+//     预乘色 pow 一遍会把「颜色×alpha」拆开，边缘会偏色）。
+//   · 查找表读不到 / shader 编不过 → smaaOk = false：颜色链一个字都不变，
+//     aa 当 ssaa2x（main 里一次性回落，见 setSmaaOk / aaFallback）。
+//
+// 纹理朝向：参考实现是 y 向下的 texcoord，我们是 y 向上（FBO 的 v=0 在 NDC -1）。
+// 按 three.js 的 WebGL 移植版（同一份算法，注释里标了 "Changed sign"）抄 ——
+// 三遍 pass 之间的 splat 是各自独立的，朝向只影响 weights 那遍里 ±y 的几个偏移。
+// ══════════════════════════════════════════════════════════════════════
+
+// ① 边缘检测（luma 版，SMAA_THRESHOLD 0.1）
+static const char* kSmaaEdgeFS =
+    "#version 330\n"
+    "in vec2 vUV;\n"
+    "uniform sampler2D uTex;\n"
+    "uniform vec2 uTexel;\n"
+    "out vec4 o;\n"
+    "const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);\n"
+    "float lum(vec2 d){ return dot(texture(uTex, vUV + d * uTexel).rgb, kLuma); }\n"
+    "void main(){\n"
+    "  float L  = lum(vec2( 0.0,  0.0));\n"
+    "  float Ll = lum(vec2(-1.0,  0.0));\n"
+    "  float Lt = lum(vec2( 0.0, -1.0));\n"
+    "  vec2 delta = vec2(abs(L - Ll), abs(L - Lt));\n"
+    "  vec2 edges = step(vec2(0.1), delta);\n"
+    "  if (edges.x + edges.y == 0.0) discard;\n"
+    "  float Le  = lum(vec2( 1.0,  0.0));\n"
+    "  float Lb  = lum(vec2( 0.0,  1.0));\n"
+    "  float Lll = lum(vec2(-2.0,  0.0));\n"
+    "  float Ltt = lum(vec2( 0.0, -2.0));\n"
+    "  vec2 md = max(vec2(abs(L - Le), abs(L - Lb)),\n"
+    "                vec2(abs(Ll - Lll), abs(Lt - Ltt)));\n"
+    "  float finalDelta = max(md.x, md.y);\n"
+    "  edges *= step(0.5 * finalDelta, delta);\n"   // 局部对比度自适应：别被更强的边带着乱混
+    "  o = vec4(edges, 0.0, 1.0);\n"
+    "}\n";
+
+// ② 混合权重：SearchTex 决定「这条线往两边各有多长」，AreaTex 把
+//    （左距离、右距离、两侧交叉边）映射成两侧各自的覆盖面积。
+static const char* kSmaaBlendFS =
+    "#version 330\n"
+    "in vec2 vUV;\n"
+    "uniform sampler2D uEdges, uArea, uSearch;\n"
+    "uniform vec2 uTexel;\n"          // 1/edges 尺寸（三张目标同尺寸）
+    "uniform vec2 uSize;\n"           // edges 像素尺寸
+    "out vec4 o;\n"
+    "const vec2  AREA_PIXEL  = vec2(1.0/160.0, 1.0/560.0);\n"
+    "const float AREA_SUBTEX = 1.0/7.0;\n"
+    "const float MAXD        = 16.0;\n"
+    "const int   STEPS       = 8;\n"
+    "float searchLen(vec2 e, float bias){\n"   // SearchTex 是 64x16 的打包表：x=边组合，y=偏移
+    "  return 255.0 * texture(uSearch, vec2(bias + e.r * 0.5, e.g)).r;\n"
+    "}\n"
+    // 沿线往左走（一次跨两像素，-0.25/-0.125 的偏移是 @PSEUDO_GATHER4：一次采样拿四个边）
+    "float searchXLeft(vec2 tc, float end){\n"
+    "  vec2 e = vec2(0.0, 1.0);\n"
+    "  for (int i = 0; i < STEPS; ++i){\n"
+    "    e = texture(uEdges, tc).rg;\n"
+    "    tc -= vec2(2.0, 0.0) * uTexel;\n"
+    "    if (!(tc.x > end && e.g > 0.8281 && e.r == 0.0)) break;\n"
+    "  }\n"
+    "  tc.x += 0.25 * uTexel.x;\n"
+    "  tc.x += uTexel.x;\n"
+    "  tc.x += 2.0 * uTexel.x;\n"
+    "  tc.x -= uTexel.x * searchLen(e, 0.0);\n"
+    "  return tc.x;\n"
+    "}\n"
+    "float searchXRight(vec2 tc, float end){\n"
+    "  vec2 e = vec2(0.0, 1.0);\n"
+    "  for (int i = 0; i < STEPS; ++i){\n"
+    "    e = texture(uEdges, tc).rg;\n"
+    "    tc += vec2(2.0, 0.0) * uTexel;\n"
+    "    if (!(tc.x < end && e.g > 0.8281 && e.r == 0.0)) break;\n"
+    "  }\n"
+    "  tc.x -= 0.25 * uTexel.x;\n"
+    "  tc.x -= uTexel.x;\n"
+    "  tc.x -= 2.0 * uTexel.x;\n"
+    "  tc.x += uTexel.x * searchLen(e, 0.5);\n"
+    "  return tc.x;\n"
+    "}\n"
+    "float searchYUp(vec2 tc, float end){\n"
+    "  vec2 e = vec2(1.0, 0.0);\n"
+    "  for (int i = 0; i < STEPS; ++i){\n"
+    "    e = texture(uEdges, tc).rg;\n"
+    "    tc += vec2(0.0, 2.0) * uTexel;\n"
+    "    if (!(tc.y > end && e.r > 0.8281 && e.g == 0.0)) break;\n"
+    "  }\n"
+    "  tc.y -= 0.25 * uTexel.y;\n"
+    "  tc.y -= uTexel.y;\n"
+    "  tc.y -= 2.0 * uTexel.y;\n"
+    "  tc.y += uTexel.y * searchLen(e.gr, 0.0);\n"
+    "  return tc.y;\n"
+    "}\n"
+    "float searchYDown(vec2 tc, float end){\n"
+    "  vec2 e = vec2(1.0, 0.0);\n"
+    "  for (int i = 0; i < STEPS; ++i){\n"
+    "    e = texture(uEdges, tc).rg;\n"
+    "    tc -= vec2(0.0, 2.0) * uTexel;\n"
+    "    if (!(tc.y < end && e.r > 0.8281 && e.g == 0.0)) break;\n"
+    "  }\n"
+    "  tc.y += 0.25 * uTexel.y;\n"
+    "  tc.y += uTexel.y;\n"
+    "  tc.y += 2.0 * uTexel.y;\n"
+    "  tc.y -= uTexel.y * searchLen(e.gr, 0.5);\n"
+    "  return tc.y;\n"
+    "}\n"
+    "vec2 area(vec2 dist, float e1, float e2, float off){\n"
+    "  vec2 tc = MAXD * round(4.0 * vec2(e1, e2)) + dist;\n"
+    "  tc = AREA_PIXEL * tc + 0.5 * AREA_PIXEL;\n"
+    "  tc.y += AREA_SUBTEX * off;\n"
+    "  return texture(uArea, tc).rg;\n"
+    "}\n"
+    "void main(){\n"
+    "  vec2 pixcoord = vUV / uTexel;\n"
+    "  vec4 o0 = vUV.xyxy + uTexel.xyxy * vec4(-0.25,  0.125, 1.25,  0.125);\n"
+    "  vec4 o1 = vUV.xyxy + uTexel.xyxy * vec4(-0.125, 0.25, -0.125, -1.25);\n"
+    "  vec4 o2 = vec4(o0.xz, o1.yw) + vec4(-2.0, 2.0, -2.0, 2.0) * uTexel.xxyy * float(STEPS);\n"
+    "  vec2 e = texture(uEdges, vUV).rg;\n"
+    "  vec4 w = vec4(0.0);\n"
+    "  if (e.g > 0.0){\n"                       // 横向的线：沿 x 找两端
+    "    vec2 coords;\n"
+    "    coords.x = searchXLeft(o0.xy, o2.x);\n"
+    "    coords.y = o1.y;\n"
+    "    float dl = coords.x;\n"
+    "    float e1 = texture(uEdges, coords).r;\n"
+    "    coords.x = searchXRight(o0.zw, o2.y);\n"
+    "    float dr = coords.x;\n"
+    "    vec2 d = vec2(dl, dr) / uTexel.x - pixcoord.x;\n"
+    "    vec2 sd = sqrt(abs(d));\n"
+    "    coords.y -= uTexel.y;\n"
+    "    float e2 = textureLodOffset(uEdges, coords, 0.0, ivec2(1, 0)).r;\n"
+    "    w.rg = area(sd, e1, e2, 0.0);\n"
+    "  }\n"
+    "  if (e.r > 0.0){\n"                       // 竖向的线：沿 y 找两端
+    "    vec2 coords;\n"
+    "    coords.y = searchYUp(o1.xy, o2.z);\n"
+    "    coords.x = o0.x;\n"
+    "    float dt = coords.y;\n"
+    "    float e1 = texture(uEdges, coords).g;\n"
+    "    coords.y = searchYDown(o1.zw, o2.w);\n"
+    "    float db = coords.y;\n"
+    "    vec2 d = vec2(dt, db) / uTexel.y - pixcoord.y;\n"
+    "    vec2 sd = sqrt(abs(d));\n"
+    "    coords.y -= uTexel.y;\n"
+    "    float e2 = textureLodOffset(uEdges, coords, 0.0, ivec2(0, 1)).g;\n"
+    "    w.ba = area(sd, e1, e2, 0.0);\n"
+    "  }\n"
+    "  o = w;\n"
+    "}\n";
+
+// ③ 邻域混合：只在真有权重的地方混，而且只往权重更大的那一侧混一像素。
+static const char* kSmaaNeighFS =
+    "#version 330\n"
+    "in vec2 vUV;\n"
+    "uniform sampler2D uColor, uBlend;\n"
+    "uniform vec2 uTexel;\n"
+    "out vec4 o;\n"
+    "void main(){\n"
+    "  vec4 a;\n"
+    "  a.xz = texture(uBlend, vUV).xz;\n"                                    // 本像素：左 / 右
+    "  a.y  = texture(uBlend, vUV + vec2(0.0, -1.0) * uTexel).g;\n"         // 上一行给的「上」
+    "  a.w  = texture(uBlend, vUV + vec2(1.0,  0.0) * uTexel).a;\n"         // 右一列给的「下」
+    "  if (dot(a, vec4(1.0)) < 1e-5){ o = texture(uColor, vUV); return; }\n"
+    "  vec2 dir;\n"
+    "  dir.x = a.a > a.b ? a.a : -a.b;\n"
+    "  dir.y = a.g > a.r ? -a.g : a.r;\n"
+    "  if (abs(dir.x) > abs(dir.y)) dir.y = 0.0; else dir.x = 0.0;\n"
+    "  vec4 c0 = texture(uColor, vUV);\n"
+    "  vec4 c1 = texture(uColor, vUV + sign(dir) * uTexel);\n"
+    "  o = mix(c0, c1, max(abs(dir.x), abs(dir.y)));\n"
+    "}\n";
+
+// 两张官方查找表的 DDS 只有「128 字节头 + 原始像素」这一种最朴素的写法：
+// 没有 fourcc、没有压缩、没有 mipmap，所以不需要任何图像库。
+// 头里要的四个数：高(12)、宽(16)、像素位数(88)。24bpp 是 BGR 排的，手动换成 RGB。
+static bool readDds(const char* path, int* w, int* h, int* bpp,
+                    std::vector<unsigned char>& px) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    unsigned char hd[128];
+    f.read(reinterpret_cast<char*>(hd), sizeof hd);
+    if (f.gcount() != static_cast<std::streamsize>(sizeof hd)) return false;
+    if (std::memcmp(hd, "DDS ", 4) != 0) return false;
+    const auto u32 = [&hd](int off) {
+        return int(hd[off]) | (int(hd[off + 1]) << 8) | (int(hd[off + 2]) << 16) |
+               (int(hd[off + 3]) << 24);
+    };
+    *h   = u32(12);
+    *w   = u32(16);
+    *bpp = u32(88) / 8;
+    if (*w <= 0 || *h <= 0 || (*bpp != 1 && *bpp != 3)) return false;
+    const size_t want = static_cast<size_t>(*w) * static_cast<size_t>(*h) *
+                        static_cast<size_t>(*bpp);
+    px.resize(want);
+    f.read(reinterpret_cast<char*>(px.data()), static_cast<std::streamsize>(want));
+    if (f.gcount() != static_cast<std::streamsize>(want)) return false;
+    if (*bpp == 3) {
+        for (size_t i = 0; i + 2 < px.size(); i += 3) std::swap(px[i], px[i + 2]);
+    }
+    return true;
+}
+
+static bool loadSmaaTextures() {
+    int aw = 0, ah = 0, ab = 0, sw = 0, sh = 0, sb = 0;
+    std::vector<unsigned char> ap, sp;
+    const bool gotArea = readDds("assets/smaa/AreaTexDX10.dds", &aw, &ah, &ab, ap);
+    const bool gotSearch = readDds("assets/smaa/SearchTex.dds", &sw, &sh, &sb, sp);
+    if (!gotArea || !gotSearch || aw != 160 || ah != 560 || ab != 3 ||
+        sw != 64 || sh != 16 || sb != 1) {
+        log_("[post] smaa 不可用：assets/smaa/ 下没有（或不是）AreaTexDX10.dds 160×560 RGB888"
+             " + SearchTex.dds 64×16 灰度（读到 area=%d %dx%d %dbpp / search=%d %dx%d %dbpp）",
+             int(gotArea), aw, ah, ab * 8, int(gotSearch), sw, sh, sb * 8);
+        return false;
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glGenTextures(1, &C.smaaAreaTex);
+    glBindTexture(GL_TEXTURE_2D, C.smaaAreaTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, aw, ah, 0, GL_RGB, GL_UNSIGNED_BYTE, ap.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenTextures(1, &C.smaaSearchTex);
+    glBindTexture(GL_TEXTURE_2D, C.smaaSearchTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, sw, sh, 0, GL_RED, GL_UNSIGNED_BYTE, sp.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    log_("[post] smaa 查找表：Area %dx%d RGB8（%zu 字节）/ Search %dx%d R8（%zu 字节），"
+         "GL_LINEAR 不建 mipmap", aw, ah, ap.size(), sw, sh, sp.size());
+    return true;
+}
+
+// 三张同尺寸目标（edges RG8 / blend RGBA8 / out RGBA8）。改尺寸时整组重建。
+static bool ensureSmaaTargets(int w, int h) {
+    if (C.smaaOutFbo != 0 && C.smaaW == w && C.smaaH == h) return true;
+    if (C.smaaEdgesFbo) { glDeleteFramebuffers(1, &C.smaaEdgesFbo); C.smaaEdgesFbo = 0; }
+    if (C.smaaEdgesTex) { glDeleteTextures(1, &C.smaaEdgesTex); C.smaaEdgesTex = 0; }
+    if (C.smaaBlendFbo) { glDeleteFramebuffers(1, &C.smaaBlendFbo); C.smaaBlendFbo = 0; }
+    if (C.smaaBlendTex) { glDeleteTextures(1, &C.smaaBlendTex); C.smaaBlendTex = 0; }
+    if (C.smaaOutFbo) { glDeleteFramebuffers(1, &C.smaaOutFbo); C.smaaOutFbo = 0; }
+    if (C.smaaOutTex) { glDeleteTextures(1, &C.smaaOutTex); C.smaaOutTex = 0; }
+    C.smaaW = C.smaaH = 0;
+
+    const auto make = [w, h](GLuint* tex, GLuint* fbo, GLint internal, GLenum fmt,
+                             const char* tag) -> bool {
+        glGenTextures(1, tex);
+        glBindTexture(GL_TEXTURE_2D, *tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, fmt, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glGenFramebuffers(1, fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, *fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, *tex, 0);
+        const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        if (st != GL_FRAMEBUFFER_COMPLETE) {
+            log_("[post] smaa 的 %s 目标不完整（0x%04x），这一帧不走 smaa",
+                 tag, static_cast<unsigned>(st));
+            glDeleteFramebuffers(1, fbo); *fbo = 0;
+            glDeleteTextures(1, tex);     *tex = 0;
+            return false;
+        }
+        return true;
+    };
+    if (!make(&C.smaaEdgesTex, &C.smaaEdgesFbo, GL_RG8, GL_RG, "edges") ||
+        !make(&C.smaaBlendTex, &C.smaaBlendFbo, GL_RGBA8, GL_RGBA, "blend") ||
+        !make(&C.smaaOutTex, &C.smaaOutFbo, GL_RGBA8, GL_RGBA, "out")) {
+        return false;
+    }
+    C.smaaW = w;
+    C.smaaH = h;
+    log_("[post] smaa 目标重建 %dx%d（RG8 + 2×RGBA8，共 %.1f MB）", w, h,
+         double(w) * double(h) * 8.0 / 1048576.0);
+    return true;
+}
+
+// 返回 true 表示「成品已经在 smaaOutTex 里，合成要改吃它」。
+static bool applySmaa(int w, int h) {
+    if (!C.smaaOk || C.progSmaaEdge == 0 || C.progSmaaBlend == 0 || C.progSmaaNeigh == 0)
+        return false;
+    if (!ensureSmaaTargets(w, h)) return false;
+    const float tx = 1.0f / float(w), ty = 1.0f / float(h);
+    glDisable(GL_BLEND);
+    glBindVertexArray(C.vaoQuad);
+
+    // ① edges
+    glBindFramebuffer(GL_FRAMEBUFFER, C.smaaEdgesFbo);
+    glViewport(0, 0, w, h);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(C.progSmaaEdge);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, C.tex);
+    glUniform1i(C.uSeTex, 0);
+    glUniform2f(C.uSeTexel, tx, ty);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // ② blend weights
+    glBindFramebuffer(GL_FRAMEBUFFER, C.smaaBlendFbo);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(C.progSmaaBlend);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, C.smaaEdgesTex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, C.smaaAreaTex);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, C.smaaSearchTex);
+    glUniform1i(C.uSbEdges, 0);
+    glUniform1i(C.uSbArea, 1);
+    glUniform1i(C.uSbSearch, 2);
+    glUniform2f(C.uSbTexel, tx, ty);
+    glUniform2f(C.uSbSize, float(w), float(h));
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // ③ neighborhood blending：颜色读**原始** targetTex，权重读 blendTex
+    glBindFramebuffer(GL_FRAMEBUFFER, C.smaaOutFbo);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(C.progSmaaNeigh);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, C.tex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, C.smaaBlendTex);
+    glUniform1i(C.uSnColor, 0);
+    glUniform1i(C.uSnBlend, 1);
+    glUniform2f(C.uSnTexel, tx, ty);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    return true;
+}
+
 static bool init() {
     if (C.progRim != 0 || C.shadowTex != 0) return true;
     buildShadowTex();
@@ -850,6 +1226,29 @@ static bool init() {
         C.uRimStr   = glGetUniformLocation(C.progRim, "uStrength");
     }
     if (C.progPt) C.uPtColor = glGetUniformLocation(C.progPt, "uColor");
+
+    // 十九：SMAA —— 三遍 pass 的 program + 两张查找表。任何一步失败都只是
+    // 「没有 smaa 这一档」，不影响别的 aa。
+    C.progSmaaEdge  = mkProgram(kRimVS, kSmaaEdgeFS,  "smaa-edges");
+    C.progSmaaBlend = mkProgram(kRimVS, kSmaaBlendFS, "smaa-weights");
+    C.progSmaaNeigh = mkProgram(kRimVS, kSmaaNeighFS, "smaa-blend");
+    const bool texOk = (C.smaaAreaTex != 0 && C.smaaSearchTex != 0) || loadSmaaTextures();
+    C.smaaOk = texOk && C.progSmaaEdge && C.progSmaaBlend && C.progSmaaNeigh;
+    if (C.smaaOk) {
+        C.uSeTex    = glGetUniformLocation(C.progSmaaEdge, "uTex");
+        C.uSeTexel  = glGetUniformLocation(C.progSmaaEdge, "uTexel");
+        C.uSbEdges  = glGetUniformLocation(C.progSmaaBlend, "uEdges");
+        C.uSbArea   = glGetUniformLocation(C.progSmaaBlend, "uArea");
+        C.uSbSearch = glGetUniformLocation(C.progSmaaBlend, "uSearch");
+        C.uSbTexel  = glGetUniformLocation(C.progSmaaBlend, "uTexel");
+        C.uSbSize   = glGetUniformLocation(C.progSmaaBlend, "uSize");
+        C.uSnColor  = glGetUniformLocation(C.progSmaaNeigh, "uColor");
+        C.uSnBlend  = glGetUniformLocation(C.progSmaaNeigh, "uBlend");
+        C.uSnTexel  = glGetUniformLocation(C.progSmaaNeigh, "uTexel");
+        log_("[post] smaa 就绪：edges / weights / blend 三遍（SMAA 1x，1x 分辨率）");
+    } else if (texOk) {
+        log_("[post] smaa 不可用：着色器编译/链接失败，aa 里不留这一档");
+    }
 
     // 全屏四边形（rim 用）—— 直接 NDC，不走矩阵
     {
@@ -882,15 +1281,19 @@ static bool init() {
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
-    log_("[post] 就绪：阴影贴图 %d²（峰值 alpha %.2f）| rim=%s | particles=%s | fxaa=%s",
+    log_("[post] 就绪：阴影贴图 %d²（峰值 alpha %.2f）| rim=%s | particles=%s | fxaa=%s | smaa=%s",
          kShadowN, double(kShadowPeak), C.progRim ? "ok" : "失败", C.progPt ? "ok" : "失败",
-         C.progFxaa ? "ok" : "失败");
+         C.progFxaa ? "ok" : "失败", C.smaaOk ? "ok" : "不可用");
     return C.progRim != 0;
 }
 
 static GLuint targetFbo() { return C.fbo; }
 static GLuint targetTex() { return C.tex; }
 static GLuint fxTex()    { return C.fxTex; }
+static GLuint smaaTex()  { return C.smaaOutTex; }
+
+// 十九：smaa 能不能用（查找表 + shader 都在）—— main 拿它决定 aa 落不落回 ssaa2x。
+static bool smaaAvailable() { return C.smaaOk; }
 
 // 每帧一次：告诉这层「这次画多大、逻辑多大」。
 static void setMetrics(int ww, int wh, int lw, int lh) {
@@ -1243,6 +1646,19 @@ static void shutdown() {
     if (C.fxFbo) { glDeleteFramebuffers(1, &C.fxFbo); C.fxFbo = 0; }
     if (C.fxTex) { glDeleteTextures(1, &C.fxTex); C.fxTex = 0; }
     if (C.progFxaa) { glDeleteProgram(C.progFxaa); C.progFxaa = 0; }
+    // 十九：SMAA 的三张目标 + 两张查找表 + 三个 program
+    if (C.smaaEdgesFbo) { glDeleteFramebuffers(1, &C.smaaEdgesFbo); C.smaaEdgesFbo = 0; }
+    if (C.smaaEdgesTex) { glDeleteTextures(1, &C.smaaEdgesTex); C.smaaEdgesTex = 0; }
+    if (C.smaaBlendFbo) { glDeleteFramebuffers(1, &C.smaaBlendFbo); C.smaaBlendFbo = 0; }
+    if (C.smaaBlendTex) { glDeleteTextures(1, &C.smaaBlendTex); C.smaaBlendTex = 0; }
+    if (C.smaaOutFbo) { glDeleteFramebuffers(1, &C.smaaOutFbo); C.smaaOutFbo = 0; }
+    if (C.smaaOutTex) { glDeleteTextures(1, &C.smaaOutTex); C.smaaOutTex = 0; }
+    if (C.smaaAreaTex) { glDeleteTextures(1, &C.smaaAreaTex); C.smaaAreaTex = 0; }
+    if (C.smaaSearchTex) { glDeleteTextures(1, &C.smaaSearchTex); C.smaaSearchTex = 0; }
+    if (C.progSmaaEdge) { glDeleteProgram(C.progSmaaEdge); C.progSmaaEdge = 0; }
+    if (C.progSmaaBlend) { glDeleteProgram(C.progSmaaBlend); C.progSmaaBlend = 0; }
+    if (C.progSmaaNeigh) { glDeleteProgram(C.progSmaaNeigh); C.progSmaaNeigh = 0; }
+    C.smaaW = C.smaaH = 0;
     if (C.shadowTex) { glDeleteTextures(1, &C.shadowTex); C.shadowTex = 0; }
     if (C.progRim) { glDeleteProgram(C.progRim); C.progRim = 0; }
     if (C.progPt) { glDeleteProgram(C.progPt); C.progPt = 0; }
@@ -1580,16 +1996,30 @@ int main() {
             continue;
         }
 
-        // ── 十七/十八：选这一帧画到哪儿（aa）────────────────────────
+        // ── 十七/十八/十九：选这一帧画到哪儿（aa）──────────────────
         // off   → 直接画窗口 buffer（最快，边缘就是画师画的软边）
         // fxaa  → 画进 1x 的离屏 FBO，一帧末尾跑一次 FXAA，再原尺寸合成回窗口
+        // smaa  → 同上位置，跑 edges → weights → blend 三遍（只沿边缘混）
         // 2x/3x → 画进 N 倍 FBO，最后一趟双线性降采样合成回窗口（老 SSAA）
         // FBO 尺寸跟着窗口物理尺寸变（scale / 跨屏 / 换 output 都会变），
         // 重建在帧内同步做完，失败立刻退回直接画。
         postfx::init();
+
+        // 十九：smaa 的可用性只探一次（表在不在、shader 通不通）。
+        // 用不了时：日志喊一句、页面下拉里不留这一档、设置里请求的 smaa 拉回 ssaa2x
+        // 并**落盘**（否则下次重启还是它，白等一次）。其它 aa 一个字不动。
+        {
+            static bool probed = false;
+            if (!probed) {
+                probed = true;
+                web::setSmaaOk(postfx::smaaAvailable());
+                if (!postfx::smaaAvailable()) web::aaFallback();
+            }
+        }
         const int aaMul = postfx::factorOf(ws.aa);
         const bool wantFxaa = postfx::fxaaWanted(ws.aa);
-        bool offscreen = aaMul > 1 || wantFxaa;
+        const bool wantSmaa = postfx::smaaWanted(ws.aa) && postfx::smaaAvailable();
+        bool offscreen = aaMul > 1 || wantFxaa || wantSmaa;
         int LW = 0, LH = 0;
         platGetLogicalSize(&LW, &LH);
         int DW = W, DH = H;
@@ -1704,7 +2134,7 @@ int main() {
         }
         // 2026-11-10：分段计时（每 5 秒打一行），用来找出每帧真正的开销在哪。
         // 关帧率不重要时，这段能指出 physics / Update / Draw / 后处理 各占多少。
-        static double tPhys = 0, tUpd = 0, tDraw = 0, tPost = 0, tIn = 0, tAll = 0;
+        static double tPhys = 0, tUpd = 0, tDraw = 0, tPost = 0;
         static int nFrames = 0;
         static double lastProf = 0;
         const double tA = platTime();
@@ -1735,7 +2165,9 @@ int main() {
         }
         if (offscreen) {
             GLuint src = postfx::targetTex();
+            // 十八/十九：同一条缝，二选一（wantFxaa 和 wantSmaa 互斥：aa 只有一个值）
             if (wantFxaa && postfx::applyFxaa(DW, DH)) src = postfx::fxTex();
+            else if (wantSmaa && postfx::applySmaa(DW, DH)) src = postfx::smaaTex();
             postfx::composite(ws.alpha, W, H, src);
         }
         {
