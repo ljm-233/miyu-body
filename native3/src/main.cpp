@@ -12,6 +12,7 @@
 //     真的透明、niri 里用 window-rule 设 open-floating 就浮起来了。就是这条。
 
 #include <cstdio>
+#include <map>
 #include <cstdarg>
 #include <cstdlib>
 #include <cstring>
@@ -1020,8 +1021,40 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
         // 留下的残值 —— 拿它当基准，弹一次漂一点，几十次点击之后她就歪在那儿了
         // （实测：连点 40 多次以后，静止帧和基准帧差 4.8 万像素）。
         c.base = model->GetParameterDefaultValue(idx);
-        c.peak = p.peak;
-        c.dip  = p.dip;
+        // 2026-11-10 02:1x：**必须按参数真实范围 clamp**。表和曲线给的是「摆幅的百分之几」，
+        // 遇到范围窄的参数就会冲出去——比如 param53 只有 0..1、默认 0，peak 0.8×全幅 = 1.6
+        // 直接越界，网格被拉翻，画面上就是点一下胸口黑一下。
+        {
+            static std::map<std::string, std::pair<float, float>> rng;
+            static bool rngLoaded = false;
+            if (!rngLoaded) {
+                rngLoaded = true;
+                std::ifstream rf("state/param-range.tsv");
+                std::string line;
+                while (std::getline(rf, line)) {
+                    if (line.empty() || line[0] == '#') continue;
+                    // 格式：序号 <TAB> 名字 <TAB> min <TAB> max <TAB> 默认
+                    std::vector<std::string> f;
+                    size_t a = 0;
+                    for (;;) {
+                        const size_t b = line.find('\t', a);
+                        f.push_back(line.substr(a, b == std::string::npos ? std::string::npos : b - a));
+                        if (b == std::string::npos) break;
+                        a = b + 1;
+                    }
+                    if (f.size() >= 4) rng[f[1]] = { std::stof(f[2]), std::stof(f[3]) };
+                }
+                log_("[partpoke] 读到 %zu 个参数的范围", rng.size());
+            }
+            const auto it = rng.find(p.name);
+            float lo = -1e9f, hi = 1e9f;
+            if (it != rng.end()) { lo = it->second.first; hi = it->second.second; }
+            float pk = p.peak, dp = p.dip;
+            if (pk < lo) pk = lo; if (pk > hi) pk = hi;
+            if (dp < lo) dp = lo; if (dp > hi) dp = hi;
+            c.peak = pk;
+            c.dip = dp;
+        }
         char buf[96];
         std::snprintf(buf, sizeof buf, "%s(%.1f->%.1f/%.1f) ", p.name.c_str(),
                       c.base, c.peak, c.dip);
