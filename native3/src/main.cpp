@@ -28,6 +28,8 @@
 #include "Model/CubismModel.hpp"
 #include "Rendering/CubismRenderer.hpp"
 #include "Rendering/OpenGL/CubismRenderer_OpenGLES2.hpp"
+#include "Motion/CubismExpressionMotion.hpp"
+#include "Motion/CubismExpressionMotionManager.hpp"
 #include "Math/CubismMatrix44.hpp"
 #include "CubismModelSettingJson.hpp"
 #include "ICubismAllocator.hpp"
@@ -438,6 +440,30 @@ int main() {
         }
     }
 
+    // ── 表情（Exp3/*.exp3.json）────────────────────────────
+    // 2026-11-09 22:0x：作者给的 23 个表情才是「她怎么看你」的正路 —— 尤其「前倾」。
+    // MIYU_EXPR=前倾 就播那一个（循环），不设就完全不播。
+    Csm::CubismExpressionMotionManager* exprMgr = nullptr;
+    Csm::CubismExpressionMotion* expr = nullptr;
+    if (const char* en = std::getenv("MIYU_EXPR")) {
+        const std::string ep = std::string(kModelDir) + "Exp3/" + en + ".exp3.json";
+        std::vector<char> eb = slurp(ep);
+        if (eb.empty()) {
+            log_("[main] 表情：读不到 %s", ep.c_str());
+        } else {
+            expr = Csm::CubismExpressionMotion::Create(
+                reinterpret_cast<const Csm::csmByte*>(eb.data()),
+                static_cast<Csm::csmSizeInt>(eb.size()));
+            if (!expr) {
+                log_("[main] 表情：Create 失败 %s", ep.c_str());
+            } else {
+                exprMgr = new Csm::CubismExpressionMotionManager();
+                exprMgr->StartMotion(expr, false /* autoDelete */);
+                log_("[main] 表情：%s 已开始（%zu 字节）", en, eb.size());
+            }
+        }
+    }
+
     // 眨眼状态翻转打点（一次眨眼两行；不进每帧日志）
     const Csm::csmInt32 eyeLi = model->GetParameterIndex(
         Csm::CubismFramework::GetIdManager()->GetId("ParamEyeLOpen"));
@@ -522,6 +548,7 @@ int main() {
         model->LoadParameters();
         if (motionManager) motionManager->UpdateMotion(model, dt);
         else if (kUseSine) idleTick(model, now);   // 只有 MIYU_IDLE_SINE=1 才走手写正弦
+        if (exprMgr) exprMgr->UpdateMotion(model, dt);   // 表情在动作之后、眨眼之前
         // 视线：夹在待机微动之后（叠在它上面，不覆盖）、眨眼之前。
         // 用逻辑尺寸归一化 —— platPointer 给的是 surface-local 逻辑 px，不是物理 px。
         int lw = 0, lh = 0;
