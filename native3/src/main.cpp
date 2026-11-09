@@ -561,8 +561,9 @@ static void framePace(int cap, double now) {
         nanosleep(&ts, nullptr);
     }
     if (now - t0 >= 5.0) {
-        log_("[fps] 实测 %.1f 帧/秒（上限 %d，%lu 帧 / %.1fs）",
-             double(n) / (now - t0), cap, n, now - t0);
+        const double fps = double(n) / (now - t0);
+        log_("[fps] 实测 %.1f 帧/秒（上限 %d，%lu 帧 / %.1fs）", fps, cap, n, now - t0);
+        web::setFps(fps);          // 十八：设置页顶栏的「帧率」就吃这一个数（同一个 5 秒窗口）
         n = 0;
         t0 = now;
     }
@@ -601,6 +602,12 @@ struct Ctx {
     int    aw = 0, ah = 0;
     bool   prevValid = false;
 
+    // 十八：FXAA 的输出目标（和输入同尺寸，逐像素一一对应）。只有在 aa=fxaa 时才分配。
+    GLuint fxTex = 0, fxFbo = 0;
+    int    fxw = 0, fxh = 0;
+    GLuint progFxaa = 0;
+    GLint  uFxTex = -1, uFxTexel = -1;
+
     GLuint shadowTex = 0;
     GLuint progRim = 0, progPt = 0;
     GLuint vaoQuad = 0, vboQuad = 0;
@@ -627,11 +634,16 @@ static float rnd(float a, float b) { return a + (b - a) * rnd01(); }
 static float nx(float lx) { return (lx / float(C.lw)) * 2.0f - 1.0f; }
 static float ny(float ly) { return 1.0f - (ly / float(C.lh)) * 2.0f; }
 
+// 十八：aa 的值 → 离屏倍率。fxaa 在 **1x** 上做（它治的是「贴图自带的 alpha 渐变」这类
+// 像素级过渡，靠邻域亮度混合，不靠超采样；开 2x 再 fxaa 只是白多花一倍填充率）。
+// 老的 ssaa 值（"2x"/"3x"）也认 —— 旧 settings.json / 旧脚本传进来不能炸。
 static int factorOf(const std::string& s) {
-    if (s == "off") return 1;
-    if (s == "3x")  return 3;
-    return 2;                    // 默认 2x
+    if (s == "ssaa2x" || s == "2x") return 2;
+    if (s == "ssaa3x" || s == "3x") return 3;
+    return 1;                    // off / fxaa / 不认识的一律 1x
 }
+
+static bool fxaaWanted(const std::string& s) { return s == "fxaa"; }
 
 static GLuint mkShader(GLenum t, const char* src, const char* tag) {
     GLuint s = glCreateShader(t);
@@ -774,11 +786,62 @@ static const char* kPtFS =
     "  o = vec4(uColor * a, a);\n"
     "}\n";
 
+// ── FXAA（3.11 简化版：亮度阈值 + 边缘方向混合）──────────────────────
+// 十八：SSAA 2x 把 140 帧压到 82，而它治不了这个模型的软边（贴图里的 alpha 渐变，
+// 见 17.6），性价比太低。FXAA 在 1x 上做，一次全屏 pass、最多 13 次纹理采样。
+//
+// 三个和「透明图层」有关的取舍：
+//  ① 整条链 alpha 都是 premultiplied，所以 rgb 本身已经被 alpha 缩过 —— luma 天然是
+//     「覆盖率×颜色亮度」，边缘两侧差得明显；四通道一起做线性插值也是对的（不会发黑）。
+//  ② 阈值用**相对**的 max(0.0312, lMax*0.125)：只混真边缘，平坦区原样输出（她脸上一大
+//     片肤色不会被磨平）。
+//  ③ 混合核固定 3+4 抽样、dir 夹到 ±8 像素 —— 再大就会把细发丝抹成糊块，这个模型的
+//     发丝只有 1–2 px 宽。
+static const char* kFxaaFS =
+    "#version 330\n"
+    "in vec2 vUV;\n"
+    "uniform sampler2D uTex;\n"
+    "uniform vec2 uTexel;\n"
+    "out vec4 o;\n"
+    "float luma(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }\n"
+    "vec4 tap(vec2 d){ return texture(uTex, vUV + d * uTexel); }\n"
+    "void main(){\n"
+    "  vec4 m = texture(uTex, vUV);\n"
+    "  float lM = luma(m.rgb);\n"
+    "  float lN = luma(tap(vec2( 0.0, -1.0)).rgb);\n"
+    "  float lS = luma(tap(vec2( 0.0,  1.0)).rgb);\n"
+    "  float lE = luma(tap(vec2( 1.0,  0.0)).rgb);\n"
+    "  float lW = luma(tap(vec2(-1.0,  0.0)).rgb);\n"
+    "  float lMin = min(lM, min(min(lN, lS), min(lE, lW)));\n"
+    "  float lMax = max(lM, max(max(lN, lS), max(lE, lW)));\n"
+    "  if (lMax - lMin < max(0.0312, lMax * 0.125)) { o = m; return; }\n"   // 平坦区：原样
+    "  float lNW = luma(tap(vec2(-1.0, -1.0)).rgb);\n"
+    "  float lNE = luma(tap(vec2( 1.0, -1.0)).rgb);\n"
+    "  float lSW = luma(tap(vec2(-1.0,  1.0)).rgb);\n"
+    "  float lSE = luma(tap(vec2( 1.0,  1.0)).rgb);\n"
+    "  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)),\n"
+    "                   ((lNW + lSW) - (lNE + lSE)));\n"
+    "  float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0);\n"
+    "  float rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);\n"
+    "  dir = clamp(dir * rcp, vec2(-8.0), vec2(8.0)) * uTexel;\n"
+    "  vec4 a = 0.5 * (texture(uTex, vUV + dir * (1.0 / 3.0 - 0.5)) +\n"
+    "                  texture(uTex, vUV + dir * (2.0 / 3.0 - 0.5)));\n"
+    "  vec4 b = a * 0.5 + 0.25 * (texture(uTex, vUV - dir * 0.5) +\n"
+    "                             texture(uTex, vUV + dir * 0.5));\n"
+    "  float lB = luma(b.rgb);\n"
+    "  o = (lB < lMin || lB > lMax) ? a : b;\n"    // 混过头就退回短核
+    "}\n";
+
 static bool init() {
     if (C.progRim != 0 || C.shadowTex != 0) return true;
     buildShadowTex();
     C.progRim = mkProgram(kRimVS, kRimFS, "rim");
+    C.progFxaa = mkProgram(kRimVS, kFxaaFS, "fxaa");
     C.progPt  = mkProgram(kPtVS, kPtFS, "particles");
+    if (C.progFxaa) {
+        C.uFxTex   = glGetUniformLocation(C.progFxaa, "uTex");
+        C.uFxTexel = glGetUniformLocation(C.progFxaa, "uTexel");
+    }
     if (C.progRim) {
         C.uRimTex   = glGetUniformLocation(C.progRim, "uTex");
         C.uRimTexel = glGetUniformLocation(C.progRim, "uTexel");
@@ -819,12 +882,15 @@ static bool init() {
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
-    log_("[post] 就绪：阴影贴图 %d²（峰值 alpha %.2f）| rim=%s | particles=%s",
-         kShadowN, double(kShadowPeak), C.progRim ? "ok" : "失败", C.progPt ? "ok" : "失败");
+    log_("[post] 就绪：阴影贴图 %d²（峰值 alpha %.2f）| rim=%s | particles=%s | fxaa=%s",
+         kShadowN, double(kShadowPeak), C.progRim ? "ok" : "失败", C.progPt ? "ok" : "失败",
+         C.progFxaa ? "ok" : "失败");
     return C.progRim != 0;
 }
 
 static GLuint targetFbo() { return C.fbo; }
+static GLuint targetTex() { return C.tex; }
+static GLuint fxTex()    { return C.fxTex; }
 
 // 每帧一次：告诉这层「这次画多大、逻辑多大」。
 static void setMetrics(int ww, int wh, int lw, int lh) {
@@ -1052,16 +1118,73 @@ static void drawRim(float strength, float uiScale) {
     glUseProgram(0);
 }
 
+// ── FXAA：把本帧 FBO 的成品（模型 + 垫在下面的三件）混一遍，写进同尺寸的 fxTex ──
+// 输入输出同尺寸、逐像素一一对应；之后合成那一趟再（可能）降采样回窗口。
+// 单独一个 FBO 而不是就地改：GL 不允许同一张纹理同时当读写目标。
+static bool ensureFxTargets(int w, int h) {
+    if (C.fxFbo != 0 && C.fxw == w && C.fxh == h) return true;
+    if (C.fxFbo) { glDeleteFramebuffers(1, &C.fxFbo); C.fxFbo = 0; }
+    if (C.fxTex) { glDeleteTextures(1, &C.fxTex); C.fxTex = 0; }
+    glGenTextures(1, &C.fxTex);
+    glBindTexture(GL_TEXTURE_2D, C.fxTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenFramebuffers(1, &C.fxFbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, C.fxFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, C.fxTex, 0);
+    const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    if (st != GL_FRAMEBUFFER_COMPLETE) {
+        log_("[post] FXAA 目标不完整（0x%04x），这一帧不走 fxaa", static_cast<unsigned>(st));
+        if (C.fxFbo) { glDeleteFramebuffers(1, &C.fxFbo); C.fxFbo = 0; }
+        if (C.fxTex) { glDeleteTextures(1, &C.fxTex); C.fxTex = 0; }
+        return false;
+    }
+    C.fxw = w;
+    C.fxh = h;
+    log_("[post] FXAA 目标重建 %dx%d（%.1f MB）", w, h,
+         double(w) * double(h) * 4.0 / 1048576.0);
+    return true;
+}
+
+// 返回 true 表示「成品已经在 fxTex 里，合成要改吃它」。
+static bool applyFxaa(int w, int h) {
+    if (C.progFxaa == 0) return false;
+    if (!ensureFxTargets(w, h)) return false;
+    glBindFramebuffer(GL_FRAMEBUFFER, C.fxFbo);
+    glViewport(0, 0, w, h);
+    glUseProgram(C.progFxaa);
+    glDisable(GL_BLEND);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, C.tex);
+    glUniform1i(C.uFxTex, 0);
+    glUniform2f(C.uFxTexel, 1.0f / float(w), 1.0f / float(h));
+    glBindVertexArray(C.vaoQuad);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    return true;
+}
+
 // ── 合成：FBO → 窗口 buffer（顺带把 alpha 乘进去）────────────────────
 // 全乘（GL_MODULATE）：RGB 和 A 一起缩，premultiplied 一致；缩放就是双线性。
-static void composite(float alpha, int w, int h) {
+// src：aa=off 不会走到这里；fxaa 时吃 fxTex，SSAA 时吃 tex（降采样那一趟）。
+static void composite(float alpha, int w, int h, GLuint src) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
     glUseProgram(0);
     glDisable(GL_BLEND);
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, C.tex);
+    glBindTexture(GL_TEXTURE_2D, src);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     const float a = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
     glColor4f(a, a, a, a);
@@ -1117,6 +1240,9 @@ static void shutdown() {
     if (C.prevTex) { glDeleteTextures(1, &C.prevTex); C.prevTex = 0; }
     if (C.alphaFbo) { glDeleteFramebuffers(1, &C.alphaFbo); C.alphaFbo = 0; }
     if (C.alphaTex) { glDeleteTextures(1, &C.alphaTex); C.alphaTex = 0; }
+    if (C.fxFbo) { glDeleteFramebuffers(1, &C.fxFbo); C.fxFbo = 0; }
+    if (C.fxTex) { glDeleteTextures(1, &C.fxTex); C.fxTex = 0; }
+    if (C.progFxaa) { glDeleteProgram(C.progFxaa); C.progFxaa = 0; }
     if (C.shadowTex) { glDeleteTextures(1, &C.shadowTex); C.shadowTex = 0; }
     if (C.progRim) { glDeleteProgram(C.progRim); C.progRim = 0; }
     if (C.progPt) { glDeleteProgram(C.progPt); C.progPt = 0; }
@@ -1453,23 +1579,26 @@ int main() {
             continue;
         }
 
-        // ── 十七：选这一帧画到哪儿（SSAA）───────────────────────────
-        // ssaa=off 就画窗口 buffer（等于改动之前那样）；2x/3x 画进离屏 FBO，
-        // 最后一趟双线性降采样合成回窗口。FBO 尺寸跟着窗口物理尺寸变（scale /
-        // 跨屏 / 换 output 都会变），重建在帧内同步做完，失败立刻退回直接画。
+        // ── 十七/十八：选这一帧画到哪儿（aa）────────────────────────
+        // off   → 直接画窗口 buffer（最快，边缘就是画师画的软边）
+        // fxaa  → 画进 1x 的离屏 FBO，一帧末尾跑一次 FXAA，再原尺寸合成回窗口
+        // 2x/3x → 画进 N 倍 FBO，最后一趟双线性降采样合成回窗口（老 SSAA）
+        // FBO 尺寸跟着窗口物理尺寸变（scale / 跨屏 / 换 output 都会变），
+        // 重建在帧内同步做完，失败立刻退回直接画。
         postfx::init();
-        const int ssaaMul = postfx::factorOf(ws.ssaa);
-        bool offscreen = ssaaMul > 1;
+        const int aaMul = postfx::factorOf(ws.aa);
+        const bool wantFxaa = postfx::fxaaWanted(ws.aa);
+        bool offscreen = aaMul > 1 || wantFxaa;
         int LW = 0, LH = 0;
         platGetLogicalSize(&LW, &LH);
         int DW = W, DH = H;
         postfx::setMetrics(W, H, LW, LH);      // 先告诉这层坐标系，日志/尺寸才准
         if (offscreen) {
-            DW = W * ssaaMul;
-            DH = H * ssaaMul;
+            DW = W * aaMul;
+            DH = H * aaMul;
             if (!postfx::ensureTargets(DW, DH)) { offscreen = false; DW = W; DH = H; }
         }
-        postfx::setDrawSize(DW, DH);           // ssaa=off 时就是窗口尺寸
+        postfx::setDrawSize(DW, DH);           // aa=off 时就是窗口尺寸
         if (offscreen) {
             glBindFramebuffer(GL_FRAMEBUFFER, postfx::targetFbo());
             glViewport(0, 0, DW, DH);
@@ -1577,10 +1706,11 @@ int main() {
         renderer->SetMvpMatrix(&proj);
         renderer->DrawModel();
 
-        // ── 十七：抄模型 alpha → 垫背景三件 → 合成回窗口 ───────────────
+        // ── 十七：抄模型 alpha → 垫背景三件 → （十八）FXAA → 合成回窗口 ─────
         // 顺序不能换：capturePrev 必须紧跟在 DrawModel 后面（这时目标里只有她，
         // 抄下来的 alpha 才是干净的）；三件必须在这里画（它们在模型下面，见
-        // postfx 顶部注释①）；合成必须在 swap 之前。
+        // postfx 顶部注释①）；FXAA 必须在**三件之后**（它要混整张成品，包括影子边和
+        // 气泡边）；合成必须在 swap 之前。
         postfx::capturePrev();
         {
             int pcx = 0, pcy = 0, phw = 0, phh = 0;
@@ -1592,7 +1722,11 @@ int main() {
             }
             postfx::drawRim(ws.rim, ws.scale);
         }
-        if (offscreen) postfx::composite(ws.alpha, W, H);
+        if (offscreen) {
+            GLuint src = postfx::targetTex();
+            if (wantFxaa && postfx::applyFxaa(DW, DH)) src = postfx::fxTex();
+            postfx::composite(ws.alpha, W, H, src);
+        }
 
         // ── 整体不透明度（网页设置页的 alpha，第 14 节）───────────────────
         // 「乘到最终颜色上」用一次全屏乘算做完，别去动每个 drawable 的 opacity：

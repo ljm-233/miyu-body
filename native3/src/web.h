@@ -40,8 +40,14 @@ struct Settings {
     float       vol    = 0.8f;      // 0–1   音量（pw-play --volume）
 
     // ── 第十七节新增：抗锯齿 + 后处理三件 ────────────────────────────
-    std::string ssaa   = "2x";      // off/2x/3x  离屏 FBO 倍率（抗锯齿）
-    float       shadow = 0.28f;     // 0–1   地面软阴影强度
+    // ── 第十八节改：ssaa → aa，主开关换成 FXAA ──────────────────────
+    // off / fxaa / ssaa2x / ssaa3x。老 key `ssaa`（off/2x/3x）仍然读得进来，
+    // 旧的 settings.json 不会炸（见 web.cpp 里 loadSettings / handleSet 的映射）。
+    // 2026-11-10 00:1x：默认从 fxaa 改回 ssaa2x —— 他一试就说「fxaa 开了变模糊」。
+    // fxaa 按亮度在整条边缘带上做宽带混合，这个模型的边本身就是贴图里的 alpha 渐变，
+    // 一混就是 3–4 像素的糊。ssaa2x 反而更锐（贴图接近 1:1、不走 mipmap，见 17.6）。
+    std::string aa     = "ssaa2x";  // off/ssaa2x/ssaa3x/fxaa/smaa
+    float       shadow = 0.0f;      // 0–1   地面软阴影强度（默认关：深色壁纸上基本看不见）
     float       rim    = 0.35f;     // 0–1   轮廓光强度
     float       particles = 0.3f;   // 0–1   粒子数量倍率
 };
@@ -65,6 +71,10 @@ const Settings& settingsC();
 
 // 状态栏要显示的东西：输出名 + 窗口逻辑尺寸（main 每帧喂一次，便宜）。
 void setStatus(const char* output, int w, int h);
+
+// 实测帧率（main 的 framePace 每 5 秒算完喂一次；顶栏「帧率」显示的就是它）。
+// 没人喂过就保持 -1，页面上显示「—」。
+void setFps(double fps);
 
 // 表情清单（main 从 model/Exp3 扫出来给「切个表情」按钮用；空就退回默认）。
 void setExprNames(std::vector<std::string> names);

@@ -1395,3 +1395,166 @@ EGL 那边已经是 Compatibility Profile，FBO / 着色器 / 固定管线全都
 - 粒子只在有 bbox 时才生成；`platPersonBox` 靠输入区那一步算（每 10 帧 / 松手 / 尺寸变化），
   所以她的 bbox 有最多 10 帧的延迟 —— 拖动时影子和粒子会滞后一帧量级，肉眼看不到。
 - 粒子数量上限 24；`particles=0` 时 vector 清空，`[post] 粒子 0 颗` 只在变化时打一行日志。
+
+## 十八、阴影默认关 + 抗锯齿（FXAA/SSAA）+ 设置页重排版 + 明暗主题（2026-11-09 23:4x–2026-11-10 00:2x）
+
+他三句话定了这一轮的走向：①「黑色界面几乎看不到脚下的阴影，所以那个就没有必要去开」；
+②「fxaa 开了之后，变模糊了」；③「界面的利用率太低了 / 设置界面是不是太暗色调了，看起来不舒服」。
+
+### 18.1 改了什么（只动 `src/` 和 `state/`）
+
+| 位置 | 改动 |
+| --- | --- |
+| `src/web.h` | `ssaa` → `aa`（`off/fxaa/ssaa2x/ssaa3x`，**默认 `ssaa2x`**）；`shadow` 默认 `0.28` → **`0`**；新增 `setFps()` |
+| `src/web.cpp` | `aa` 读写 / `/state` / `POST /set` / `reset`；**老 key `ssaa` 仍吃**（`off/2x/3x` → `off/ssaa2x/ssaa3x`，`aa` 优先）；`/state` 多 `fps_now`；设置页整页重写（多列 + 明暗双主题 + 实时帧率） |
+| `src/main.cpp` | `postfx` 加 FXAA pass（着色器 / 第二个 FBO / `ensureFxTargets` / `applyFxaa`）；`factorOf(aa)` 四档；`framePace` 每 5 秒 `web::setFps()` |
+| `state/settings.json` | 落盘键 `ssaa` → `aa`，`shadow: 0.000`，`aa: "ssaa2x"` |
+
+没碰：socket 协议、service 文件、`native2/`、`platform_wayland.cpp`（一行没改）。
+
+### 18.2 抗锯齿：为什么 fxaa 留着但**不是默认**
+
+`aa` 四档 = `off` / `ssaa2x` / `ssaa3x` / `fxaa`。默认 **ssaa2x**。
+
+FXAA 是这一轮加的：1x 的离屏 FBO → 一次全屏 FXAA（3.11 简化版：相对亮度阈值 + 四邻域边缘方向 +
+±8 px 夹紧 + 3+4 抽样二选一）→ 合成回窗口。它**不用**第二张搜索纹理，也不需要 2x 超采样。
+
+**但它糊，而且是他一眼看出来的**。原因是我们早知道的那件事（17.6）：这个模型的轮廓不是几何边，
+是**贴图里的 alpha 渐变**（画师画的 2–4 px 软边）。FXAA 按亮度在这条带上做宽带混合，等于把本来
+就软的地方再糊一遍 —— 脸 72×72 的高频细节（拉普拉斯方差）从 **2654.9 → 991.1（掉 63%）**。
+SSAA 反过来：2x 渲染让贴图接近 1:1、不走 mipmap，边缘更硬更清楚。
+
+所以页面上诚实地写着：`ssaa2x 最锐（贴图不走 mipmap），代价是帧率；fxaa 最快但糊——它按亮度整块混合；off 最省`。
+
+**管线**：`FBO(1x 或 2x) → （只有 aa=fxaa 时）FXAA 到同尺寸 fxTex → 双线性合成/降采样到窗口`。
+FXAA 排在「垫在模型下面的三件」之后、合成之前（它要混整张成品），`prevTex`（轮廓光/输入区吃的
+纯模型 alpha）仍然在 DrawModel 紧接着那一步抄，不受影响。FXAA 输出必须另开一张 FBO —— GL 不允许
+同一张纹理同时当读写目标。
+
+### 18.3 设置页：按使用频率重排 + 响应式多列 + 明暗主题
+
+**分组**（顺序 = 使用频率，5 组 20 项）：常用（显示/大小/透明度/吸角）→ 外观（抗锯齿/轮廓光/粒子/阴影）
+→ 行为（待机风格/待机幅度/视线/视线强度/眨眼/点击/表情/表情停留/嘴动）→ 性能（帧率）→ 声音（出声/音量）；
+最下面是「恢复默认」，页脚 `改完即时生效 · 设置存在 state/settings.json`。
+
+**每项一行三栏**：`grid-template-columns: 88px minmax(0,1fr) 62px` —— 左标签、中控件、右当前值
+（`tabular-nums` 数字对齐），下一行 11px 浅灰人话说明。
+
+**布局**：`.wrap{max-width:1400px}`，`.grid` 单列；`@media (min-width:900px)` 两列；`@media (min-width:1400px)`
+三列（`repeat(3, minmax(0,1fr))`，`align-items:start` 免得矮卡片被拉成一大片空白）。状态条和底部按钮
+横跨整宽。**1920 宽实测铺开**：`state/shot-settings-dark.png` / `state/shot-settings-light.png`。
+
+**配色**（默认暗色，不再是纯黑的 `#0d1117`）：
+
+| 变量 | 暗（`data-theme="dark"`，默认） | 亮（`data-theme="light"`） |
+| --- | --- | --- |
+| 页面底 | `#16181d` | `#f5f6f8` |
+| 卡片底 | `#1e2128` | `#ffffff` |
+| 边框 | `rgba(255,255,255,.06)` | `rgba(0,0,0,.08)` |
+| 主文字 | `#d7dce6` | `#1f2328` |
+| 说明文字 | `#8b93a1` | `#6b7280` |
+| 强调 | `#7aa2f7` | `#3b6fd4` |
+| 滑块轨道 | `#2c313a` | `#d8dbe1` |
+
+**对比度**（WCAG 相对亮度算的）：
+
+| 组合 | 比值 | 要求 |
+| --- | --- | --- |
+| 暗 主文字/卡片 `#d7dce6` on `#1e2128` | **11.72:1** | ≥7 ✓ |
+| 暗 说明/卡片 `#8b93a1` on `#1e2128` | **5.21:1** | ≥4.5 ✓ |
+| 亮 主文字/卡片 `#1f2328` on `#fff` | **15.80:1** | ≥7 ✓ |
+| 亮 说明/卡片 `#6b7280` on `#fff` | **4.83:1** | ≥4.5 ✓ |
+
+右上角 `☀/☾` 切换，写 `localStorage('miyu-theme')`，刷新保持（`<body>` 里第一段脚本先读再上屏，
+不闪白）。另加 `?theme=light|dark` 只对当前页面生效、**不写** localStorage（截图/调试用）。
+
+### 18.4 验证数字
+
+**默认值（`reset` 后 `settings.json` 原文）**
+
+```
+{"scale":1.000,"alpha":1.000,"tap":true,"expr":true,"idle":1.000,"idleStyle":"natural",
+ "look":1.000,"lookOn":true,"blink":1.000,"mouth":1.000,"exprHold":1.000,"fps":60,
+ "voice":false,"vol":0.800,"corner":"free","hide":false,"aa":"ssaa2x",
+ "shadow":0.000,"rim":0.350,"particles":0.300}
+```
+
+新装（删掉 `state/settings.json` 再启动）：`shadow` = **0.0**、`aa` = **`ssaa2x`**。
+
+**帧率（`fps=200`，同一次运行里交错测，取进程自己算的 5 秒窗口）**
+
+| aa | 实测 | 备注 |
+| --- | --- | --- |
+| `off` | **138.4 / 135.7 / 132.9 / 134.3** | 和 十七 的 140.4 对得上 |
+| `fxaa` | **133.6 / 134.9 / 133.1 / 137.0** | 比 off 少 1–3 帧（≈2%） |
+| `ssaa2x` | **125.0 / 126.9**（抖动样本 66.6 / 114.8） | 十七 记的 82.2 今天没复现 |
+
+每帧 CPU（utime+stime ÷ 帧数）：`off` **3.28 ms**、`fxaa` **3.21 ms**、`ssaa2x` **3.27 ms** —— 同一量级。
+**这台机器今天很吵**（msedge 37% + node 20% 常驻），同一配置 6 分钟内测到过 81.6 和 125.0 两个数，
+所以只能**同一次运行里交错比**，跨时间比绝对值没意义。
+
+日常档（`fps=60`，`aa=ssaa2x`）：**60.0 帧/秒**，CPU **18%**，RSS **213 MB**。
+
+**画质（同一块头发 40×40，6 倍最近邻，`state/shot-aa-compare.png`）**
+
+| aa | 脸 72×72 拉普拉斯方差（越高越清楚） | 头发硬跳变（相邻亮度差>60） | 头发过渡像素（60<L<110） |
+| --- | --- | --- | --- |
+| `off` | **2654.9** | 54 | 763 |
+| `ssaa2x` | **2516.1** | 74 | 776 |
+| `fxaa` | **991.1（−63%）** | 37 | 810 |
+
+FXAA 把细节抹掉六成 —— 这就是他说的「变模糊了」，数字和肉眼对上了。
+`off` 的 2654.9 略高于 ssaa2x，是因为 1x 的锯齿本身就是假高频（边缘更脏但方差更高）；
+ssaa2x 的硬跳变更多（74 vs 54）才是「更锐」的来源（贴图不走 mipmap）。
+**没有黑边**：三档最暗像素都是 16.5，「比左右邻居暗 3 以上」的凹坑 off 23 → fxaa 17 → ssaa2x 17。
+
+**回归（每项验完立刻复原成默认）**
+
+| 项 | 证据 |
+| --- | --- |
+| `scale=0.8` | `window=400x720`，`缩放 0.80 -> 逻辑 400x720 / margin (-2,62)`，FBO/FXAA 目标跟着重建 400x720 |
+| `alpha=0.6` | 她 bbox 内变化 **112,468/246,010** px，平均亮度 **72.3 → 39.5** |
+| `hide=true` | 她 bbox 内变化 **124,376** px，平均亮度 **99.0 → 30.3**（桌面透出来） |
+| `corner=br` | `吸角 br：屏 1920x1080 / 窗 500x900 / bar 37 -> margin (1420,143)` |
+| `tap=false` | 点她的位置 → `[tap]` **0 条**；`tap=true` → `[tap] 第 1 次点击 local=(270,413) → 播 被戳4.json` |
+| `expr=false` | socket 推两次 `{"expr":"脸红"}` → `[expr] ->` **0 条**；`true` → **1 条** `[expr] -> 脸红` |
+| `lookOn=false` | `[look] 回正 nx=+0.00 ny=+0.00 k=0.00 … （视线关：nx 不带动任何角度）` |
+| `blink=0` | 10 秒内闭眼 **0 次**；`blink=1` 8 秒内 **2 次** |
+| `idleStyle` | `quiet` max\|ax\| = **0.99**；`lively` = **4.83**（4.9×） |
+| `fps` | 30 → **30.0**；60 → **60.1**（真机不稳时 57–60） |
+| `voice=true` | `[ctl] 声音 开，音量 0.80` |
+| `reset` | `applied` **20 项**，`/state` + `settings.json` 全回上表 |
+| 拖动 | margin `(1220,104) → (1015,104)`（拖 −200，实际 −205，y 不动） |
+| 跨屏 | 拖出边缘 → `搬家（拖动越界）：output[1] HDMI-A-3 -> output[0] eDP-1`，`FBO 重建 2000x3600`（eDP-1 是 scale 2）；再拖回来 `-> output[1] HDMI-A-3`，`FBO 重建 1000x1800`，无崩溃 |
+| 逐像素穿透 | 点窗口内她不在的地方 → `[tap]` 0 条、`指针进入` 0 条 |
+| 输入区 | `input region: 物理 500x900 -> 逻辑 500x900 | 881 条矩形 | 覆盖 127912 px (28.4%) | bbox=[109,107 .. 446,837]` —— 和上一轮**逐字一致** |
+
+**页面自检**
+
+| 检查 | 结果 |
+| --- | --- |
+| `GET /` | **200**，**16239 字节**，单文件、零外链（`https?:// | src= | <link | @import | url(` 0 命中） |
+| `GET /state` | 200，合法 JSON |
+| `GET /nope` | **404** |
+| `POST /set` 逐项 | 21 个 key 全 `ok:true` + `applied` 非空（含老键 `ssaa=3x` → `applied:["aa"]`） |
+| `reset` | 一次回全默认（见上表） |
+| 分组/顺序 | 5 组 20 项，顺序 hide/scale/alpha/corner → aa/rim/particles/shadow → idleStyle/idle/lookOn/look/blink/tap/expr/exprHold/mouth → fps → voice/vol |
+| 主题 | `localStorage('miyu-theme')`，`?theme=light|dark` 只影响当页；两套截图见 `state/shot-settings-{dark,light}.png`（1920×1080） |
+
+**进程/编译**：`systemctl --user is-active miyu-body` = **active**，输出 **HDMI-A-3**，`MIYU_OUTPUT=1` 保留，
+标题 `native2-test`；近 10 分钟日志里 error/warning/失败/不完整 **0 条**；`/tmp/native3-clean` 全新目录重编
+两个 target **0 warning / 0 error**（`-Wall -Wextra`）。
+
+### 18.5 边界 / 没做的
+
+- **SMAA 没做**。它要官方的 160×560 area 贴图 + 64×16 search 贴图（内嵌成 C 数组）才准；没有那两张
+  图我只能手搓一个「差不多」的东西再叫它 SMAA —— 那正好是他会一眼看出问题的地方，不值当。
+  真要做：把官方 `AreaTex.h` / `SearchTex.h` 的数据带进来，两个 pass（边缘 → 混合）替换掉现在的
+  `applyFxaa`，接口不用动（`fxaaWanted` 那套加一个分支就行）。
+- `aa=fxaa` 比 `aa=off` 多一张同尺寸 FBO（500×900 时 1.7 MB；eDP-1 上 1000×1800 = 6.9 MB）。
+  `aa=off` 根本不建 FBO，是「绝对最省」那条路。
+- 拖动是 platform 层的老逻辑（按 surface-local 位移累加），连着重启/快速注入点击时偶发「一次拖动跨两次屏」
+  —— 那是注入器把光标瞬移造成的（代码里有「按下后大跳 → 按点重定位」兜底），手拖不会。本轮没改它。
+- 这台机器**没有能跑的浏览器**（他的 Edge 在另一个 namespace，直接 exec `/proc/<pid>/root/...` 报
+  ICU fd 错），所以页面截图是靠 `niri msg action spawn -- xdg-open <url>` 让**他的浏览器**开新标签、
+  再 `grim` 抓的 —— 副作用是浏览器里多了几个 `米鱼 · 设置` 标签页。

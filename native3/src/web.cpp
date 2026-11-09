@@ -51,74 +51,115 @@ const char* kHtml = R"HTML(<!doctype html>
 <title>米鱼 · 设置</title>
 <style>
   :root{
-    --bg:#0d1117; --fg:#c9d1d9; --dim:#6e7681; --line:#1f2430;
-    --accent:#7aa2f7; --accent2:#bb9af7; --ok:#9ece6a;
+    --bg:#16181d; --card:#1e2128; --line:rgba(255,255,255,.06);
+    --fg:#d7dce6; --dim:#8b93a1; --accent:#7aa2f7;
+    --track:#2c313a; --ctl:#262a33; --knob:#8b93a1; --gh:#9aa4b8;
+  }
+  html[data-theme="light"]{
+    --bg:#f5f6f8; --card:#ffffff; --line:rgba(0,0,0,.08);
+    --fg:#1f2328; --dim:#6b7280; --accent:#3b6fd4;
+    --track:#d8dbe1; --ctl:#f0f2f5; --knob:#9aa1ad; --gh:#5b6472;
   }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--fg);
-    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Noto Sans SC","Segoe UI",sans-serif}
-  .wrap{max-width:420px;margin:0 auto;padding:22px 16px 40px}
-  h1{font-size:16px;font-weight:600;margin:0 0 4px;letter-spacing:.06em;
-     color:var(--accent)}
-  .status{font-size:12px;color:var(--dim);margin:0 0 18px;word-break:break-all}
-  .status b{color:var(--accent2);font-weight:500}
-  .card{background:#10151d;border:1px solid var(--line);border-radius:12px;
-        padding:6px 14px;margin-bottom:14px}
-  .gh{font-size:11px;letter-spacing:.18em;color:var(--accent2);
-      padding:13px 0 3px;text-transform:uppercase}
-  .row{padding:13px 0;border-bottom:1px solid var(--line)}
-  .row:last-child{border-bottom:0}
-  .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-  .k{font-size:13px;color:var(--fg)}
-  .v{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
-  .d{font-size:11px;color:var(--dim);margin-top:3px}
-  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;
-    background:transparent;margin:6px 0 0}
-  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;
-    background:#1f2430}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
-    width:16px;height:16px;margin-top:-6px;border-radius:50%;background:var(--accent);
-    border:0;box-shadow:0 0 0 3px rgba(122,162,247,.18)}
-  input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:#1f2430}
-  input[type=range]::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Noto Sans SC","Segoe UI",sans-serif}
+  .wrap{max-width:1400px;margin:0 auto;padding:20px 18px 36px}
+  .head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.08em;color:var(--accent)}
+  .themebtn{font:inherit;font-size:15px;line-height:1;color:var(--dim);background:var(--card);
+    border:1px solid var(--line);border-radius:9px;padding:6px 10px;cursor:pointer}
+  .themebtn:hover{color:var(--accent)}
+  .status{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:12px;color:var(--dim);margin:9px 0 16px}
+  .status b{color:var(--gh);font-weight:600}
+  .status i{color:var(--accent);font-style:normal;font-variant-numeric:tabular-nums}
+  .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+  @media (min-width:900px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px} }
+  @media (min-width:1400px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:3px 16px 8px;min-width:0}
+  .gh{font-size:11px;letter-spacing:.18em;color:var(--gh);padding:12px 0 5px}
+  .row{display:grid;grid-template-columns:88px minmax(0,1fr) 62px;column-gap:12px;
+       align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+  .gh + .row{border-top:0}
+  .k{font-size:13px;white-space:nowrap}
+  .c{min-width:0;display:flex;align-items:center}
+  .v{font-size:12px;text-align:right;color:var(--accent);
+     font-variant-numeric:tabular-nums;white-space:nowrap}
+  .d{grid-column:1/-1;font-size:11px;color:var(--dim);margin-top:2px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;
+    background:transparent;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--track)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;
+    height:15px;margin-top:-5.5px;border-radius:50%;background:var(--accent);border:0;
+    box-shadow:0 0 0 3px rgba(122,162,247,.16)}
+  input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--track)}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;
     background:var(--accent)}
-  select{background:#161b26;color:var(--fg);border:1px solid var(--line);
-    border-radius:8px;padding:5px 8px;font-size:13px;outline:none}
-  .sw{position:relative;display:inline-block;width:40px;height:22px;flex:0 0 auto}
+  select{width:100%;background:var(--ctl);color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:4px 6px;font-size:12px;outline:none}
+  .sw{position:relative;display:inline-block;width:38px;height:21px}
   .sw input{opacity:0;width:0;height:0}
-  .sl{position:absolute;inset:0;background:#1f2430;border-radius:22px;
-      transition:background .15s;cursor:pointer}
-  .sl:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;
-      background:#8b949e;border-radius:50%;transition:transform .15s,background .15s}
+  .sl{position:absolute;inset:0;background:var(--track);border-radius:22px;cursor:pointer;
+      transition:background .15s}
+  .sl:before{content:"";position:absolute;width:15px;height:15px;left:3px;top:3px;
+      background:var(--knob);border-radius:50%;transition:transform .15s,background .15s}
   .sw input:checked + .sl{background:rgba(122,162,247,.35)}
-  .sw input:checked + .sl:before{transform:translateX(18px);background:var(--accent)}
-  .btns{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px}
-  button{font:inherit;font-size:13px;color:var(--fg);background:#161b26;
+  .sw input:checked + .sl:before{transform:translateX(17px);background:var(--accent)}
+  .tools{display:flex;justify-content:center;gap:8px;margin:18px 0 10px}
+  .tools button{font:inherit;font-size:11px;color:var(--dim);background:none;border:0;
+    padding:4px 6px;cursor:pointer;border-radius:6px}
+  .tools button:hover{color:var(--accent);background:var(--card)}
+  .btns{margin-top:2px}
+  button.main{width:100%;font:inherit;font-size:13px;color:var(--fg);background:var(--card);
     border:1px solid var(--line);border-radius:10px;padding:11px 8px;cursor:pointer;
-    transition:border-color .15s,color .15s,background .15s}
-  button:hover{border-color:var(--accent);color:var(--accent)}
-  button:active{background:#1b2230}
-  button.wide{grid-column:1 / -1}
-  button.warn:hover{border-color:#f7768e;color:#f7768e}
-  .hint{margin-top:14px;font-size:11px;color:var(--dim);min-height:16px;
+    transition:border-color .15s,color .15s}
+  button.main:hover{border-color:#f7768e;color:#f7768e}
+  .hint{margin-top:12px;font-size:11px;color:var(--dim);min-height:15px;
         text-align:center;transition:color .2s}
-  .hint.ok{color:var(--ok)}
-</style></head>
-<body><div class="wrap">
-  <h1>米鱼 · 设置</h1>
+  .hint.ok{color:#2f9e44}
+  html[data-theme="light"] .hint.ok{color:#2b8a3e}
+  .foot{margin-top:14px;font-size:11px;color:var(--dim);text-align:center;opacity:.8}
+</style></style></head>
+<body><script>
+(function(){
+  var t = null;
+  try { t = localStorage.getItem('miyu-theme'); } catch(e) {}
+  // ?theme=light / dark：只对这一页生效，不写 localStorage（截图/调试用）
+  var q = location.search.indexOf('theme=light') >= 0 ? 'light'
+        : (location.search.indexOf('theme=dark') >= 0 ? 'dark' : null);
+  document.documentElement.setAttribute('data-theme', q || (t === 'light' ? 'light' : 'dark'));
+})();
+</script><div class="wrap">
+  <div class="head"><h1>米鱼 · 设置</h1>
+    <button class="themebtn" id="theme" title="切换明暗">☀</button></div>
   <p class="status" id="status">连接中…</p>
-  <div id="groups"></div>
-
-  <div class="btns">
+  <div class="grid" id="groups"></div>
+  <div class="tools">
     <button id="call">叫她一下</button>
     <button id="exprnext">切个表情</button>
-    <button id="reset">恢复默认</button>
-    <button id="restart" class="warn">重启服务</button>
+    <button id="restart">重启服务</button>
   </div>
+  <div class="btns"><button class="main" id="reset">恢复默认</button></div>
   <div class="hint" id="hint"></div>
+  <div class="foot">改完即时生效 · 设置存在 state/settings.json</div>
 </div>
 <script>
 (function(){
+  var themeBtn = document.getElementById('theme');
+  function paintTheme(){
+    var light = document.documentElement.getAttribute('data-theme') === 'light';
+    themeBtn.textContent = light ? '☾' : '☀';
+    themeBtn.title = light ? '切到暗色' : '切到亮色';
+  }
+  themeBtn.addEventListener('click', function(){
+    var light = document.documentElement.getAttribute('data-theme') === 'light';
+    var next = light ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('miyu-theme', next); } catch(e) {}
+    paintTheme();
+  });
+  paintTheme();
+
   var hintEl = document.getElementById('hint');
   function hint(t, ok){
     hintEl.textContent = t;
@@ -141,111 +182,122 @@ const char* kHtml = R"HTML(<!doctype html>
     }, wait);
   }
 
-  // 每项：k=键名 t=控件类型 label=名字 d=这一项到底改了什么
+  var CORNER = {free:'自由', tl:'左上', tr:'右上', bl:'左下', br:'右下'};
+  var AA = {off:'关', fxaa:'fxaa', ssaa2x:'2×', ssaa3x:'3×'};
+  var IDLE = {quiet:'安静', natural:'自然', lively:'活泼'};
+  function pick(m){ return function(v){ return m[v] || String(v); }; }
+
+  // 顺序 = 使用频率：常用 → 外观 → 行为 → 性能 → 声音
   var SCHEMA = [
-    {g:'外观', items:[
+    {g:'常用', items:[
+      {k:'hide', t:'bool', label:'显示',
+       d:'关掉后她整个不见，进程还在，点哪儿都直接穿到桌面'},
       {k:'scale', t:'range', min:0.4, max:1.6, step:0.05, label:'大小',
-       d:'整块窗口放大缩小（重建 buffer），位置不动'},
-      {k:'alpha', t:'range', min:0.3, max:1.0, step:0.05, label:'不透明度',
-       d:'乘到最终颜色上，越低桌面从她身上透出来越多'},
-      {k:'idleStyle', t:'select', label:'待机风格',
-       opts:[['quiet','安静（几乎不动）'],['natural','自然'],['lively','活泼（明显在晃）']],
-       d:'quiet 几乎不动、只剩呼吸；lively 会明显晃，换姿势也更快'},
-      {k:'idle', t:'range', min:0, max:3, step:0.1, label:'待机幅度',
-       d:'在风格之上再乘一个倍数，0 = 完全定住只剩呼吸'},
-      // ── 第十七节：抗锯齿 + 后处理三件 ──────────────────────────
-      {k:'ssaa', t:'select', label:'抗锯齿',
-       opts:[['off','关（最省，边缘有锯齿）'],['2x','2 倍（默认）'],['3x','3 倍（最细）']],
-       d:'离屏按 N 倍画再缩回来，头发丝和裙边不再糊成锯齿；代价是显存 ×N²'},
-      {k:'shadow', t:'range', min:0, max:1, step:0.05, label:'地面阴影',
-       d:'脚下的软阴影，0 关掉她又像贴纸了'},
+       d:'整体放大缩小，位置不动'},
+      {k:'alpha', t:'range', min:0.3, max:1.0, step:0.05, label:'透明度',
+       d:'越低桌面从她身上透出来越多'},
+      {k:'corner', t:'select', label:'吸角',
+       opts:[['free','自由'],['tl','左上'],['tr','右上'],['bl','左下'],['br','右下']],
+       d:'吸到副屏哪个角，选完马上挪过去', show:pick(CORNER)}
+    ]},
+    {g:'外观', items:[
+      {k:'aa', t:'select', label:'抗锯齿',
+       opts:[['off','关'],['ssaa2x','ssaa 2 倍'],['ssaa3x','ssaa 3 倍'],['fxaa','fxaa']],
+       d:'ssaa2x 最锐（贴图不走 mipmap），代价是帧率；fxaa 最快但糊——它按亮度整块混合；off 最省',
+       show:pick(AA)},
       {k:'rim', t:'range', min:0, max:1, step:0.05, label:'轮廓光',
-       d:'边缘那一圈淡光，深色壁纸上尤其有用'},
-      {k:'particles', t:'range', min:0, max:1, step:0.05, label:'气泡',
-       d:'身后飘的气泡，0 关掉'}
+       d:'她身边一圈淡蓝光，深色壁纸上更好看'},
+      {k:'particles', t:'range', min:0, max:1, step:0.05, label:'粒子',
+       d:'身后往上飘的小气泡，0 关掉'},
+      {k:'shadow', t:'range', min:0, max:1, step:0.05, label:'阴影',
+       d:'脚下的软阴影。深色壁纸上基本看不见，只在浅色背景才有用，所以默认关'}
     ]},
     {g:'行为', items:[
-      {k:'look', t:'range', min:0, max:2, step:0.1, label:'视线跟随强度',
-       d:'她看鼠标的幅度（眼珠 + 身体微倾），0 = 不看'},
-      {k:'lookOn', t:'bool', label:'视线总开关',
-       d:'关掉她完全不跟鼠标，眼睛回正'},
-      {k:'blink', t:'range', min:0, max:2, step:0.1, label:'眨眼频率',
-       d:'2 = 眨得很勤，1 = 默认，0 = 一直睁着不眨'},
-      {k:'mouth', t:'range', min:0.5, max:3, step:0.1, label:'嘴动时长',
-       d:'说完一句话嘴还在动的时长倍数（张合快慢不变）'},
+      {k:'idleStyle', t:'select', label:'待机风格',
+       opts:[['quiet','安静'],['natural','自然'],['lively','活泼']],
+       d:'安静几乎不动、只剩呼吸；活泼会明显晃', show:pick(IDLE)},
+      {k:'idle', t:'range', min:0, max:3, step:0.1, label:'待机幅度',
+       d:'在风格之上再乘一个倍数，0 = 定住只剩呼吸'},
+      {k:'lookOn', t:'bool', label:'视线',
+       d:'关掉她就不跟鼠标了，眼睛回正'},
+      {k:'look', t:'range', min:0, max:2, step:0.1, label:'视线强度',
+       d:'看鼠标的幅度，眼珠和身体一起倾'},
+      {k:'blink', t:'range', min:0, max:2, step:0.1, label:'眨眼',
+       d:'2 = 眨得很勤，0 = 一直睁着'},
+      {k:'tap', t:'bool', label:'点击',
+       d:'戳她一下有反应；关掉只剩拖动'},
+      {k:'expr', t:'bool', label:'表情',
+       d:'所有表情切换的总开关'},
       {k:'exprHold', t:'range', min:0.2, max:5, step:0.1, label:'表情停留',
-       d:'表情挂多久后自己淡回默认（动作计划自带的表情不受它管）'},
-      {k:'tap', t:'bool', label:'点击反应', d:'关掉后戳她没反应（拖动还照旧）'},
-      {k:'expr', t:'bool', label:'表情切换', d:'关掉所有表情切换（含动作计划里的）'},
-      {k:'corner', t:'select', label:'贴角',
-       opts:[['free','自由（不动）'],['tl','左上'],['tr','右上'],['bl','左下'],['br','右下']],
-       d:'吸到副屏四角之一'},
-      {k:'hide', t:'bool', label:'隐藏', d:'整个隐藏，进程还在，点击直接穿过去'}
+       d:'表情挂多久自己淡回默认'},
+      {k:'mouth', t:'range', min:0.5, max:3, step:0.1, label:'嘴动',
+       d:'说完一句嘴还动多久（开合快慢不变）'}
     ]},
     {g:'性能', items:[
-      {k:'fps', t:'select', label:'帧率上限',
-       opts:[['30','30（最省电）'],['60','60（默认）'],['120','120'],['200','200（副屏上限）'],['240','240（主屏上限）']],
-       d:'每帧睡到该来的时刻，数字越低越省 CPU；副屏是 200Hz，240 档只有挪到主屏才跑得满'}
+      {k:'fps', t:'select', label:'帧率', num:true,
+       opts:[['30','30 最省电'],['60','60 默认'],['120','120'],['200','200 副屏上限'],
+             ['240','240 主屏上限']],
+       d:'越低越省 CPU；副屏 200 就封顶，240 只有挪到主屏才跑得满'}
     ]},
     {g:'声音', items:[
-      {k:'voice', t:'bool', label:'说话出声',
-       d:'说话时播 voice/*.wav 里预生成的短句，没有这句就静默'},
+      {k:'voice', t:'bool', label:'出声',
+       d:'说话时放预生成的短句，没生成的那句就静默'},
       {k:'vol', t:'range', min:0, max:1, step:0.05, label:'音量',
-       d:'pw-play 的 --volume，0 = 有声音但不响'}
+       d:'0 = 有声音但不响，要静音用上面那个开关'}
     ]}
   ];
 
   var els = {};
   function addRow(card, it){
     var row = document.createElement('div'); row.className = 'row';
-    var top = document.createElement('div'); top.className = 'top';
     var k = document.createElement('span'); k.className = 'k'; k.textContent = it.label;
-    var v = null;
-    if (it.t === 'range') { v = document.createElement('span'); v.className = 'v'; v.textContent = '—'; }
-    top.appendChild(k);
-    if (v) top.appendChild(v); else {
-      var box = document.createElement('span'); box.style.flex = '0 0 auto'; top.appendChild(box);
-    }
-    row.appendChild(top);
+    var c = document.createElement('span'); c.className = 'c';
+    var v = document.createElement('span'); v.className = 'v'; v.textContent = '—';
+    var show = it.show || function(x){
+      return it.t === 'range' ? Number(x).toFixed(2) : (it.t === 'bool' ? (x ? '开' : '关') : String(x));
+    };
 
     if (it.t === 'range') {
       var r = document.createElement('input');
       r.type = 'range'; r.min = it.min; r.max = it.max; r.step = it.step;
       r.addEventListener('input', function(){
         v.textContent = Number(r.value).toFixed(2);
-        push(it.k, parseFloat(r.value), 300);     // 300ms 防抖
+        push(it.k, parseFloat(r.value), 300);      // 300ms 防抖，别把服务端刷爆
       });
-      row.appendChild(r);
-      els[it.k] = {el: r, out: v, type: 'range'};
+      c.appendChild(r);
+      els[it.k] = {el: r, out: v, type: 'range', show: show};
     } else if (it.t === 'bool') {
       var lab = document.createElement('label'); lab.className = 'sw';
       var cb = document.createElement('input'); cb.type = 'checkbox';
       var sl = document.createElement('span'); sl.className = 'sl';
       lab.appendChild(cb); lab.appendChild(sl);
-      top.removeChild(top.lastChild); top.appendChild(lab);
+      c.appendChild(lab);
       cb.addEventListener('change', function(){
         var o = {}; o[it.k] = cb.checked;
+        v.textContent = cb.checked ? '开' : '关';
         post(o).then(function(d){
           if (d && d.ok) hint('已应用：' + it.k, true); else hint('没生效', false);
         }).catch(function(){});
       });
-      els[it.k] = {el: cb, type: 'bool'};
+      els[it.k] = {el: cb, out: v, type: 'bool', show: show};
     } else {
       var sel = document.createElement('select');
       it.opts.forEach(function(o2){
         var op = document.createElement('option'); op.value = o2[0]; op.textContent = o2[1];
         sel.appendChild(op);
       });
-      top.removeChild(top.lastChild); top.appendChild(sel);
+      c.appendChild(sel);
       sel.addEventListener('change', function(){
-        var o = {}; o[it.k] = (it.k === 'fps') ? parseInt(sel.value, 10) : sel.value;
+        var o = {}; o[it.k] = it.num ? parseInt(sel.value, 10) : sel.value;
+        v.textContent = show(it.num ? parseInt(sel.value, 10) : sel.value);
         post(o).then(function(d){
           if (d && d.ok) hint('已应用：' + it.k, true); else hint('没生效', false);
         }).catch(function(){});
       });
-      els[it.k] = {el: sel, type: 'select'};
+      els[it.k] = {el: sel, out: v, type: 'select', show: show, num: !!it.num};
     }
 
+    row.appendChild(k); row.appendChild(c); row.appendChild(v);
     var d = document.createElement('div'); d.className = 'd'; d.textContent = it.d;
     row.appendChild(d);
     card.appendChild(row);
@@ -260,20 +312,27 @@ const char* kHtml = R"HTML(<!doctype html>
     root.appendChild(card);
   });
 
-  function fill(s){
+  function statusLine(s){
+    var f = (s.fps_now === null || s.fps_now === undefined) ? '—' : Number(s.fps_now).toFixed(1);
     document.getElementById('status').innerHTML =
-      '<b>运行中</b> · PID ' + s.pid + ' · 输出 ' + s.output + ' · 窗口 ' + s.window;
+      '<b>运行中</b>' +
+      '<span>PID <i>' + s.pid + '</i></span>' +
+      '<span>输出 <i>' + s.output + '</i></span>' +
+      '<span>窗口 <i>' + s.window + '</i></span>' +
+      '<span>帧率 <i>' + f + '</i> fps</span>';
+  }
+  function fill(s){
+    statusLine(s);
     SCHEMA.forEach(function(sec){
       sec.items.forEach(function(it){
         var e = els[it.k]; if (!e) return;
         var val = s[it.k];
         if (e.type === 'range') {
-          e.el.value = val;
-          e.out.textContent = Number(val).toFixed(2);
+          e.el.value = val; e.out.textContent = Number(val).toFixed(2);
         } else if (e.type === 'bool') {
-          e.el.checked = !!val;
+          e.el.checked = !!val; e.out.textContent = val ? '开' : '关';
         } else {
-          e.el.value = String(val);
+          e.el.value = String(val); e.out.textContent = e.show(e.num ? parseInt(val, 10) : val);
         }
       });
     });
@@ -284,17 +343,15 @@ const char* kHtml = R"HTML(<!doctype html>
     });
   }
   load();
-  // 5 秒只刷状态行：不动控件值（不然正拖滑块会被服务端值拽回去）
+  // 每秒只刷顶栏（帧率是 main 里 5 秒一次的实测值，刷得再勤也只会变一次；
+  // 不动控件值 —— 不然正在拖的滑块会被服务端值拽回去）
   setInterval(function(){
-    fetch('/state').then(function(r){ return r.json(); }).then(function(s){
-      document.getElementById('status').innerHTML =
-        '<b>运行中</b> · PID ' + s.pid + ' · 输出 ' + s.output + ' · 窗口 ' + s.window;
-    }).catch(function(){});
-  }, 5000);
+    fetch('/state').then(function(r){ return r.json(); }).then(statusLine).catch(function(){});
+  }, 1000);
 
   document.getElementById('call').addEventListener('click', function(){
-    post({say:'在', mood:60}).then(function(){ hint('叫了：在', true); }).catch(function(){
-      hint('连不上', false); });
+    post({say:'在', mood:60}).then(function(){ hint('叫了：在', true); })
+      .catch(function(){ hint('连不上', false); });
   });
   document.getElementById('exprnext').addEventListener('click', function(){
     post({action:'expr_next'}).then(function(d){
@@ -438,6 +495,18 @@ std::string jsonEsc(const std::string& in) {
 
 float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+// ── 十八：aa 的取值归一 ─────────────────────────────────────────────
+// 只认四档：off / fxaa / ssaa2x / ssaa3x。
+// 老 key `ssaa` 的写法（off / 2x / 3x）和直接写 "2x"/"3x" 一起收 —— 旧的 settings.json、
+// 旧脚本、旧书签里的 POST 都不会炸。返回 false = 不认识，调用方忽略（不写坏值）。
+bool normAa(const std::string& in, std::string& out) {
+    if (in == "off")  { out = "off";    return true; }
+    if (in == "fxaa") { out = "fxaa";   return true; }
+    if (in == "ssaa2x" || in == "2x") { out = "ssaa2x"; return true; }
+    if (in == "ssaa3x" || in == "3x") { out = "ssaa3x"; return true; }
+    return false;
+}
+
 // ── 状态 ────────────────────────────────────────────────────────────
 int         gFd       = -1;
 int         gPort     = 0;
@@ -445,6 +514,7 @@ Settings    gSet;
 ApplyFn     gApply    = nullptr;
 std::string gOutput   = "?";
 int         gWinW     = 0, gWinH = 0;
+double      gFps      = -1.0;    // 十八：main 的 framePace 每 5 秒喂一次实测帧率
 std::string gPath     = "settings.json";
 std::vector<std::string> gExprs;
 size_t      gExprIdx  = 0;
@@ -482,7 +552,7 @@ void saveSettings() {
           << ",\"vol\":" << gSet.vol
           << ",\"corner\":\"" << gSet.corner << "\""
           << ",\"hide\":" << (gSet.hide ? "true" : "false")
-          << ",\"ssaa\":\"" << gSet.ssaa << "\""
+          << ",\"aa\":\"" << gSet.aa << "\""
           << ",\"shadow\":" << gSet.shadow
           << ",\"rim\":" << gSet.rim
           << ",\"particles\":" << gSet.particles << "}\n";
@@ -498,6 +568,7 @@ void loadSettings() {
     ss << f.rdbuf();
     std::vector<std::pair<std::string, Val>> kv;
     if (!parseFlat(ss.str(), kv)) { logw("%s 不是合法 JSON，用默认值", gPath.c_str()); return; }
+    bool sawAa = false;          // 十八：见上面 aa / ssaa 的先后规矩
     for (auto& [k, v] : kv) {
         if (k == "scale" && v.t == VNum) gSet.scale = clampf(float(v.n), 0.4f, 1.6f);
         else if (k == "alpha" && v.t == VNum) gSet.alpha = clampf(float(v.n), 0.3f, 1.0f);
@@ -528,19 +599,27 @@ void loadSettings() {
         else if (k == "shadow" && v.t == VNum) gSet.shadow = clampf(float(v.n), 0.0f, 1.0f);
         else if (k == "rim" && v.t == VNum) gSet.rim = clampf(float(v.n), 0.0f, 1.0f);
         else if (k == "particles" && v.t == VNum) gSet.particles = clampf(float(v.n), 0.0f, 1.0f);
+        // 十八：aa 是新主键；ssaa 是旧键（映射过来，读了不炸）。
+        // 两个都出现时 aa 赢 —— 所以先记「见过 aa」，旧键只在没见 aa 时生效。
+        else if (k == "aa" && v.t == VStr) {
+            std::string c;
+            if (normAa(v.s, c)) { gSet.aa = c; sawAa = true; }
+            else logw("%s 里 aa=%s 不认识，用默认 %s", gPath.c_str(), v.s.c_str(), gSet.aa.c_str());
+        }
         else if (k == "ssaa" && v.t == VStr) {
-            const std::string c = v.s;
-            if (c == "off" || c == "2x" || c == "3x") gSet.ssaa = c;
+            std::string c;
+            if (normAa(v.s, c)) { if (!sawAa) gSet.aa = c; }
+            else logw("%s 里 ssaa=%s 不认识，忽略", gPath.c_str(), v.s.c_str());
         }
     }
     logw("读回 %s：scale=%.2f alpha=%.2f tap=%d expr=%d idle=%.2f(%s) corner=%s hide=%d "
          "look=%.2f/%d blink=%.2f mouth=%.2f exprHold=%.2f fps=%d voice=%d vol=%.2f "
-         "ssaa=%s shadow=%.2f rim=%.2f particles=%.2f",
+         "aa=%s shadow=%.2f rim=%.2f particles=%.2f",
          gPath.c_str(), gSet.scale, gSet.alpha, int(gSet.tap), int(gSet.expr),
          gSet.idle, gSet.idleStyle.c_str(), gSet.corner.c_str(), int(gSet.hide),
          gSet.look, int(gSet.lookOn), gSet.blink, gSet.mouth, gSet.exprHold,
          gSet.fps, int(gSet.voice), gSet.vol,
-         gSet.ssaa.c_str(), gSet.shadow, gSet.rim, gSet.particles);
+         gSet.aa.c_str(), gSet.shadow, gSet.rim, gSet.particles);
 }
 
 // ── 往 ctl 的 socket 推一条（说一句话 / 切个表情）────────────────────
@@ -617,10 +696,11 @@ std::string stateJson() {
     s += ",\"vol\":" + std::to_string(gSet.vol);
     s += ",\"corner\":\"" + gSet.corner + "\"";
     s += ",\"hide\":" + std::string(gSet.hide ? "true" : "false");
-    s += ",\"ssaa\":\"" + gSet.ssaa + "\"";
+    s += ",\"aa\":\"" + gSet.aa + "\"";
     s += ",\"shadow\":" + std::to_string(gSet.shadow);
     s += ",\"rim\":" + std::to_string(gSet.rim);
     s += ",\"particles\":" + std::to_string(gSet.particles);
+    s += ",\"fps_now\":" + (gFps < 0.0 ? std::string("null") : std::to_string(gFps));
     s += ",\"port\":" + std::to_string(gPort);
     s += ",\"expr_next\":\"" + jsonEsc(gExprs.empty() ? "" : gExprs[gExprIdx % gExprs.size()]) + "\"";
     s += "}";
@@ -749,12 +829,14 @@ std::string handleSet(const std::string& body, bool logIt) {
             if (nv != gSet.particles) { gSet.particles = nv; changed.push_back("particles"); }
             continue;
         }
-        if (k == "ssaa" && v.t == VStr) {
-            const std::string c = v.s;
-            if (c != "off" && c != "2x" && c != "3x") {
-                if (logIt) logw("POST /set ssaa=%s 只认 off/2x/3x，忽略", c.c_str());
-            } else if (c != gSet.ssaa) {
-                gSet.ssaa = c; changed.push_back("ssaa");
+        // 十八：aa 主键 + ssaa 旧键（旧页面/旧脚本照旧能改）
+        if ((k == "aa" || k == "ssaa") && v.t == VStr) {
+            std::string c;
+            if (!normAa(v.s, c)) {
+                if (logIt) logw("POST /set %s=%s 只认 off/fxaa/ssaa2x/ssaa3x（旧写法 off/2x/3x 也认），忽略",
+                                k.c_str(), v.s.c_str());
+            } else if (c != gSet.aa) {
+                gSet.aa = c; changed.push_back("aa");
             }
             continue;
         }
@@ -779,7 +861,7 @@ std::string handleSet(const std::string& body, bool logIt) {
         static const char* kAll[] = {
             "scale", "alpha", "tap", "expr", "idle", "corner", "hide",
             "idleStyle", "look", "lookOn", "blink", "mouth", "exprHold", "fps",
-            "voice", "vol", "ssaa", "shadow", "rim", "particles",
+            "voice", "vol", "aa", "shadow", "rim", "particles",
         };
         changed.clear();
         for (const char* k : kAll) changed.push_back(k);
@@ -920,6 +1002,8 @@ void setStatus(const char* output, int w, int h) {
     gWinW = w;
     gWinH = h;
 }
+
+void setFps(double fps) { gFps = fps; }
 
 void setExprNames(std::vector<std::string> names) { gExprs = std::move(names); }
 
