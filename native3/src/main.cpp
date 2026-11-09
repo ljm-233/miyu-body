@@ -153,6 +153,105 @@ static void idleTick(Csm::CubismModel* model, double now) {
     }
 }
 
+// ── 视线：头 + 眼珠跟着鼠标（2026-11-09 21:xx）──────────────
+// 每帧在 idleTick 之后、eyeBlink 之前跑：指针 → 相对窗口中心的归一化偏移 (-1..1)
+//   · 头：ParamAngleX += nx*10 度，ParamAngleY += ny*6 度（幅度再大就像抽搐）
+//   · 眼珠：ParamEyeBallX/Y += nx/ny * 0.7（这两个参数本来就是 -1..1）
+//   · 一阶低通 cur += (target-cur)*min(1, dt*6)：鼠标瞬移、离开窗口回正，都靠它变软
+//   · **全部走 AddParameterValue**：这 4 个参数默认值都是 0，Add 才叠在待机微动之上。
+//     ParamBreath 那种默认 1.0 的才用 Set（见 idleTick 里那行注释）。
+//   · MIYU_NO_LOOK=1 整套关掉（排查用：关掉后三张图应该几乎一致）
+//
+// 一个反直觉的点：「在窗口内」= 指针在她**身上**（input region 内）。窗口是 500x900
+// 的矩形，但她只占 28%，指针落在透明区域时合成器根本不发 enter —— 平台层不知道
+// 指针在哪。这是逐像素点击穿透的代价，不是 bug（第九节记了）。
+struct LookRig {
+    Csm::csmInt32 iAx = -1, iAy = -1, iEx = -1, iEy = -1;
+    float cx = 0, cy = 0;      // 头（度，已平滑）
+    float ex = 0, ey = 0;      // 眼珠（-1..1，已平滑）
+    bool ready = false, on = true;
+    bool wasIn = false;
+};
+static LookRig gLook;
+
+static void lookInit(Csm::CubismModel* model) {
+    Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+    gLook.iAx = model->GetParameterIndex(m->GetId("ParamAngleX"));
+    gLook.iAy = model->GetParameterIndex(m->GetId("ParamAngleY"));
+    gLook.iEx = model->GetParameterIndex(m->GetId("ParamEyeBallX"));
+    gLook.iEy = model->GetParameterIndex(m->GetId("ParamEyeBallY"));
+    gLook.on = std::getenv("MIYU_NO_LOOK") == nullptr;
+    gLook.ready = true;
+    log_("[main] 视线：%s | 参数索引 angleX=%d angleY=%d eyeBallX=%d eyeBallY=%d",
+         gLook.on ? "开（头 ±10°/±6°，眼珠 ±0.7，一阶低通 dt*6）" : "关（MIYU_NO_LOOK）",
+         gLook.iAx, gLook.iAy, gLook.iEx, gLook.iEy);
+}
+
+static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int lh) {
+    if (!gLook.ready) lookInit(model);
+    if (!gLook.on) return;
+
+    float nx = 0.0f, ny = 0.0f;   // 不在窗口内 → 目标就是 0，同一个平滑慢慢回正
+    float px = 0.0f, py = 0.0f;
+    const bool in = platPointer(&px, &py) && lw > 0 && lh > 0;
+    if (in) {
+        // 分母优先用「她本人」的半宽（platPersonBox），拿不到才退回整块窗口。
+        // 逐像素穿透之后鼠标只在她身上才算「在窗口内」，用窗口半宽只能到 ±0.5，
+        // 头只偏一半幅度；换成她自己的半宽，在她身上挪一点点就是满幅。
+        int pcx = 0, pcy = 0, phw = 0, phh = 0;
+        float cx = static_cast<float>(lw) * 0.5f, cy = static_cast<float>(lh) * 0.5f;
+        float hw = static_cast<float>(lw) * 0.5f, hh = static_cast<float>(lh) * 0.5f;
+        if (platPersonBox(&pcx, &pcy, &phw, &phh) && phw > 0 && phh > 0) {
+            cx = static_cast<float>(pcx); cy = static_cast<float>(pcy);
+            hw = static_cast<float>(phw); hh = static_cast<float>(phh);
+        }
+        nx = (px - cx) / hw;
+        ny = (py - cy) / hh;
+        if (nx > 1.0f) nx = 1.0f;
+        if (nx < -1.0f) nx = -1.0f;
+        if (ny > 1.0f) ny = 1.0f;
+        if (ny < -1.0f) ny = -1.0f;
+    }
+
+    // 诊断：Add 之前模型里是什么（LoadParameters 刚跑过；不为 0 就是有人在累加）
+    const float preAx = gLook.iAx >= 0 ? model->GetParameterValue(gLook.iAx) : -999.0f;
+
+    const float a = (dt * 6.0f > 1.0f) ? 1.0f : dt * 6.0f;
+    gLook.cx += (nx * 10.0f - gLook.cx) * a;
+    gLook.cy += (ny * 6.0f - gLook.cy) * a;
+    gLook.ex += (nx * 0.7f - gLook.ex) * a;
+    gLook.ey += (ny * 0.7f - gLook.ey) * a;
+
+    // 头用 Add：待机微动也写 ParamAngleX，Add 才是「叠在它上面」（实测 Add 前读到的
+    // 恰好是 idle 本帧算的值，说明这两个参数每帧确实被 LoadParameters 归零了）。
+    if (gLook.iAx >= 0) model->AddParameterValue(gLook.iAx, gLook.cx, 1.0f);
+    if (gLook.iAy >= 0) model->AddParameterValue(gLook.iAy, gLook.cy, 1.0f);
+    // 眼珠必须用 **Set**，不能用 Add —— 实测出来的，跟"默认 0 就用 Add"的经验相反：
+    // ParamEyeBallX/Y（本模型索引 76/77）**不会被 LoadParameters 归零**，Add 一帧一帧累加，
+    // 约 4 帧就顶到 -1/+1（日志里 eyeX 一直钉在 -1.00，平滑值才 -0.33）。
+    // 这俩参数没有别的写入者（默认 0、眨眼只写 EyeLOpen），所以 Set 就是「写目标值」——
+    // 等价于「在 0 上 Add」，但不累积。
+    if (gLook.iEx >= 0) model->SetParameterValue(gLook.iEx, gLook.ex, 1.0f);
+    if (gLook.iEy >= 0) model->SetParameterValue(gLook.iEy, gLook.ey, 1.0f);
+
+    // 诊断：进出窗口各打一行（视线验证全靠它判断"她到底看没看见指针"），
+    // 停留期间每 2 秒一行。
+    if (in != gLook.wasIn) {
+        gLook.wasIn = in;
+        if (in) log_("[look] 指针进入 local=(%.0f,%.0f) nx=%+.2f ny=%+.2f", px, py, nx, ny);
+        else    log_("[look] 指针离开，视线回正");
+    }
+    static double lastLog = -1e9;
+    if (now - lastLog > 2.0) {
+        lastLog = now;
+        log_("[look] %s nx=%+.2f ny=%+.2f -> 头(%+.2f,%+.2f)° 眼(%+.2f,%+.2f)"
+             " | Add前 angleX=%+.2f | 写入后模型 angleX=%+.2f eyeX=%+.2f",
+             in ? "跟" : "回正", nx, ny, gLook.cx, gLook.cy, gLook.ex, gLook.ey,
+             preAx, gLook.iAx >= 0 ? model->GetParameterValue(gLook.iAx) : -999.0f,
+             gLook.iEx >= 0 ? model->GetParameterValue(gLook.iEx) : -999.0f);
+    }
+}
+
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
@@ -389,6 +488,11 @@ int main() {
         model->LoadParameters();
         if (motionManager) motionManager->UpdateMotion(model, dt);
         else if (!kNoIdle) idleTick(model, now);   // 没有 motion 时走自己写的待机微动
+        // 视线：夹在待机微动之后（叠在它上面，不覆盖）、眨眼之前。
+        // 用逻辑尺寸归一化 —— platPointer 给的是 surface-local 逻辑 px，不是物理 px。
+        int lw = 0, lh = 0;
+        platGetLogicalSize(&lw, &lh);
+        lookTick(model, dt, now, lw, lh);
         if (eyeBlink) {
             eyeBlink->UpdateParameters(model, dt);
             if (eyeLi >= 0) {

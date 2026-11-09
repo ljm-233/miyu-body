@@ -48,6 +48,22 @@ void platSetPosition(int x, int y);
 // 松手那一帧再补算一次。
 bool platIsDragging();
 
+// 指针当前是否在窗口内；在的话通过 out 返回 surface-local 逻辑坐标。
+//   · Wayland 实现：靠 wl_pointer 的 enter/leave 记账。注意**只有她身上的像素**才算
+//     「在窗口内」—— input region 之外的点合成器根本不发 enter（见 NOTES 第九节）。
+//   · X11 实现：恒 false（X11 那版没有指针层，视线功能自然不生效）。
+bool platPointer(float* x, float* y);
+
+// 窗口的**逻辑**尺寸（surface-local 坐标系，跟 platPointer 同一个单位）。
+// 为什么要单独一个：platGetFramebufferSize 给的是物理像素（逻辑 × buffer scale，
+// 本机 2 倍）。拿物理宽度去归一化逻辑坐标，nx 永远落在 -1..0，看起来像"她只会往左看"。
+void platGetLogicalSize(int* w, int* h);
+
+// 她本人（不透明像素）在窗口里的包围盒，逻辑坐标。没有就返回 false。
+// 用途：视线跟随要用「她本人」当坐标系，不是用整块窗口——逐像素穿透之后，
+// 鼠标只在她身上才会被算作「在窗口内」，用窗口半宽当分母只能到 ±0.5。
+bool platPersonBox(int* cx, int* cy, int* hw, int* hh);
+
 // 销毁窗口（调用方负责先释放 GL 资源）。
 void platShutdown();
 

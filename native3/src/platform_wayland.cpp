@@ -852,6 +852,35 @@ void platSetPosition(int x, int y) {
 
 bool platIsDragging() { return W.dragging; }
 
+// 指针在哪（surface-local 逻辑 px）。只认 enter/leave 记的账：
+//   · 不在窗口内 → false，调用方把视线目标归零（她不看人）
+//   · 在窗口内 → refSx/refSy 是最后一次 enter/motion 收到的 local。
+//     别在这里自己算「窗口挪了多少」：那个换算在 ptr_motion 里已经做过一遍
+//     （同值去重 + 不补偿，见第七节的坐标账）。
+bool platPointer(float* x, float* y) {
+    if (!W.ptrIn) return false;
+    if (x) *x = (float)W.refSx;
+    if (y) *y = (float)W.refSy;
+    return true;
+}
+
+// 最近一次输入区计算时得到的「她本人」包围盒（逻辑坐标），供视线跟随用
+static int gPcx = -1, gPcy = -1, gPhw = 0, gPhh = 0;
+
+bool platPersonBox(int* cx, int* cy, int* hw, int* hh) {
+    if (gPcx < 0 || gPhw <= 0) return false;
+    if (cx) *cx = gPcx;
+    if (cy) *cy = gPcy;
+    if (hw) *hw = gPhw;
+    if (hh) *hh = gPhh;
+    return true;
+}
+
+void platGetLogicalSize(int* w, int* h) {
+    if (w) *w = W.reqW;
+    if (h) *h = W.reqH;
+}
+
 void platShutdown() {
     if (!W.dpy) return;
     if (W.edpy != EGL_NO_DISPLAY) {
@@ -962,6 +991,12 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
                 if (rs[i].y < by0) by0 = rs[i].y;
                 if (rs[i].x + rs[i].w > bx1) bx1 = rs[i].x + rs[i].w;
                 if (rs[i].y + rs[i].h > by1) by1 = rs[i].y + rs[i].h;
+            }
+            if (bx1 > bx0 && by1 > by0) {
+                gPcx = (bx0 + bx1) / 2;
+                gPcy = (by0 + by1) / 2;
+                gPhw = (bx1 - bx0) / 2;
+                gPhh = (by1 - by0) / 2;
             }
             LOG("input region: 物理 %dx%d -> 逻辑 %dx%d | %zu 条矩形 | 覆盖 %zu px (%.1f%%) | bbox=[%d,%d .. %d,%d] | threshold=%u",
                 w, h, lw, lh, n, alpha_region_area(rs, n),

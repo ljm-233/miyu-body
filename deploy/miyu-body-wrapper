@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# miyu-body — 启动 Miyu 的 Wayland 原生桌宠
+# 关键：cwd 必须是 native3，程序用相对路径读 FrameworkShaders/
+set -u
+
+BODY_DIR="/home/link/.dsh/miyu/body/native3"
+BIN="build/miyu-wayland"
+
+cd "$BODY_DIR" || { echo "[miyu-body] 进不去 $BODY_DIR" >&2; exit 1; }
+
+if [[ ! -x "$BIN" ]]; then
+    echo "[miyu-body] 二进制不可执行：$BODY_DIR/$BIN（先 cmake --build build）" >&2
+    exit 1
+fi
+
+# 资源自检：缺 shader 目录就当场报清楚，别让程序刷一屏 Failed to load vertex shader
+if [[ ! -d "$BODY_DIR/FrameworkShaders" ]]; then
+    echo "[miyu-body] 缺 $BODY_DIR/FrameworkShaders/" >&2
+    exit 1
+fi
+
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+export XDG_RUNTIME_DIR
+
+# WAYLAND_DISPLAY：unit 里写死 wayland-1；万一 niri 重启换了编号，自动挑一个存在的
+if [[ -z "${WAYLAND_DISPLAY:-}" || ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+    want="${WAYLAND_DISPLAY:-<空>}"
+    found=""
+    for s in "$XDG_RUNTIME_DIR"/wayland-*; do
+        [[ -S "$s" ]] && { found="${s##*/}"; break; }
+    done
+    if [[ -n "$found" ]]; then
+        echo "[miyu-body] WAYLAND_DISPLAY=$want 不可用，改用 $found" >&2
+        export WAYLAND_DISPLAY="$found"
+    else
+        echo "[miyu-body] $XDG_RUNTIME_DIR 下没有 wayland-* socket（合成器没起来？）" >&2
+        exit 1
+    fi
+fi
+
+# 这是 Wayland 原生版：DISPLAY 留着会让部分 GL 栈去试 XWayland
+unset DISPLAY
+
+exec "./$BIN" "$@"

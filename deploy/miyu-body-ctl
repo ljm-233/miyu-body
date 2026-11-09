@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# miyu-body-ctl — 一键叫出来 / 收起来
+#   start | stop | restart | status | toggle | logs
+set -u
+UNIT="miyu-body.service"
+
+usage() {
+    cat <<'USAGE'
+用法: miyu-body-ctl {start|stop|restart|status|toggle|logs}
+  start    叫出来（systemctl --user start miyu-body）
+  stop     收起来
+  restart  重起（会闪一下）
+  status   是否在跑 + PID + 重启次数 + 最近日志
+  toggle   在跑就收，没跑就放出来（给键绑定用）
+  logs     跟 journal（Ctrl-C 退出）
+USAGE
+}
+
+running() { systemctl --user is-active --quiet "$UNIT"; }
+
+case "${1:-}" in
+    start)   systemctl --user start "$UNIT"   && echo "miyu-body: 已叫出来" ;;
+    stop)    systemctl --user stop  "$UNIT"   && echo "miyu-body: 已收起来" ;;
+    restart) systemctl --user restart "$UNIT" && echo "miyu-body: 已重起" ;;
+    toggle)
+        if running; then
+            systemctl --user stop "$UNIT" && echo "miyu-body: 已收起来"
+        else
+            systemctl --user start "$UNIT" && echo "miyu-body: 已叫出来"
+        fi
+        ;;
+    status)
+        printf '状态: %s\n' "$(systemctl --user is-active "$UNIT")"
+        systemctl --user show "$UNIT" -p MainPID -p NRestarts -p ExecMainStartTimestamp |
+            sed 's/^/  /'
+        echo "  进程: $(pgrep -ax miyu-wayland || echo '无')"
+        ;;
+    logs)    exec journalctl --user -u "$UNIT" -f -o cat ;;
+    ""|-h|--help|help) usage; exit 0 ;;
+    *) echo "不认识的子命令: $1" >&2; usage >&2; exit 2 ;;
+esac

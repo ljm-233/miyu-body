@@ -113,6 +113,16 @@ void platSetPosition(int x, int y) {
 // 那段逻辑在 X11 版永远走「不是拖动」那条路（X11 本来也没有 region）。
 bool platIsDragging() { return false; }
 
+// X11 版没有指针层（GLFW 只给窗口级回调，没有 surface-local 这套），
+// 视线功能在备胎上就是「不跟」：恒 false → main.cpp 那边目标永远是 0。
+bool platPointer(float*, float*) { return false; }
+
+// 逻辑尺寸 = 窗口尺寸（X11 没有 buffer_scale 那套）。
+void platGetLogicalSize(int* w, int* h) {
+    if (!g_win) { if (w) *w = 0; if (h) *h = 0; return; }
+    glfwGetWindowSize(g_win, w, h);
+}
+
 void platShutdown() {
     if (g_win) { glfwDestroyWindow(g_win); g_win = nullptr; }
     if (g_inited) { glfwTerminate(); g_inited = false; }
@@ -121,3 +131,6 @@ void platShutdown() {
 // X11 做不到逐像素点击穿透：X Shape 扩展的路子 xwayland-satellite 零实现
 // （见 wayland-migration.md 第三节），所以这里是空实现，让两个 target 都能编。
 void platSetInputRegionFromAlpha(const unsigned char*, int, int, int) {}
+
+// X11 版没有「按 alpha 算她本人包围盒」这套，视线跟随在 X11 上退回到窗口坐标
+bool platPersonBox(int*, int*, int*, int*) { return false; }

@@ -1,0 +1,26 @@
+[Unit]
+Description=Miyu body — Wayland 原生桌宠（layer-shell）
+Documentation=file:/home/link/.dsh/miyu/body/native3
+# niri.service 本身 BindsTo+Before=graphical-session.target，所以 niri 起来后
+# 这个 target 一定是 active 的，WantedBy=graphical-session.target 能被拉起
+After=graphical-session.target niri.service
+PartOf=graphical-session.target
+# 连续失败也不要把 unit 锁死（崩一次就永远别再起 = 最坏的结果）
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-1
+ExecStart=/home/link/.local/bin/miyu-body
+Restart=always
+RestartSec=3
+# 已知收到 SIGTERM 1ms 内退出，不需要温柔等待
+TimeoutStopSec=5
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=miyu-body
+
+[Install]
+WantedBy=graphical-session.target
