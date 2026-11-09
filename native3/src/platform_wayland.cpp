@@ -193,9 +193,20 @@ static const zxdg_output_v1_listener xo_listener = {
 #define BTN_LEFT 0x110
 static void drag_apply_pending();   // 定义在 apply_margin 之后
 
+// 2026-11-09 21:0x：不能只看 W.ptrIn —— input region 每 10 帧重算一次，
+// region 一变合成器就会重判指针归属，enter/leave 会抖，ptrIn 经常是 false，
+// 于是视线一直「回正」。改成看「最近 1.5 秒内有没有指针活动」。
+static double gLastPtrT = -1e9;
+static double nowSec() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec / 1e9;
+}
+
 static void ptr_enter(void*, wl_pointer*, uint32_t, wl_surface* s, wl_fixed_t sx, wl_fixed_t sy) {
     if (!s || s != W.surf) return;
     W.ptrIn = true;
+    gLastPtrT = nowSec();
     W.refSx = wl_fixed_to_int(sx);
     W.refSy = wl_fixed_to_int(sy);
     LOG("指针进入 surface，local=(%d,%d)", W.refSx, W.refSy);
@@ -216,6 +227,7 @@ static void ptr_motion(void*, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t s
     // 合成器在 layer surface 挪动之后会把**同一个** local 重发一次（一次 commit 一个），
     // 值一模一样。当成新位移就会每帧再挪一格，几十帧就飞到屏幕边上
     // （实测：注入 −100，窗口跑了 −620）。同值直接丢。
+    gLastPtrT = nowSec();           // 只要指针动过就算「在」
     if (x == W.refSx && y == W.refSy) return;
     const int dx = x - W.refSx;
     const int dy = y - W.refSy;
@@ -858,7 +870,7 @@ bool platIsDragging() { return W.dragging; }
 //     别在这里自己算「窗口挪了多少」：那个换算在 ptr_motion 里已经做过一遍
 //     （同值去重 + 不补偿，见第七节的坐标账）。
 bool platPointer(float* x, float* y) {
-    if (!W.ptrIn) return false;
+    if (!W.ptrIn && nowSec() - gLastPtrT > 1.5) return false;
     if (x) *x = (float)W.refSx;
     if (y) *y = (float)W.refSy;
     return true;
