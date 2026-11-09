@@ -109,9 +109,9 @@ static IdleRig gIdle;
 static void idleInit(Csm::CubismModel* model) {
     Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
     gIdle.iBreath = model->GetParameterIndex(m->GetId("ParamBreath"));
-    gIdle.iAx = model->GetParameterIndex(m->GetId("ParamAngleX"));
-    gIdle.iAz = model->GetParameterIndex(m->GetId("ParamAngleZ"));
-    gIdle.iBz = model->GetParameterIndex(m->GetId("ParamBodyAngleZ"));
+    gIdle.iAx = model->GetParameterIndex(m->GetId("AngleX"));
+    gIdle.iAz = model->GetParameterIndex(m->GetId("AngleZ"));
+    gIdle.iBz = model->GetParameterIndex(m->GetId("PositionX"));
     srand(static_cast<unsigned>(time(nullptr)));   // 不种的话每次启动抽到同一串数
     gIdle.ready = true;
     log_("[main] 待机参数索引 breath=%d angleX=%d angleZ=%d bodyZ=%d",
@@ -176,8 +176,8 @@ static LookRig gLook;
 
 static void lookInit(Csm::CubismModel* model) {
     Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
-    gLook.iAx = model->GetParameterIndex(m->GetId("ParamAngleX"));
-    gLook.iAy = model->GetParameterIndex(m->GetId("ParamAngleY"));
+    gLook.iAx = model->GetParameterIndex(m->GetId("AngleX"));   // 注意：不是 ParamAngleX，那个是空壳
+    gLook.iAy = model->GetParameterIndex(m->GetId("AngleY"));
     gLook.iEx = model->GetParameterIndex(m->GetId("ParamEyeBallX"));
     gLook.iEy = model->GetParameterIndex(m->GetId("ParamEyeBallY"));
     gLook.on = std::getenv("MIYU_NO_LOOK") == nullptr;
@@ -233,8 +233,8 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     const float preAx = gLook.iAx >= 0 ? model->GetParameterValue(gLook.iAx) : -999.0f;
 
     const float a = (dt * 6.0f > 1.0f) ? 1.0f : dt * 6.0f;
-    gLook.cx += (nx * 26.0f - gLook.cx) * a;   // 10 太轻，实测头只偏 1.7 度看不出来
-    gLook.cy += (ny * 16.0f - gLook.cy) * a;
+    gLook.cx += (nx * 14.0f - gLook.cx) * a;   // 10 太轻，实测头只偏 1.7 度看不出来
+    gLook.cy += (ny * 10.0f - gLook.cy) * a;
     gLook.ex += (nx * 1.0f - gLook.ex) * a;
     gLook.ey += (ny * 1.0f - gLook.ey) * a;
 
