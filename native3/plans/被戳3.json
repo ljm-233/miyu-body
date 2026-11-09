@@ -1,0 +1,57 @@
+{
+ "version": 1,
+ "title": "被戳3",
+ "view": "full",
+ "actions": [
+  {
+   "kind": "trajectory",
+   "duration": 0.9,
+   "frames": [
+    {
+     "time": 0.0,
+     "values": {
+      "AngleX": 0,
+      "AngleZ": 0,
+      "PositionY": 0,
+      "ParamEyeBallX": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthOpenY": 0
+     }
+    },
+    {
+     "time": 0.12,
+     "values": {
+      "AngleX": 3,
+      "AngleZ": -7,
+      "PositionY": 6,
+      "ParamEyeBallX": 0.7,
+      "ParamEyeBallY": -0.5,
+      "ParamMouthOpenY": 0.35
+     }
+    },
+    {
+     "time": 0.45,
+     "values": {
+      "AngleX": 2,
+      "AngleZ": -5,
+      "PositionY": 4,
+      "ParamEyeBallX": 0.6,
+      "ParamEyeBallY": -0.45,
+      "ParamMouthOpenY": 0.22
+     }
+    },
+    {
+     "time": 0.9,
+     "values": {
+      "AngleX": 0,
+      "AngleZ": 0,
+      "PositionY": 0,
+      "ParamEyeBallX": 0,
+      "ParamEyeBallY": 0,
+      "ParamMouthOpenY": 0
+     }
+    }
+   ]
+  }
+ ]
+}

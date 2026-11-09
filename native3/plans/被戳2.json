@@ -1,0 +1,45 @@
+{
+ "version": 1,
+ "title": "被戳2",
+ "view": "full",
+ "actions": [
+  {
+   "kind": "trajectory",
+   "duration": 1.1,
+   "frames": [
+    {
+     "time": 0.0,
+     "values": {
+      "AngleY": 0,
+      "AngleZ": 0,
+      "ParamEyeBallX": 0
+     }
+    },
+    {
+     "time": 0.2,
+     "values": {
+      "AngleY": 6,
+      "AngleZ": -5,
+      "ParamEyeBallX": 0.6
+     }
+    },
+    {
+     "time": 0.6,
+     "values": {
+      "AngleY": -2,
+      "AngleZ": -3,
+      "ParamEyeBallX": 0.4
+     }
+    },
+    {
+     "time": 1.1,
+     "values": {
+      "AngleY": 0,
+      "AngleZ": 0,
+      "ParamEyeBallX": 0
+     }
+    }
+   ]
+  }
+ ]
+}

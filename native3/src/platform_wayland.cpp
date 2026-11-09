@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <ctime>
 #include <cmath>
+#include <string>
 #include <poll.h>
 #include <dlfcn.h>
 #include <unistd.h>
@@ -37,6 +38,7 @@
 #include "layer-shell-client.h"
 #include "xdg-output-client.h"
 #include "alpha_region.h"
+#include "plan.h"   // 单击反应：平台层直接推一份计划给播放器（第十三节）
 
 #define LOG(...) do { fprintf(stderr, "[plat-wl] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
 
@@ -193,6 +195,105 @@ static const zxdg_output_v1_listener xo_listener = {
 #define BTN_LEFT 0x110
 static void drag_apply_pending();   // 定义在 apply_margin 之后
 
+/* ---------------- 单击反应（tap）—— 第十三节 ----------------
+ *
+ * 「点她一下有反应」和「拖她走」共用同一个 BTN_LEFT，所以要先把两件事分开：
+ *
+ *   · 按下：**只记账**，不进拖动（pressX/pressY/pressT）。
+ *   · 按下后位移越过 TAP_SLOP_PX → 当场转成拖动，并且把「按下点 → 现在」这段
+ *     位移整段补进 pend（少了这 6px，拖 100 就只走 94）。
+ *   · 松开且从没越过阈值：位移 ≤ TAP_SLOP_PX 且按住 < TAP_MAX_S → 单击。
+ *
+ * 选了「先不拖、超阈值才开始拖」这条路（而不是「松开时再决定」）：手感上更接近
+ * 普通窗口 —— 一动起来就跟手，不用先等松开。代价是前 6px 之后才真正开始挪，
+ * 已经在转拖动那一帧补回来了，实测注入 100 → 窗口走 105（见 NOTES 13.7-B）。
+ *
+ * 反应计划：点左半边播 `被戳.json`（低头躲），右半边播 `被戳2.json`（抬头侧偏），
+ * 每第 3 次播 `被戳3.json`（往上一惊 + 眼珠甩开 + 嘴微张 = 换个表情）。
+ * 冷却 800ms；正在播别的计划时 plan::start() 走播放器自己的 0.2s 交叉淡入接管。
+ */
+static constexpr int    TAP_SLOP_PX = 6;      // 单击的位移上限（逻辑 px）
+static constexpr int    TAP_JUMP_PX = 120;    // 单个 motion 事件跳这么远 = 不是手在拖（见下）
+static constexpr double TAP_MAX_S   = 0.400;  // 按住多久以上就不算单击
+static constexpr double TAP_COOL_S  = 0.800;  // 冷却
+
+static bool        gTapOn = true;             // MIYU_NO_TAP=1 关
+static std::string gPlansDir;                 // 计划目录（MIYU_PLANS_DIR 或按 exe 找）
+static int         gTapN = 0;                 // 第几次点击（含被冷却挡掉的）
+static double      gTapCoolUntil = 0.0;
+
+// 按下记账
+static bool   gPressArmed = false;
+static int    gPressX = 0, gPressY = 0;
+static double gPressT = 0.0;
+
+// 计划目录：不写死绝对路径。
+//   ① MIYU_PLANS_DIR 指定的优先
+//   ② /proc/self/exe 所在目录下的 plans/（二进制被装到和 plans 同层时）
+//   ③ /proc/self/exe 的上一级 plans/（本项目就是这种：build/miyu-wayland ↔ ../plans）
+//   ④ 兜底 "plans/"（launcher 已经 cd 到 native3 了）
+static void tapInit() {
+    const char* no = getenv("MIYU_NO_TAP");
+    gTapOn = !(no && strcmp(no, "1") == 0);
+
+    if (const char* d = getenv("MIYU_PLANS_DIR")) {
+        gPlansDir = d;
+    } else {
+        std::string exeDir;
+        char buf[4096];
+        const ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+        if (n > 0) {
+            buf[n] = 0;
+            const std::string e(buf);
+            const size_t sl = e.rfind('/');
+            exeDir = (sl == std::string::npos) ? std::string(".") : e.substr(0, sl);
+        }
+        const std::string cands[3] = {exeDir + "/plans", exeDir + "/../plans", "plans"};
+        for (int i = 0; i < 3; ++i) {
+            if (access((cands[i] + "/被戳.json").c_str(), R_OK) == 0) { gPlansDir = cands[i]; break; }
+        }
+        if (gPlansDir.empty()) gPlansDir = "plans";
+    }
+    LOG("点击反应：%s | plans=%s", gTapOn ? "开" : "关（MIYU_NO_TAP=1）", gPlansDir.c_str());
+}
+
+static bool tapLoadPlan(const char* name, std::string* out) {
+    const std::string p = gPlansDir + "/" + name;
+    FILE* f = std::fopen(p.c_str(), "rb");
+    if (!f) { LOG("[tap] 打不开 %s（这次不播）", p.c_str()); return false; }
+    out->clear();
+    char b[4096];
+    size_t n;
+    while ((n = std::fread(b, 1, sizeof b, f)) > 0) out->append(b, n);
+    std::fclose(f);
+    if (out->empty()) { LOG("[tap] %s 是空的（这次不播）", p.c_str()); return false; }
+    return true;
+}
+
+// 真点下去那一下。lx/ly 是 surface-local 逻辑坐标。
+static void tapFire(int lx, int ly) {
+    ++gTapN;
+    const double now = platTime();
+    if (now < gTapCoolUntil) {
+        LOG("[tap] 第 %d 次点击 local=(%d,%d) → 冷却中（还剩 %.2fs），不播",
+            gTapN, lx, ly, gTapCoolUntil - now);
+        return;
+    }
+    // 点左半边 → 被戳（低头躲）；点右半边 → 被戳2（抬头侧偏）；
+    // 每第 3 次换成 被戳3（往上一惊、眼珠甩开、嘴微张）—— 那一下算「换个表情」。
+    int pcx = 0, pcy = 0, phw = 0, phh = 0;
+    const bool haveBox = platPersonBox(&pcx, &pcy, &phw, &phh);
+    const bool left = haveBox ? (lx < pcx) : (lx < W.reqW / 2);
+    const char* file;
+    if (gTapN % 3 == 0) file = "被戳3.json";
+    else                file = left ? "被戳.json" : "被戳2.json";
+    std::string body;
+    if (!tapLoadPlan(file, &body)) return;
+    gTapCoolUntil = now + TAP_COOL_S;
+    plan::start(body, now);
+    LOG("[tap] 第 %d 次点击 local=(%d,%d) → 播 %s", gTapN, lx, ly, file);
+}
+
 // 2026-11-09 21:0x：不能只看 W.ptrIn —— input region 每 10 帧重算一次，
 // region 一变合成器就会重判指针归属，enter/leave 会抖，ptrIn 经常是 false，
 // 于是视线一直「回正」。改成看「最近 1.5 秒内有没有指针活动」。
@@ -203,8 +304,7 @@ static double nowSec() {
     return ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
-static void ptr_enter(void*, wl_pointer*, uint32_t, wl_surface* s, wl_fixed_t sx, wl_fixed_t sy) {
-    if (!s || s != W.surf) return;
+static void ptr_enter(void*, wl_pointer*, uint32_t, wl_surface* s, wl_fixed_t sx, wl_fixed_t sy) {    if (!s || s != W.surf) return;
     W.ptrIn = true;
     gLastPtrT = nowSec();
     W.refSx = wl_fixed_to_int(sx);
@@ -234,9 +334,32 @@ static void ptr_motion(void*, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t s
     W.refSx = x;
     W.refSy = y;
     if (!W.dragging) {
-        if (dbg) LOG("[dbg] motion（未拖）local=(%d,%d) ref=(%d,%d) pos=(%d,%d) ptrIn=%d",
-                     x, y, W.refSx, W.refSy, W.posX, W.posY, (int)W.ptrIn);
-        return;
+        // 按下后还没进拖动：位移越过阈值才转拖动（单击/拖动分流，见上面 tap 注释）
+        if (gPressArmed && (std::abs(dx) > TAP_JUMP_PX || std::abs(dy) > TAP_JUMP_PX)) {
+            // 一个事件就跳这么远，不是手在拖：是「按下之后指针被瞬移 / 窗口刚重排」
+            // 带来的假位移（实测：注入器绝对定位把光标挪 600+ px，那一下会把单击
+            // 变成拖动，把她甩到屏幕另一头）。把按点跟着挪同样一段，重新起算。
+            gPressX += dx;
+            gPressY += dy;
+            if (dbg) LOG("[dbg] 按下后大跳 (%d,%d) → 按点重定位 local=(%d,%d)",
+                         dx, dy, gPressX, gPressY);
+            return;
+        }
+        if (gPressArmed && W.dragOn) {
+            const int ax = x - gPressX, ay = y - gPressY;
+            if (ax * ax + ay * ay > TAP_SLOP_PX * TAP_SLOP_PX) {
+                W.dragging = true;
+                W.pendX = ax;      // 按下点到现在整段补上，不丢前面那几像素
+                W.pendY = ay;
+                gPressArmed = false;
+                LOG("开始拖动：margin=(%d,%d) 按点 local=(%d,%d)", W.posX, W.posY, gPressX, gPressY);
+            }
+        }
+        if (!W.dragging) {
+            if (dbg) LOG("[dbg] motion（未拖）local=(%d,%d) ref=(%d,%d) pos=(%d,%d) ptrIn=%d",
+                         x, y, W.refSx, W.refSy, W.posX, W.posY, (int)W.ptrIn);
+            return;
+        }
     }
     if (!W.ptrIn) { W.ptrIn = true; return; }   // 刚回来，这一格不认（避免跳一下）
     if (dbg) LOG("[dbg] motion local=(%d,%d) ref=(%d,%d) d=(%d,%d) pos=(%d,%d) pend=(%d,%d)",
@@ -246,19 +369,39 @@ static void ptr_motion(void*, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t s
 }
 
 static void ptr_button(void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t state) {
-    if (!W.dragOn) return;                       // MIYU_DRAG=0
     if (button != BTN_LEFT) return;
+    // 注意：这里**没有** `if (!W.dragOn) return;` 了 —— 拖动开关只管拖动，
+    // 单击反应有自己的开关（MIYU_NO_TAP=1）；两个开关互不牵连。
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
         drag_apply_pending();                    // 把按下前攒的零头清掉
-        if (!W.ptrIn) return;                    // 不在她身上按下 → 不拖
-        W.dragging = true;
+        gPressArmed = false;
         W.pendX = W.pendY = 0;
-        LOG("开始拖动：margin=(%d,%d) 按点 local=(%d,%d)", W.posX, W.posY, W.refSx, W.refSy);
+        if (!W.ptrIn) return;                    // 不在她身上按下 → 既不当单击也不拖
+        // 只记账，先不进拖动（等位移超阈值、或松开时判定单击）
+        gPressX = W.refSx;
+        gPressY = W.refSy;
+        gPressT = nowSec();
+        gPressArmed = true;
+        LOG("按下 local=(%d,%d)（松开时判单击/拖动）", gPressX, gPressY);
     } else if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
-        if (!W.dragging) return;
-        drag_apply_pending();
-        W.dragging = false;
-        LOG("结束拖动：margin=(%d,%d)", W.posX, W.posY);
+        if (W.dragging) {
+            drag_apply_pending();
+            W.dragging = false;
+            gPressArmed = false;
+            LOG("结束拖动：margin=(%d,%d)", W.posX, W.posY);
+            return;
+        }
+        if (!gPressArmed) return;
+        gPressArmed = false;
+        // 从没越过阈值 → 看位移和按住时长：短按 + 几乎没动 = 单击
+        const int dx = W.refSx - gPressX;
+        const int dy = W.refSy - gPressY;
+        const double held = nowSec() - gPressT;
+        if (dx * dx + dy * dy <= TAP_SLOP_PX * TAP_SLOP_PX && held < TAP_MAX_S) {
+            if (gTapOn) tapFire(W.refSx, W.refSy);
+        } else if (dbg) {
+            LOG("[dbg] 不认作单击：位移(%.1f,%.1f) 按住%.0fms", (double)dx, (double)dy, held * 1000.0);
+        }
     }
 }
 
@@ -672,6 +815,7 @@ bool platInit(int w, int h, const char* title) {
         W.dragOn = !(de && strcmp(de, "0") == 0);
         LOG("拖动开关：%s (MIYU_DRAG=%s)", W.dragOn ? "开" : "关", de ? de : "(未设，默认开)");
     }
+    tapInit();   // 单击反应：开关 + 计划目录（第十三节）
 
     /* 1) Wayland 连接 + globals */
     W.dpy = wl_display_connect(nullptr);
