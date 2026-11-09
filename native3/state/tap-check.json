@@ -1,0 +1,14 @@
+{
+ "noise": 0.0,
+ "peak": {
+  "empty": {
+   "tail": 0.0,
+   "armL": 0.0,
+   "armR": 0.0,
+   "leg": 0.0,
+   "head": 0.0,
+   "chest": 0.0,
+   "skirt": 0.0
+  }
+ }
+}

@@ -1,0 +1,538 @@
+{
+ "tail": [
+  {
+   "param": "Param_Angle_Rotation88",
+   "amp": 0.6,
+   "hit": 21.4,
+   "others": 0.25,
+   "ratio": 84.83,
+   "peak": -27.0,
+   "swing": -45.0
+  },
+  {
+   "param": "Param_Angle_Rotation86",
+   "amp": 0.6,
+   "hit": 49.94,
+   "others": 1.98,
+   "ratio": 25.21,
+   "peak": 27.0,
+   "swing": 45.0
+  },
+  {
+   "param": "Param_Angle_Rotation87",
+   "amp": 0.6,
+   "hit": 50.17,
+   "others": 2.03,
+   "ratio": 24.75,
+   "peak": 27.0,
+   "swing": 45.0
+  },
+  {
+   "param": "Param_Angle_Rotation84",
+   "amp": 1.0,
+   "hit": 53.26,
+   "others": 24.64,
+   "ratio": 2.16,
+   "peak": -45.0,
+   "swing": -45.0
+  },
+  {
+   "param": "ParamHipAngleZ",
+   "amp": 1.0,
+   "hit": 17.56,
+   "others": 9.58,
+   "ratio": 1.83,
+   "peak": 30.0,
+   "swing": 30.0
+  },
+  {
+   "param": "ParamBodyAngleX",
+   "amp": 1.0,
+   "hit": 10.27,
+   "others": 12.3,
+   "ratio": 0.83,
+   "peak": -30.0,
+   "swing": -30.0
+  },
+  {
+   "param": "Param_Angle_Rotation85",
+   "amp": 1.0,
+   "hit": 41.52,
+   "others": 55.72,
+   "ratio": 0.75,
+   "peak": -45.0,
+   "swing": -45.0
+  },
+  {
+   "param": "HipAngleX2",
+   "amp": 1.0,
+   "hit": 7.33,
+   "others": 17.49,
+   "ratio": 0.42,
+   "peak": -30.0,
+   "swing": -30.0
+  },
+  {
+   "param": "Param52",
+   "amp": 1.0,
+   "hit": 0.13,
+   "others": 0.89,
+   "ratio": 0.15,
+   "peak": -1.0,
+   "swing": -1.0
+  }
+ ],
+ "armL": [
+  {
+   "param": "Param62",
+   "amp": 1.0,
+   "hit": 0.9,
+   "others": 1.86,
+   "ratio": 0.48,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "RArm",
+   "amp": 0.6,
+   "hit": 0.16,
+   "others": 1.11,
+   "ratio": 0.15,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "Param59",
+   "amp": 1.0,
+   "hit": 0.16,
+   "others": 1.28,
+   "ratio": 0.13,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "Param60",
+   "amp": 0.6,
+   "hit": 0.16,
+   "others": 1.86,
+   "ratio": 0.09,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "RForearm",
+   "amp": 1.0,
+   "hit": 0.17,
+   "others": 2.06,
+   "ratio": 0.08,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "ShoulderY",
+   "amp": 1.0,
+   "hit": 0.02,
+   "others": 0.28,
+   "ratio": 0.07,
+   "peak": 30.0,
+   "swing": 30.0
+  },
+  {
+   "param": "ShoulderZ",
+   "amp": 1.0,
+   "hit": 0.02,
+   "others": 0.33,
+   "ratio": 0.06,
+   "peak": -30.0,
+   "swing": -30.0
+  },
+  {
+   "param": "RSleeveY1",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.01,
+   "ratio": 0.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "RSleeveX1",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.27,
+   "ratio": 0.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "RSleeveY2",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.01,
+   "ratio": 0.0,
+   "peak": 0.6,
+   "swing": 1.0
+  }
+ ],
+ "armR": [
+  {
+   "param": "LSleeveY",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "Param41",
+   "amp": 0.6,
+   "hit": 2.74,
+   "others": 0.39,
+   "ratio": 6.99,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "Movement3",
+   "amp": 0.6,
+   "hit": 1.14,
+   "others": 0.21,
+   "ratio": 5.35,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "LArm",
+   "amp": 0.6,
+   "hit": 1.59,
+   "others": 0.36,
+   "ratio": 4.43,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "Param39",
+   "amp": 0.6,
+   "hit": 1.22,
+   "others": 0.33,
+   "ratio": 3.71,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "LForearm",
+   "amp": 0.6,
+   "hit": 1.51,
+   "others": 0.44,
+   "ratio": 3.41,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "Movement1",
+   "amp": 0.6,
+   "hit": 0.09,
+   "others": 0.04,
+   "ratio": 2.0,
+   "peak": 0.6,
+   "swing": 1.0
+  }
+ ],
+ "leg": [
+  {
+   "param": "LEGAngleZ2",
+   "amp": 0.6,
+   "hit": 5.28,
+   "others": 2.06,
+   "ratio": 2.56,
+   "peak": -18.0,
+   "swing": -30.0
+  },
+  {
+   "param": "Param33",
+   "amp": 1.0,
+   "hit": 3.66,
+   "others": 2.0,
+   "ratio": 1.83,
+   "peak": -1.0,
+   "swing": -1.0
+  }
+ ],
+ "head": [
+  {
+   "param": "SideHairY2",
+   "amp": 1.0,
+   "hit": 0.11,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SideHairY1",
+   "amp": 0.6,
+   "hit": 0.04,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "SideHairY3",
+   "amp": 0.6,
+   "hit": 0.03,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "SideHairX2",
+   "amp": 1.0,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SideHairX3",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "ParamAngleY",
+   "amp": 1.0,
+   "hit": 3.08,
+   "others": 3.42,
+   "ratio": 0.9,
+   "peak": -30.0,
+   "swing": -30.0
+  },
+  {
+   "param": "SideHairX1",
+   "amp": 1.0,
+   "hit": 0.08,
+   "others": 0.17,
+   "ratio": 0.48,
+   "peak": -1.0,
+   "swing": -1.0
+  },
+  {
+   "param": "ParamAngleZ",
+   "amp": 1.0,
+   "hit": 7.32,
+   "others": 30.72,
+   "ratio": 0.24,
+   "peak": 30.0,
+   "swing": 30.0
+  },
+  {
+   "param": "ParamAngleX",
+   "amp": 0.6,
+   "hit": 5.81,
+   "others": 43.82,
+   "ratio": 0.13,
+   "peak": -18.0,
+   "swing": -30.0
+  },
+  {
+   "param": "Param50",
+   "amp": 0.6,
+   "hit": 0.9,
+   "others": 11.05,
+   "ratio": 0.08,
+   "peak": 0.6,
+   "swing": 1.0
+  }
+ ],
+ "chest": [
+  {
+   "param": "ChestY1",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "ChestX1",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "ChestXBS",
+   "amp": 1.0,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 999.0,
+   "peak": -1.0,
+   "swing": -1.0
+  },
+  {
+   "param": "Param53",
+   "amp": 1.0,
+   "hit": 0.02,
+   "others": 0.01,
+   "ratio": 1.52,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "Param36",
+   "amp": 1.0,
+   "hit": 0.16,
+   "others": 3.97,
+   "ratio": 0.04,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "ChestX2",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.22,
+   "ratio": 0.0,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "ChestY2",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.01,
+   "ratio": 0.0,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "ChestY4",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.0,
+   "ratio": 0.0,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "ChestX3",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.01,
+   "ratio": 0.0,
+   "peak": -0.6,
+   "swing": -1.0
+  },
+  {
+   "param": "ChestY3",
+   "amp": 0.6,
+   "hit": 0.0,
+   "others": 0.25,
+   "ratio": 0.0,
+   "peak": 0.6,
+   "swing": 1.0
+  }
+ ],
+ "skirt": [
+  {
+   "param": "SkirtY9",
+   "amp": 1.0,
+   "hit": 1.61,
+   "others": 1.11,
+   "ratio": 1.46,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtSpecial2",
+   "amp": 1.0,
+   "hit": 0.33,
+   "others": 0.24,
+   "ratio": 1.37,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtY7",
+   "amp": 1.0,
+   "hit": 1.66,
+   "others": 1.24,
+   "ratio": 1.34,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtLayerX4",
+   "amp": 1.0,
+   "hit": 0.32,
+   "others": 0.27,
+   "ratio": 1.19,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtX1",
+   "amp": 1.0,
+   "hit": 1.4,
+   "others": 1.3,
+   "ratio": 1.08,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtY6",
+   "amp": 1.0,
+   "hit": 1.05,
+   "others": 1.36,
+   "ratio": 0.77,
+   "peak": 1.0,
+   "swing": 1.0
+  },
+  {
+   "param": "HipAngleX",
+   "amp": 1.0,
+   "hit": 0.9,
+   "others": 1.41,
+   "ratio": 0.64,
+   "peak": -30.0,
+   "swing": -30.0
+  },
+  {
+   "param": "SkirtX3",
+   "amp": 0.6,
+   "hit": 0.38,
+   "others": 0.69,
+   "ratio": 0.55,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtLayerY4",
+   "amp": 0.6,
+   "hit": 0.13,
+   "others": 0.3,
+   "ratio": 0.46,
+   "peak": 0.6,
+   "swing": 1.0
+  },
+  {
+   "param": "SkirtX2",
+   "amp": 0.6,
+   "hit": 0.38,
+   "others": 1.24,
+   "ratio": 0.31,
+   "peak": 0.6,
+   "swing": 1.0
+  }
+ ]
+}

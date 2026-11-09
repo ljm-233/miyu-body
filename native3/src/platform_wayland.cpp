@@ -39,6 +39,8 @@
 #include "xdg-output-client.h"
 #include "alpha_region.h"
 #include "plan.h"   // 单击反应：平台层直接推一份计划给播放器（第十三节）
+#include "partpoke.h"  // 二十一：点哪动哪（部位矩形表 + 邮筒）
+#include "web.h"       // 二十一：读设置项 tapPart（这个头很轻，只有 Settings + 几个声明）
 
 #define LOG(...) do { fprintf(stderr, "[plat-wl] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
 
@@ -330,6 +332,28 @@ static void tapFire(int lx, int ly) {
     // 同一部位连点第 3 次换「一惊」（被戳3），避免看腻。
     int pcx = 0, pcy = 0, phw = 0, phh = 0;
     const bool haveBox = platPersonBox(&pcx, &pcy, &phw, &phh);
+
+    // 二十一：先问「点的是哪个部位」。命中且有活参数就只动那一块，整套反应不播。
+    // 表格来自 state/param-parts.tsv（tools/param-probe.py 生成），这里是**唯一**
+    // 的判定点：u/v 用的是和她本人 bbox 同一套归一化，和探针截图时的坐标一致。
+    if (web::settings().tapPart && haveBox && phw > 0 && phh > 0) {
+        const float u = float(lx - (pcx - phw)) / float(2 * phw);
+        const float v = float(ly - (pcy - phh)) / float(2 * phh);
+        if (u >= -0.02f && u <= 1.02f && v >= -0.02f && v <= 1.02f) {
+            const std::string part = partpoke::classify(u, v);
+            if (!part.empty() && partpoke::hasParams(part)) {
+                std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());
+                ++partpoke::gGen;
+                gTapCoolUntil = now + TAP_COOL_S;
+                LOG("[tap] 第 %d 次点击 local=(%d,%d) → 部位 %s（u=%.2f v=%.2f，只动这一块）",
+                    gTapN, lx, ly, part.c_str(), u, v);
+                return;
+            }
+            LOG("[tap] 部位 %s（u=%.2f v=%.2f）没有活参数，退回整套反应",
+                part.empty() ? "(空白)" : part.c_str(), u, v);
+        }
+    }
+
     const char* file;
     if (gTapN % 3 == 0 && haveBox) {
         file = "被戳3.json";               // 每第 3 次：整个人一惊
@@ -1599,6 +1623,18 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
                 w, h, lw, lh, n, alpha_region_area(rs, n),
                 (double)alpha_region_area(rs, n) * 100.0 / ((double)lw * (double)lh),
                 bx0, by0, bx1, by1, th);
+            // 二十一：探针要在**全局坐标**上截一块（grim -g），所以把「她本人」
+            // 的全局矩形也算出来打一次。窗口在 output 里的 margin 是 posX/posY，
+            // output 自己还有 offset（副屏 = 0,0 / 主屏 = 1920,0）。
+            {
+                const OutInfo* oc = (W.curIdx >= 0 && W.curIdx < W.nouts) ? &W.outs[W.curIdx] : nullptr;
+                const int gx = oc ? oc->gx : 0, gy = oc ? oc->gy : 0;
+                LOG("[box] 全局：window=(%d,%d) output=(%+d,%+d) 她=[%d,%d .. %d,%d]（%dx%d）",
+                    W.posX, W.posY, gx, gy,
+                    gx + W.posX + bx0, gy + W.posY + by0,
+                    gx + W.posX + bx1, gy + W.posY + by1,
+                    bx1 - bx0, by1 - by0);
+            }
             free(rs);
         }
     }

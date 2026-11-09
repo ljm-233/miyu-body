@@ -1,0 +1,18 @@
+{
+ "params_seen": 509,
+ "shots": 1043,
+ "seconds": 114.5,
+ "noise_floor": 0,
+ "live": 162,
+ "dead": 347,
+ "min_total": 200,
+ "settle_frames": 6,
+ "physics_off": true,
+ "named_filter": false,
+ "box": [
+  749,
+  227,
+  337,
+  730
+ ]
+}

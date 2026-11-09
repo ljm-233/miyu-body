@@ -1,0 +1,36 @@
+# 部位级反应的数据表（tools/param-probe.py 量像素 + tools/param-rank.py 量质心位移）
+# R<TAB>部位<TAB>u0<TAB>v0<TAB>u1<TAB>v1  —— 归一化矩形，按行序优先判定
+# P<TAB>参数<TAB>部位<TAB>分数<TAB>peak<TAB>dip —— peak = 默认 + amp×摆幅，dip = 默认 − 20% 摆幅
+R	tail	0.560	0.600	1.000	0.900
+R	tail	0.040	0.660	0.200	0.990
+R	tail	0.220	0.900	0.720	1.000
+R	armL	0.200	0.240	0.350	0.520
+R	armR	0.610	0.240	0.780	0.520
+R	leg	0.260	0.620	0.630	0.960
+R	head	0.180	0.000	0.800	0.250
+R	chest	0.300	0.250	0.640	0.470
+R	skirt	0.080	0.450	0.840	0.640
+P	Param_Angle_Rotation86	tail	60	27.0000	-9.0000
+P	Param_Angle_Rotation87	tail	60	27.0000	-9.0000
+P	Param_Angle_Rotation88	tail	60	27.0000	-9.0000
+P	RArm	armL	80	0.8000	-0.2000
+P	Param59	armL	80	0.8000	-0.2000
+P	Param62	armL	80	0.8000	-0.2000
+P	Param41	armR	80	0.8000	-0.2000
+P	Movement3	armR	80	0.8000	-0.2000
+P	LForearm	armR	80	0.8000	-0.2000
+P	LArm	armR	80	0.8000	-0.2000
+P	LEGAngleZ2	leg	60	18.0000	-6.0000
+P	Param33	leg	80	0.8000	-0.2000
+P	SideHairX1	head	80	0.8000	-0.2000
+P	SideHairY2	head	80	0.8000	-0.2000
+P	FrontHairY1	head	80	0.8000	-0.2000
+P	FrontHairX1	head	80	0.8000	-0.2000
+P	Param53	chest	80	0.8000	-0.2000
+P	ChestY1	chest	80	0.8000	-0.2000
+P	ChestX2	chest	80	0.8000	-0.2000
+P	ChestX1	chest	80	0.8000	-0.2000
+P	SkirtY9	skirt	80	0.8000	-0.2000
+P	SkirtY7	skirt	80	0.8000	-0.2000
+P	SkirtY6	skirt	80	0.8000	-0.2000
+P	SkirtSpecial2	skirt	80	0.8000	-0.2000

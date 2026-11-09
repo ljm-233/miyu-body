@@ -30,6 +30,7 @@
 #include "ctl.h"    // 本地控制口：外面推「她在说什么/什么心情」，见第十一节
 #include "plan.h"   // 动作计划播放器：外面推一份时间线，她照着演，见第十二节
 #include "web.h"    // 本地设置页：127.0.0.1:8200，改完立刻生效，见第十四节
+#include "partpoke.h" // 二十一：部位级反应（平台层 ⇄ 渲染层的邮筒 + 参数表）
 
 #include "CubismFramework.hpp"
 #include "Model/CubismMoc.hpp"
@@ -321,6 +322,9 @@ static float swayTiltDeg(double now, float dt) {
     return ang;
 }
 
+// 二十一：探针模式（定义在下面「参数探针」那一节；这几个 tick 要先读到它）
+static bool probeMode();
+
 // ── 二十：两段「小动作」（抓起来那一下 / 深夜低头）──────────────────────
 // 都是**短脉冲**：一个平滑的 0…1…0 包络，乘到 AngleX / PositionY 的增量上。
 // 为什么不用 plans/*.json：计划是「外面的时间线」，会盖掉待机/视线一整段；
@@ -341,6 +345,7 @@ static float pulseEnv(Pulse& p, double now) {
 }
 
 static void feelTick(Csm::CubismModel* model, double now) {
+    if (probeMode()) return;                 // 二十一：探针要静止的帧色，别来抖
     static Csm::csmInt32 iAx = -2, iPy = -2;
     if (iAx == -2) {
         Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
@@ -408,6 +413,8 @@ static void feelTick(Csm::CubismModel* model, double now) {
 
 static void idleTick(Csm::CubismModel* model, double now) {
     if (!gIdle.ready) idleInit(model);
+    // 二十一：探针模式整段让位 —— 呼吸是 0.4s 帧差的最大来源，不关掉就没法比像素
+    if (probeMode()) return;
 
     // 2026-11-09 晚：计划在播时这套待机**只让出身体三个参数**（AngleX/AngleZ/PositionX），
     // 呼吸（ParamBreath）照旧 —— 不然她演动作的两秒里是屏住气的，一眼看出是程序。
@@ -504,6 +511,7 @@ static void lookInit(Csm::CubismModel* model) {
 static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int lh) {
     if (!gLook.ready) lookInit(model);
     if (!gLook.on) return;
+    if (probeMode()) return;                 // 二十一：探针不做视线（会写 AngleX/眼珠）
     // 第十六节：网页上的「视线跟随」两件套
     //   lookOn=false → 总开关关掉：目标直接归零（同一个平滑回正），一个角度都不跟
     //   look=0–2     → 强度：眼珠幅度和身体微倾都乘它，0 等于关、2 是两倍
@@ -794,6 +802,266 @@ static void exprPlay(const std::string& name) {
     // 计划在播时不算时间（那时候由 planTick 负责收尾），所以主循环那边也要判 plan::active()。
     gExprUntil = (label == "(默认)") ? -1e9
                                     : platTime() + kExprBaseHold * double(web::settings().exprHold);
+}
+
+// ── 二十一：参数探针（`MIYU_PROBE=1`，给 tools/param-probe.py 用）─────────
+// 同一件事以前只能用 `MIYU_FORCE_PARAM` 做，但那是环境变量 —— 换一个参数要重启一次
+// 进程。509 个参数就是 509 次重建窗口 + 重载模型（每次 3 s ≈ 25 分钟），而且每次
+// 窗口位置都可能不一样，截出来的图对不上。所以改成一个**文件协议**：
+//
+//   外面写 state/probe.txt：
+//       gen=12
+//       Param36 R大臂z=-30
+//   程序撑满 settle 帧后写 state/probe-done.txt（tmp + rename，原子）：
+//       gen=12
+//   外面看到 done 里的 gen 和自己写的一样，就截图。
+//
+// 为什么是「帧」不是「毫秒」：物理/眨眼/表情都按帧推，按毫秒在卡帧时会对不上号。
+//
+// 探针模式下**所有自己会动的东西全关**（待机正弦、视线、眨眼、小动作、粒子）——
+// 否则 min/max 两张图的差里有大半是呼吸和粒子，根本分不清是谁在动。
+//
+// 参数名里有空格和中文（`Param36 R大臂z`），所以按**最后一个 `=`** 切。
+struct ProbeRig {
+    bool        on = false;
+    std::string inPath, donePath, rangePath;
+    int         gen = -1;            // 已经吃下的那一代
+    int         idx = -1;            // 正在按死的参数索引
+    std::string name;
+    float       val = 0.0f;
+    int         held = 0;            // 这个值撑了多少帧
+    int         settle = 16;
+    double      lastPoll = -1e9;
+    bool        warned = false;
+};
+static ProbeRig gProbe;
+static bool probeMode() { return gProbe.on; }
+
+// 每帧把「上一代那个参数」还回默认值。理由：AngleX / AngleZ / PositionX/Y/Z /
+// ParamEyeBallX/Y 这几个本来就不吃 LoadParameters 的归零（NOTES 16.2），
+// 不显式还原就会把上一个参数的后果带进下一个参数的截图里。
+static void probeResetAll(Csm::CubismModel* model) {
+    const Csm::csmInt32 n = model->GetParameterCount();
+    for (Csm::csmInt32 i = 0; i < n; ++i)
+        model->SetParameterValue(i, model->GetParameterDefaultValue(i), 1.0f);
+}
+
+static void probeInit(Csm::CubismModel* model) {
+    gProbe.on = std::getenv("MIYU_PROBE") != nullptr;
+    if (!gProbe.on) return;
+    const char* f = std::getenv("MIYU_PROBE_FILE");
+    gProbe.inPath = (f && *f) ? f : "state/probe.txt";
+    const char* d = std::getenv("MIYU_PROBE_DONE");
+    gProbe.donePath = (d && *d) ? d : "state/probe-done.txt";
+    const char* s = std::getenv("MIYU_PROBE_SETTLE");
+    gProbe.settle = (s && *s) ? atoi(s) : 16;
+    if (gProbe.settle < 1) gProbe.settle = 1;
+    gProbe.rangePath = "state/param-range.tsv";
+
+    // 参数范围表：cdi3 里只有 Id 和中文名，min/max/默认值都在 moc3 里。
+    // 外面拼「弹一下」的曲线要知道能推多远，所以启动时导一份。
+    FILE* r = std::fopen(gProbe.rangePath.c_str(), "wb");
+    if (r) {
+        std::fprintf(r, "# idx\tname\tmin\tmax\tdefault\n");
+        const Csm::csmInt32 n = model->GetParameterCount();
+        for (Csm::csmInt32 i = 0; i < n; ++i) {
+            const Csm::CubismIdHandle id = model->GetParameterId(static_cast<Csm::csmUint32>(i));
+            const char* nm = id ? id->GetString().GetRawString() : "?";
+            std::fprintf(r, "%d\t%s\t%.3f\t%.3f\t%.3f\n", static_cast<int>(i), nm,
+                         model->GetParameterMinimumValue(static_cast<Csm::csmUint32>(i)),
+                         model->GetParameterMaximumValue(static_cast<Csm::csmUint32>(i)),
+                         model->GetParameterDefaultValue(static_cast<Csm::csmUint32>(i)));
+        }
+        std::fclose(r);
+        log_("[probe] 参数范围表 -> %s（%d 个参数）", gProbe.rangePath.c_str(),
+             static_cast<int>(n));
+    } else {
+        log_("[probe] 写不了 %s（继续跑，只是外面拿不到范围）", gProbe.rangePath.c_str());
+    }
+    log_("[probe] 开：%s -> %s | settle=%d 帧 | 待机/视线/眨眼/小动作/粒子全关",
+         gProbe.inPath.c_str(), gProbe.donePath.c_str(), gProbe.settle);
+}
+
+// 读 probe.txt。格式宽松：只认 `gen=<整数>` 和 `名字=<浮点>` 两种行，其余忽略。
+static bool probeRead(int* gen, std::string* name, float* val, bool* haveName) {
+    FILE* f = std::fopen(gProbe.inPath.c_str(), "rb");
+    if (!f) return false;
+    char line[512];
+    bool ok = false;
+    while (std::fgets(line, sizeof line, f)) {
+        std::string s(line);
+        while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
+        if (s.empty() || s[0] == '#') continue;
+        const size_t eq = s.rfind('=');
+        if (eq == std::string::npos || eq == 0) continue;
+        const std::string k = s.substr(0, eq);
+        const std::string v = s.substr(eq + 1);
+        if (k == "gen") {
+            *gen = atoi(v.c_str());
+            ok = true;
+        } else {
+            *name = k;
+            *val = static_cast<float>(atof(v.c_str()));
+            *haveName = true;
+            ok = true;
+        }
+    }
+    std::fclose(f);
+    return ok;
+}
+
+// 每帧一次，位置在 **planTick 之后、physics->Evaluate 之前** —— 它是这一帧
+// 最后一个写参数的人，谁也盖不过它（探针要的就是「只有它在动」）。
+static void probeTick(Csm::CubismModel* model, double now) {
+    if (!gProbe.on) return;
+    // 4ms 一次握手就够（240 fps 也就 4ms 一帧）；每帧 fopen 太浪费。
+    if (now - gProbe.lastPoll < 0.004) {
+        if (gProbe.idx >= 0) model->SetParameterValue(gProbe.idx, gProbe.val, 1.0f);
+        return;
+    }
+    gProbe.lastPoll = now;
+    int gen = gProbe.gen;
+    std::string name;
+    float val = 0.0f;
+    bool haveName = false;
+    if (!probeRead(&gen, &name, &val, &haveName)) {
+        if (!gProbe.warned) {
+            gProbe.warned = true;
+            log_("[probe] 读不到 %s（等她收到第一条指令）", gProbe.inPath.c_str());
+        }
+        return;
+    }
+    if (gen != gProbe.gen) {
+        gProbe.gen = gen;
+        gProbe.held = 0;
+        gProbe.warned = false;
+        probeResetAll(model);          // 上一代那个参数还回默认
+        gProbe.idx = -1;
+        gProbe.name = name;
+        gProbe.val = val;
+        if (haveName) {
+            gProbe.idx = model->GetParameterIndex(
+                Csm::CubismFramework::GetIdManager()->GetId(name.c_str()));
+            log_("[probe] gen=%d 按死 `%s` = %.3f（index=%d，min=%.2f max=%.2f）",
+                 gen, name.c_str(), val, static_cast<int>(gProbe.idx),
+                 gProbe.idx >= 0 ? model->GetParameterMinimumValue(static_cast<Csm::csmUint32>(gProbe.idx)) : 0.0f,
+                 gProbe.idx >= 0 ? model->GetParameterMaximumValue(static_cast<Csm::csmUint32>(gProbe.idx)) : 0.0f);
+            if (gProbe.idx < 0) log_("[probe] gen=%d 模型里没有 `%s`（这一代什么都不会变）", gen, name.c_str());
+        } else {
+            log_("[probe] gen=%d 没有参数行（基准帧）", gen);
+        }
+    }
+    if (gProbe.idx >= 0) model->SetParameterValue(gProbe.idx, gProbe.val, 1.0f);
+    if (++gProbe.held >= gProbe.settle) {
+        // 撑够了才报 —— 外面看到这行就去截图，图和这个值一定对得上。
+        const std::string tmp = gProbe.donePath + ".tmp";
+        FILE* d = std::fopen(tmp.c_str(), "wb");
+        if (d) {
+            std::fprintf(d, "gen=%d\n", gProbe.gen);
+            std::fclose(d);
+            if (std::rename(tmp.c_str(), gProbe.donePath.c_str()) != 0)
+                std::remove(tmp.c_str());
+        }
+    }
+}
+
+// ── 二十一：点哪动哪（部位级反应）───────────────────────────────────────
+// 以前点她是 `plans/被戳*.json` —— 那几份计划写的全是 AngleX/AngleZ/ParamEyeBallX
+// 这种**整体**参数，所以不管点哪儿，都是「整个人躲一下」。
+//
+// 探针（tools/param-probe.py + state/param-map.json）把 509 个参数逐个按到
+// min/max 截图，量出「这个参数动的是她身上哪一块、动多少像素」。有了那张表，
+// 点哪儿就只挑那一块的 2–4 个参数做一次「弹一下」：
+//
+//   u = 0      →  0.16 到 60% 的极值（快，60ms 量级）
+//   0.16..0.42 →  回过到 −20%（那一下回弹，看着才像被戳了）
+//   0.42..1.0  →  归零（0.62s 结束，参数回到默认值）
+//
+// 三件事必须同时成立才走这条路，否则照旧播整套 plan：
+//   ① 设置里 `tapPart` 开着  ② 点在部位矩形里  ③ 那个部位**确实有**活着的参数
+struct PartPokeRig {
+    bool   on = false;
+    int    lastGen = 0;
+    double t0 = 0.0, dur = 0.62;
+    std::string part;
+    struct Ch { Csm::csmInt32 idx; float base, peak, dip; };
+    Ch     ch[4];
+    int    n = 0;
+};
+static PartPokeRig gPartPoke;
+
+// 「弹一下」的曲线：k ∈ {0 → 1 → −0.2 → 0}
+static float pokeCurve(double u) {
+    static const double kT[4] = {0.00, 0.16, 0.42, 1.00};
+    static const float  kV[4] = {0.0f, 1.0f, -0.2f, 0.0f};
+    if (u <= kT[0]) return kV[0];
+    if (u >= kT[3]) return kV[3];
+    for (int i = 0; i < 3; ++i) {
+        if (u <= kT[i + 1]) {
+            const double f = (u - kT[i]) / (kT[i + 1] - kT[i]);
+            return static_cast<float>(kV[i] + (kV[i + 1] - kV[i]) * f);
+        }
+    }
+    return 0.0f;
+}
+
+static void partPokeStart(Csm::CubismModel* model, const std::string& part, double now) {
+    const std::vector<partpoke::PartParam> ps = partpoke::top(part, 4);
+    gPartPoke.n = 0;
+    std::string names;
+    for (const partpoke::PartParam& p : ps) {
+        const Csm::csmInt32 idx = model->GetParameterIndex(
+            Csm::CubismFramework::GetIdManager()->GetId(p.name.c_str()));
+        if (idx < 0) continue;
+        PartPokeRig::Ch& c = gPartPoke.ch[gPartPoke.n++];
+        c.idx  = idx;
+        // base 取**模型默认值**，不是"当前值"：AngleX/ParamAngleX/PositionX/ParamEyeBall
+        // 这几个不吃 LoadParameters 的归零（NOTES 16.2），当前值很可能是上一次弹完
+        // 留下的残值 —— 拿它当基准，弹一次漂一点，几十次点击之后她就歪在那儿了
+        // （实测：连点 40 多次以后，静止帧和基准帧差 4.8 万像素）。
+        c.base = model->GetParameterDefaultValue(idx);
+        c.peak = p.peak;
+        c.dip  = p.dip;
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "%s(%.1f->%.1f/%.1f) ", p.name.c_str(),
+                      c.base, c.peak, c.dip);
+        names += buf;
+    }
+    if (gPartPoke.n == 0) {
+        // 表里这个部位一个活参数都没有 —— 别装作动了，交回整套反应
+        log_("[part] 部位 %s 没有可用参数（表是空的？），这次不播", part.c_str());
+        return;
+    }
+    gPartPoke.on   = true;
+    gPartPoke.t0   = now;
+    gPartPoke.part = part;
+    log_("[part] 点中部位 %s -> %d 个参数：%s", part.c_str(), gPartPoke.n, names.c_str());
+}
+
+static void partPokeTick(Csm::CubismModel* model, double now) {
+    // ① 平台层点了新的部位
+    if (partpoke::gGen != gPartPoke.lastGen) {
+        gPartPoke.lastGen = partpoke::gGen;
+        const std::string part(partpoke::gPart);
+        if (!part.empty() && web::settings().tapPart) partPokeStart(model, part, now);
+    }
+    if (!gPartPoke.on) return;
+    const double u = (now - gPartPoke.t0) / gPartPoke.dur;
+    if (u >= 1.0) {
+        // 收尾：参数写回默认值（这几个参数不吃 LoadParameters 的归零，见 16.2）
+        for (int i = 0; i < gPartPoke.n; ++i)
+            model->SetParameterValue(gPartPoke.ch[i].idx, gPartPoke.ch[i].base, 1.0f);
+        gPartPoke.on = false;
+        log_("[part] %s 弹完（%.2fs），参数回默认", gPartPoke.part.c_str(), gPartPoke.dur);
+        return;
+    }
+    const float k = pokeCurve(u);
+    for (int i = 0; i < gPartPoke.n; ++i) {
+        const PartPokeRig::Ch& c = gPartPoke.ch[i];
+        const float v = (k >= 0.0f) ? c.base + (c.peak - c.base) * k
+                                    : c.base + (c.dip - c.base) * (k / -0.2f);
+        model->SetParameterValue(c.idx, v, 1.0f);
+    }
 }
 
 // ── 帧率上限（第十六节）────────────────────────────────
@@ -2231,6 +2499,8 @@ int main() {
              drawn, dc, ux0, uy0, ux1, uy1, ux1 - ux0, uy1 - uy0, canvasW, canvasH);
     }
 
+    probeInit(model);          // 二十一：探针（没设 MIYU_PROBE 就什么都不做）
+
     double lastT = platTime();
     while (!platShouldClose()) {
         const double tLoop0 = platTime();   // 整个循环体的总耗时
@@ -2397,6 +2667,8 @@ int main() {
         feelTick(model, now);
         // 计划：最后一个写参数的（盖过待机/IDLE motion/视线），之后才是眨眼和 physics
         planTick(model, now);
+        // 二十一：探针 / 部位级反应都放到 physics 之后（见下面那两行调用）
+        // —— 它们要当这一帧**最后**一个写参数的人。
         // 计划要是也写了嘴，正在说话时把嘴抢回来说话那一边（顺序上计划在后面，所以补这一下）
         if (mouthI >= 0 && planDrivesMouth) {
             const float mv = ctl::mouth(now);
@@ -2410,7 +2682,7 @@ int main() {
             gExprUntil = -1e9;
             exprPlay("默认");
         }
-        if (eyeBlink) {
+        if (eyeBlink && !probeMode()) {
             // 第十六节：眨眼频率倍率。SDK 的间隔是「基准 4s」，真实间隔 0~2×基准 随机，
             // 所以倍率是反着除：blink=2 → 基准 2s（0~4s 一次，明显更勤），blink=0.5 → 8s。
             // blink≈0 直接**不调 UpdateParameters**（让它自己眨会永远闭着），
@@ -2441,6 +2713,14 @@ int main() {
         static double lastProf = 0;
         const double tA = platTime();
         if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
+        // 二十一：探针和「点哪动哪」必须排在 physics **后面**。
+        // CubismPhysics 写输出参数时 weight=1.0 是**硬覆盖**（Framework/src/Physics/
+        // CubismPhysics.cpp 里 `*parameterValue = value`），而模型里有一大半好看的
+        // 参数（ParamHipAngleZ / HipAngleX2 / ParamAngleX…）正是 physics 的输出。
+        // 放在 physics 之前写 = 同一个参数一帧里被写两遍、physics 赢 —— 点了没反应
+        // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
+        probeTick(model, now);
+        partPokeTick(model, now);
         const double tB = platTime();
         model->Update();
         const double tC = platTime();
@@ -2461,7 +2741,8 @@ int main() {
             postfx::begin2D();
             if (hb) {
                 postfx::drawShadow(ws.shadow, pcx, pcy, phw, phh);
-                postfx::drawParticles(ws.particles, dt, pcx, pcy, phw, phh);
+                // 二十一：探针模式不给粒子 —— 它们是随机运动的，会把两张图的差搅浑
+                postfx::drawParticles(probeMode() ? 0.0f : ws.particles, dt, pcx, pcy, phw, phh);
             }
             postfx::drawRim(ws.rim, ws.scale);
         }

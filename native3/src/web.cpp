@@ -227,6 +227,8 @@ const char* kHtml = R"HTML(<!doctype html>
        d:'2 = 眨得很勤，0 = 一直睁着'},
       {k:'tap', t:'bool', label:'点击',
        d:'戳她一下有反应；关掉只剩拖动'},
+      {k:'tapPart', t:'bool', label:'点哪动哪',
+       d:'戳哪个部位只让那一块动（0.6 秒弹一下）；关掉就回到整套反应。点空白处仍然播整套'}
       {k:'expr', t:'bool', label:'表情',
        d:'所有表情切换的总开关'},
       {k:'exprHold', t:'range', min:0.2, max:5, step:0.1, label:'表情停留',
@@ -592,7 +594,8 @@ void saveSettings() {
           << ",\"dragSway\":" << gSet.dragSway
           << ",\"swayIdle\":" << (gSet.swayIdle ? "true" : "false")
           << ",\"swayTilt\":" << gSet.swayTilt
-          << ",\"dragSpring\":" << gSet.dragSpring << "}\n";
+          << ",\"dragSpring\":" << gSet.dragSpring
+          << ",\"tapPart\":" << (gSet.tapPart ? "true" : "false") << "}\n";
     }
     if (std::rename(tmp.c_str(), gPath.c_str()) != 0)
         logw("设置存不下来（rename 失败）：%s", gPath.c_str());
@@ -646,6 +649,8 @@ void loadSettings() {
         else if (k == "swayIdle" && v.t == VBool) gSet.swayIdle = v.b;
         else if (k == "swayTilt" && v.t == VNum) gSet.swayTilt = clampf(float(v.n), 0.0f, 4.5f);
         else if (k == "dragSpring" && v.t == VNum) gSet.dragSpring = clampf(float(v.n), 0.0f, 2.0f);
+        // 二十一：点哪动哪
+        else if (k == "tapPart" && v.t == VBool) gSet.tapPart = v.b;
         // 十八：aa 是新主键；ssaa 是旧键（映射过来，读了不炸）。
         // 两个都出现时 aa 赢 —— 所以先记「见过 aa」，旧键只在没见 aa 时生效。
         else if (k == "aa" && v.t == VStr) {
@@ -759,6 +764,7 @@ std::string stateJson() {
     s += ",\"swayIdle\":" + std::string(gSet.swayIdle ? "true" : "false");
     s += ",\"swayTilt\":" + std::to_string(gSet.swayTilt);
     s += ",\"dragSpring\":" + std::to_string(gSet.dragSpring);
+    s += ",\"tapPart\":" + std::string(gSet.tapPart ? "true" : "false");
     s += ",\"fps_now\":" + (gFps < 0.0 ? std::string("null") : std::to_string(gFps));
     s += ",\"port\":" + std::to_string(gPort);
     s += ",\"expr_next\":\"" + jsonEsc(gExprs.empty() ? "" : gExprs[gExprIdx % gExprs.size()]) + "\"";
@@ -906,6 +912,10 @@ std::string handleSet(const std::string& body, bool logIt) {
             if (v.b != gSet.timeAware) { gSet.timeAware = v.b; changed.push_back("timeAware"); }
             continue;
         }
+        if (k == "tapPart" && v.t == VBool) {
+            if (v.b != gSet.tapPart) { gSet.tapPart = v.b; changed.push_back("tapPart"); }
+            continue;
+        }
         // ── 二十之二：摆动两件（每帧读，不需要额外动作）──────────────
         if (k == "dragSway" && v.t == VNum) {
             const float nv = clampf(float(v.n), 0.0f, 2.0f);
@@ -966,7 +976,7 @@ std::string handleSet(const std::string& body, bool logIt) {
             "idleStyle", "look", "lookOn", "blink", "mouth", "exprHold", "fps",
             "voice", "vol", "aa", "shadow", "rim", "particles",
             "grab", "inertia", "edgeSoft", "timeAware", "dragSway", "swayIdle",
-            "swayTilt", "dragSpring",
+            "swayTilt", "dragSpring", "tapPart",
         };
         changed.clear();
         for (const char* k : kAll) changed.push_back(k);
