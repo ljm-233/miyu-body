@@ -413,6 +413,11 @@ static void planTick(Csm::CubismModel* model, double now) {
 //   · 队列 entry 在管理器析构时才释放，所以先删管理器、再删 pool，别反过来。
 static std::vector<Csm::ACubismMotion*> gExprPool;
 static std::string gExprName = "(无)";
+// 2026-11-09 22:5x：**空参数 exp3 清不掉表情**。表情改的那些参数（比如脸红用的那几根）
+// 不会被 LoadParameters 归零，空表情什么都不写，于是红脸一直挂着。所以切走时得
+// 把上一个表情碰过的参数手动写回各自的默认值。
+static std::vector<std::string> gExprTouched;
+static bool gExprResetPending = false;
 
 // name 为空 / "默认" → 淡出回默认表情：用一份**参数表是空的** exp3 顶上，
 // 它什么都不写，于是前一个表情按 fadeWeight 被算回默认值。
@@ -436,6 +441,20 @@ static void exprPlay(const std::string& name) {
         label = name;
     }
 
+    if (label == "(默认)") {
+        gExprResetPending = true;          // 让主循环把上次碰过的参数写回默认值
+    } else {
+        gExprTouched.clear();
+        const std::string raw(bytes.begin(), bytes.end());
+        size_t p = 0;
+        while ((p = raw.find("\"Id\"", p)) != std::string::npos) {
+            const size_t q = raw.find('"', raw.find(':', p) + 1);
+            const size_t r = q == std::string::npos ? std::string::npos : raw.find('"', q + 1);
+            if (r != std::string::npos) gExprTouched.push_back(raw.substr(q + 1, r - q - 1));
+            p = r == std::string::npos ? raw.size() : r;
+        }
+    }
+
     Csm::CubismExpressionMotion* m = Csm::CubismExpressionMotion::Create(
         reinterpret_cast<const Csm::csmByte*>(bytes.data()),
         static_cast<Csm::csmSizeInt>(bytes.size()));
@@ -449,6 +468,10 @@ static void exprPlay(const std::string& name) {
     m->SetFadeOutTime(0.35f);
 
     if (gExprMgr == nullptr) gExprMgr = new Csm::CubismExpressionMotionManager();
+    // 2026-11-09 22:4x：**必须先清队列**。StartMotion 是排队不是替换，切三次以后
+    // 队列里堆着好几个表情同时按权重写同一批参数，表现就是「换不了、也回不去默认」。
+    // 清了之后权重从 0 起，配上 0.35s 的 fadeIn 正好是「松手回弹」那种过渡。
+    gExprMgr->StopAllMotions();
     gExprMgr->StartMotion(m, false /* autoDelete：归 gExprPool 管 */);
     gExprPool.push_back(m);
     gExprName = label;
@@ -734,6 +757,14 @@ int main() {
         // 手写正弦待机：计划在播时整段让位（别两套一起写 AngleX/AngleZ）
         else if (kUseSine) idleTick(model, now);   // 计划在播时它自己只写呼吸（见 idleTick）
         if (gExprMgr) gExprMgr->UpdateMotion(model, dt);   // 表情在动作之后、眨眼之前
+        if (gExprResetPending) {
+            gExprResetPending = false;
+            for (const auto& nm : gExprTouched) {
+                const Csm::csmInt32 idx = model->GetParameterIndex(Csm::CubismFramework::GetIdManager()->GetId(nm.c_str()));
+                if (idx >= 0) model->SetParameterValue(idx, model->GetParameterDefaultValue(idx));
+            }
+            gExprTouched.clear();
+        }
         // 嘴：在表情之后写（表情要是不小心也写了 ParamMouthOpenY，说话优先），
         // 眨眼之前（眨眼只碰眼睛，顺序其实无所谓，就近放）。一律 Set —— 这个参数
         // 不会被 LoadParameters 归零，Add 会一帧一帧累加顶死，和 ParamEyeBall 一个毛病。
