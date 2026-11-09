@@ -17,7 +17,7 @@ namespace web {
 
 // 运行时设置。**改一项立刻生效**：main / platform 每帧直接读这里。
 //
-// 2026-11-09 23:xx（第十五节）：新增 12 项。规矩不变 —— 每一项都得有「谁在每帧读它」
+// 2026-11-09 23:xx（第十六节）：新增 12 项。规矩不变 —— 每一项都得有「谁在每帧读它」
 // 或「改它时回调了谁」，只存不用的字段一个都不留（自测见 NOTES 15.4）。
 struct Settings {
     float       scale  = 1.0f;      // 0.4–1.6  窗口视觉缩放（重建 wl_egl_window）
@@ -28,7 +28,7 @@ struct Settings {
     std::string corner = "free";    // tl/tr/bl/br/free
     bool        hide   = false;     // 整个隐藏（全透明 + 输入区清空，进程还在）
 
-    // ── 第十五节新增 ──────────────────────────────────────────────
+    // ── 第十六节新增 ──────────────────────────────────────────────
     std::string idleStyle = "natural";  // quiet/natural/lively：待机幅度×间隔的预设档
     float       look   = 1.0f;      // 0–2   视线跟随强度（眼珠 + 身体微倾都乘它）
     bool        lookOn = true;      // 视线跟随总开关（关掉只回正，不跟鼠标）

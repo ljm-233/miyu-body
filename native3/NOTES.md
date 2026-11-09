@@ -1163,3 +1163,128 @@ bind 地址是 `INADDR_LOOPBACK`，外面连不进来，所以没有任何鉴权
 - `particles` 0 vs 1：两帧间隔 500ms 的差异像素应集中在 bbox 下部且形状分散
 - **性能**：加完三件后 `ps` 的 %cpu 和 RSS 对比（现在 43% / 209MB），超 55% 就要考虑默认关掉粒子
 - **透明正确性**：`grim` 抓图后检查她边缘有没有黑边（对比 alpha 0.5 时的边缘 RGB）
+
+## 十六、待机幅度重做 + 九项新设置（2026-11-09 23:0x–23:2x）
+
+起因是他两句话：「我认为待机服务不起作用，设置功能太少了」。查下来两件事都成立：
+① 基数太小（`AngleX ±1.2`、`AngleZ ±0.8`、`PositionX ±1.5`），`idle` 从 1 拉到 2.5 只有
+1.2°→3°，**肉眼分辨不出**，所以「调了没反应」；② 页面上只有七项。
+
+### 16.1 改了什么
+
+| 位置 | 改动 |
+| --- | --- |
+| `src/web.h` | `Settings` 加 9 个字段：`idleStyle/look/lookOn/blink/mouth/exprHold/fps/voice/vol` |
+| `src/web.cpp` | 读写/`/state`/`POST /set` 全部接上；`{"action":"reset"}`；页面整页重写（四组 + 每项一句人话说明，JS 从 schema 生成） |
+| `src/main.cpp` | `idleTick` 基数 ±4.0/±2.5/±3.0 + 风格三档；`lookTick` 强度与总开关；眨眼倍率；表情停留截止；帧率上限 `framePace()` |
+| `src/ctl.cpp/.h` | `setMouthScale()` / `setVoice()`；`mouth()` 时长乘倍率；`voicePlay()`（fork+exec `pw-play --volume=`，double fork 不留僵尸） |
+
+待机基数与风格（`idleStyle`）：
+
+| 档 | 幅度系数 | 换姿态间隔 | 实际（`idle=1`） |
+| --- | --- | --- | --- |
+| `quiet` | ×0.35 | 5~9 s | ±1.4 |
+| `natural` | ×1.0 | 2.5~6 s | ±4.0 |
+| `lively` | ×2.0 | 1.5~4 s | ±8.0 |
+
+老的 `idle` 数值倍率**保留**，在风格之上再乘：`amp = style.amp × idle`，低通 `kAmp += (want-kAmp)*0.12`
+照旧（换档也是几帧内平滑过渡，不是硬切）。
+
+### 16.2 必须先说的一个事实：`AngleX/AngleZ/PositionX` 本身不驱动任何 drawable
+
+隔离测量（`MIYU_NO_PHYS=1` + `MIYU_FORCE_PARAM=ParamBreath=0.5`，`idle=3 lively`）：
+
+```
+[idle] 算 ax=1.23 … 算 ax=-6.41 … 算 ax=12.82      ← 参数在变
+grim 8 帧：hash 全是 7c13263b，逐像素 0 差异        ← 画面一动不动
+```
+
+**它们只通过 `physics3.json` 驱动头发 / 尾巴 / 裙摆**（和第十节「这是静态立绘 + 物理」一致）。
+所以：
+
+- 「待机在动」= 物理对 AngleX 的响应，**物理必须开着**（`MIYU_NO_PHYS=1` 时待机等于静止）；
+- 生产配置下 **呼吸是 0.4 s 帧差的最大来源**（`ParamBreath` 4.2 s 周期，0.4 s 内就走掉一大截），
+  比待机幅度本身还大 —— 这也是他「调了看不出」的第二层原因。
+
+### 16.3 验证数据（HDMI-A-3，`grim`，ROI = 她本人 338×731，8/15 帧，间隔 0.4 s）
+
+**A. 生产配置（呼吸 + 物理全开，`idle=1`）** —— 肉眼/像素都在这套配置下
+
+| 档 | 相邻帧差均值 | 帧差中位 | 逐像素时间标准差均值 | std>10 的像素 |
+| --- | --- | --- | --- | --- |
+| quiet | 6.246 | 6.134 | 11.14 | 62990 px (25.5%) |
+| lively | 7.434 | 7.503 | 14.08 | 82744 px (33.5%) |
+
+差 1.19× —— **被呼吸底噪吃掉**，见 16.2。这就是「幅度放大了 5.7 倍、帧差只多两成」的原因。
+
+**B. 隔离配置（`MIYU_FORCE_PARAM=ParamBreath=0.5`，物理开，15 帧 / 0.4 s）**
+
+| 档 | 帧差均值 | 帧差中位 | 帧差最大 | 时间标准差均值 | std>10 的像素 |
+| --- | --- | --- | --- | --- | --- |
+| quiet | 0.352 | **0.256** | 0.84 | 1.003 | 5591 px (2.26%) |
+| lively | 2.853 | **2.544** | 5.11 | 5.762 | 42538 px (17.22%) |
+
+帧差中位 **0.256 → 2.544 = 9.9×（一个数量级）**，`std>10` 的像素 **7.6×**，std 均值 **5.7×**。
+→ 幅度确实差一个数量级，只是在生产配置里被呼吸盖住了。
+
+**C. 日志 `[idle] 算 ax=` 的绝对值范围**（`idle=1`）
+
+| 档 | |ax| 范围（采样） | 备注 |
+| --- | --- | --- | --- |
+| quiet | **0.63 ~ 1.06**（< 1.5 ✓） | 幅度小，肉眼就是「几乎不动」 |
+| natural | **0.76 ~ 4.02** | 基数 ±4.0 |
+| lively | **0.20 ~ 8.35**（> 4 ✓） | `idle=3` 时到过 **19.71** |
+
+### 16.4 九项各自的生效路径 + 实测
+
+| key | 生效路径 | 证据 |
+| --- | --- | --- |
+| `idleStyle` | `idleTick` 读风格 → 幅度系数 + 间隔区间 | 16.3 的三张表 |
+| `look` | `lookTick` 目标幅度 `nx*1.5*k`（身体）、`nx*1.0*k`（眼珠） | `k=1.00 nx=+1.00 → 身体 +1.49 眼 +0.99，写入 angleX +8.52 = 待机+7.03+1.49`；`k=2.00 → 身体 +2.89 眼 +1.93(clamp)` |
+| `lookOn` | 同上，`k` 直接给 0 | `k=0.00 nx=+1.00 → 身体 +0.00 眼 +0.00，写入 angleX -0.17 **= 待机 ax -0.17**（严格相等）` |
+| `blink` | 每帧 `SetBlinkingInterval(4.0/bk)`；`bk≈0` 时不调 `UpdateParameters` | `blink=0`：30 s 内眨眼事件 **0 条**（只有 1 行设置日志）；`blink=1`：30 s 内 **20 行 = 10 次** |
+| `mouth` | `ctl::mouth()` 里 `dur = gSayDur × mouth` | `mouth=1` → `say 1.2s（×1.00 -> 嘴动 1.2s）`；`mouth=3` → `（×3.00 -> 嘴动 3.6s）` |
+| `exprHold` | `exprPlay()` 记 `gExprUntil = now + 2.5×exprHold`；主循环到点回默认（计划在播时跳过） | `exprHold=0.2` → `[expr] 停留 0.5s 到点，回默认`；`exprHold=5` → 6 s 内**没有**「到点」（12.5 s 才回） |
+| `fps` | `framePace()`：每帧末尾睡到目标周期；`hide` 分支也睡 | 60 → 实测 **60.0** 帧/秒，CPU **19.0–19.9%**；15 → 实测 **16.0**，CPU **5.0–5.3%**（3.9×） |
+| `voice`+`vol` | `ctl::setVoice()` 每帧喂；说 `say` 时查 `voice/index.tsv` → double-fork `pw-play --volume=<vol>` | `[ctl] 声音 开，音量 0.50` + `[voice] 播 241d47a3ee.wav（vol 0.50）: 在`；没有这句 wav 时只打一行「没有预生成（静默）」 |
+| `reset` | 遍历 16 个 key 全部回调 + 落盘 | `applied` 16 项；`/state` 全默认（`idleStyle=natural look=1 blink=1 mouth=1 exprHold=1 fps=60 voice=false vol=0.8 corner=free`）；`settings.json` 一致 |
+
+### 16.5 老六项回归（各测一项）
+
+| 项 | 证据 |
+| --- | --- |
+| `scale=0.8` | `/state.window=400x720`，`缩放 0.80 -> 逻辑 400x720 / margin (640,120)` |
+| `alpha=0.6` | 生效（截图 0.6 档，走的是原来那条全屏乘算） |
+| `corner=br` | `吸角 br：屏 1920x1080 / 窗 400x720 / bar 37 -> margin (1520,323)` |
+| `hide=true` | 隐藏前后副屏差 **79911 px**，隐藏期间点击穿透（原有行为） |
+| `tap=false` | 注入单击 → `[tap]` **0 条**（连「按下」记账都没有）；`tap=true` 同一下 → `[tap] 第 1 次点击 local=(250,463) → 播 被戳2.json` |
+| `expr=false` | socket 推 `{"expr":"脸红"}` → `[expr]` **0 条**；`expr=true` → `[expr] -> 脸红（fade 0.35s，池里 1 个）` |
+
+编译：`make clean && make` 两个 target（`miyu` / `miyu-wayland`）**0 warning / 0 error**（`-Wall -Wextra`）。
+收尾：`systemctl --user is-active miyu-body = active`，`MIYU_OUTPUT=1` 保留，`output=HDMI-A-3`，
+截图 `shot-settings-v2.png`，标题仍 `native2-test`。
+
+### 16.6 这一轮踩的四个坑（别再来）
+
+1. **帧率算法的累加陷阱**：第一版 `nextFrame += period` 累加，被 `eglSwapBuffers`（niri 下会等
+   frame callback，每帧 ≥16.7 ms）一挤就永远落后 → `fps=15` 实测跑出 **29.3 帧**。
+   改成「基准 = 本帧开头 + period，落后超过 1.5 个周期就把基准拉回 now」，才稳在 16.0 / 60.0。
+2. **ctl 的 socket 解析不吃 `\uXXXX`**：`python3 -c "json.dumps({'expr':'脸红'})"` 默认转义，
+   身体收到的是字面 `\u8138\u7ea2` → `[expr] 读不到 …\u8138\u7ea2.exp3.json`。
+   推中文要用 UTF-8 原文（`ensure_ascii=False` 或手拼）。
+3. **`tools/draginject` 的按下+松开不触发 tap**（只打「按下」记账，没有后续判定），
+   回归 tap 要用 `../input-probe/clicker`。两者点同一个点，只有 clicker 能出
+   `[tap] 第 N 次点击`。
+4. **测量待机幅度必须隔离呼吸**：生产配置下 0.4 s 帧差有 ~6 是呼吸的，待机幅度只占其中一成。
+   要比较幅度就 `MIYU_FORCE_PARAM=ParamBreath=0.5`（物理留开，因为 AngleX 只通过物理生效），
+   测完 `systemctl --user unset-environment` + 重启，别留在环境里。
+
+### 16.7 已知边界
+
+- `AngleX/AngleZ/PositionX` 对画面的影响全部经由 physics，所以**风格差异的可见度取决于物理**；
+  哪天为了省电关物理，待机就变成「只有呼吸」。
+- `voice` 默认**关**（不突然出声）；`vol` 0 不等于静音（`pw-play --volume=0` 仍会建流），
+  要静音用开关。
+- `exprHold` 不管「动作计划自带的表情」（计划在播时由 `planTick` 收尾），否则计划播 3 秒、
+  表情 2.5 秒就回默认，看起来像闪一下。
+- 页面上 15/30/60 是白名单，其它值 `POST /set` 会记一行忽略，不会把 fps 改坏。

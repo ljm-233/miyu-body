@@ -16,7 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
-#include <ctime>      // nanosleep：帧率上限（第十五节）
+#include <ctime>      // nanosleep：帧率上限（第十六节）
 #include <unistd.h>
 #include <dirent.h>   // scanExpressions：扫 model/Exp3 给「切个表情」按钮
 #include <string>
@@ -130,7 +130,7 @@ static void idleInit(Csm::CubismModel* model) {
 
 static float idleRnd() { return static_cast<float>(rand()) / static_cast<float>(RAND_MAX); }
 
-// 待机风格三档（网页设置页 idleStyle，第十五节）：
+// 待机风格三档（网页设置页 idleStyle，第十六节）：
 //   quiet   幅度 ×0.35、5~9 秒换一次姿态（几乎不动，只剩呼吸 + 一点点）
 //   natural ×1.0、2.5~6 秒（默认；基数已从 ±1.2/±0.8/±1.5 放大到 ±4.0/±2.5/±3.0）
 //   lively  ×2.0、1.5~4 秒（明显在晃）
@@ -236,7 +236,7 @@ static void lookInit(Csm::CubismModel* model) {
 static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int lh) {
     if (!gLook.ready) lookInit(model);
     if (!gLook.on) return;
-    // 第十五节：网页上的「视线跟随」两件套
+    // 第十六节：网页上的「视线跟随」两件套
     //   lookOn=false → 总开关关掉：目标直接归零（同一个平滑回正），一个角度都不跟
     //   look=0–2     → 强度：眼珠幅度和身体微倾都乘它，0 等于关、2 是两倍
     const float lookK = web::settings().lookOn ? web::settings().look : 0.0f;
@@ -294,7 +294,7 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     // 实测 ax 一直顶在 30.00（还带得她整个人歪）。所以这里也必须 Set：
     // 值 = 待机那本帧算出来的 + 视线偏移，两件事合成一次写。
     // 2026-11-09 22:0x：**大幅跟鼠标**被否掉（AngleX 是整体平移，-20/0/+20 连腿和尾巴
-    // 都跟着挪）。第十五节改回来一点点：±1.5 的「试探性微倾」，乘 look 之后
+    // 都跟着挪）。第十六节改回来一点点：±1.5 的「试探性微倾」，乘 look 之后
     // look=0 / lookOn=false 时 AngleX **严格等于待机的值**（自测就比这一项）。
     if (gLook.iAx >= 0) model->SetParameterValue(gLook.iAx, gIdle.lastAx + gLook.cx, 1.0f);
     if (gLook.iAy >= 0) model->SetParameterValue(gLook.iAy, 0.0f, 1.0f);
@@ -453,7 +453,7 @@ static std::string gExprName = "(无)";
 // 把上一个表情碰过的参数手动写回各自的默认值。
 static std::vector<std::string> gExprTouched;
 static bool gExprResetPending = false;
-// 第十五节：表情的停留截止时间（-1e9 = 不设防，默认表情就是它）。
+// 第十六节：表情的停留截止时间（-1e9 = 不设防，默认表情就是它）。
 // 基准 2.5s × 网页上的 exprHold（0.2–5）→ 0.5s ~ 12.5s。
 static double gExprUntil = -1e9;
 static constexpr double kExprBaseHold = 2.5;
@@ -521,14 +521,14 @@ static void exprPlay(const std::string& name) {
     gExprName = label;
     log_("[expr] -> %s（fade 0.35s，池里 %zu 个）", label.c_str(), gExprPool.size());
 
-    // 第十五节的「表情停留时长」：以前只有动作计划结束会收回默认，socket/页面推来的表情
+    // 第十六节的「表情停留时长」：以前只有动作计划结束会收回默认，socket/页面推来的表情
     // 会一直挂着（点一次脸红红到重启）。现在起一个截止时间，到点自己淡回默认。
     // 计划在播时不算时间（那时候由 planTick 负责收尾），所以主循环那边也要判 plan::active()。
     gExprUntil = (label == "(默认)") ? -1e9
                                     : platTime() + kExprBaseHold * double(web::settings().exprHold);
 }
 
-// ── 帧率上限（第十五节）────────────────────────────────
+// ── 帧率上限（第十六节）────────────────────────────────
 // 每帧末尾调一次：睡到「下一帧该来的时刻」。为什么要自己睡 —— 这个 EGL surface 在
 // niri 下 eglSwapBuffers 不等 vsync，不睡就是几百到上千 fps（空转烧 CPU）。
 // 三条细节：
@@ -536,22 +536,28 @@ static void exprPlay(const std::string& name) {
 //   · 上限变了（页面切 15/30/60）立刻重设基准，不因为旧基准睡一长觉；
 //   · 每 5 秒打一行实测帧率，验「fps 真的生效」靠它，不靠肉眼。
 static void framePace(int cap, double now) {
-    static double nextFrame = 0.0;
     static double t0 = -1e9;
     static unsigned long n = 0;
     static int lastCap = 0;
-    if (t0 < -1e8) { t0 = now; nextFrame = now; }
-    if (cap != lastCap) { lastCap = cap; nextFrame = now; log_("[fps] 上限 -> %d", cap); }
+    if (t0 < -1e8) t0 = now;
+    if (cap != lastCap) { lastCap = cap; log_("[fps] 上限 -> %d", cap); }
     ++n;
-    nextFrame += 1.0 / double(cap);
-    const double wait = nextFrame - now;
+    // 基准是**本帧开头**的 now，不是累加出来的 nextFrame：
+    // 上一版用 nextFrame += period 累加，被 eglSwapBuffers（niri 下会等 frame callback，
+    // 每帧至少 16.7ms）一挤就永远落后，wait 恒为负 → 15 档实测跑出 29 帧（实测记录）。
+    // 现在每帧重算「这一帧该占多久」，剩下的时间才睡，稳在目标值附近。
+    // 目标时刻按周期累加；但只要这一帧已经落后超过 1.5 个周期（合成器 vsync 比周期还慢、
+    // 或者这一帧本身干得久），就把基准拉回 now —— 不追帧、不叠加延迟。
+    static double nextFrame = -1e9;
+    const double period = 1.0 / double(cap);
+    if (nextFrame < -1e8 || now - nextFrame > period * 1.5) nextFrame = now;
+    nextFrame += period;
+    const double wait = nextFrame - platTime();
     if (wait > 0.0005) {
         struct timespec ts;
         ts.tv_sec = 0;
         ts.tv_nsec = static_cast<long>(wait * 1e9);
         nanosleep(&ts, nullptr);
-    } else if (now - nextFrame > 0.25) {
-        nextFrame = now;
     }
     if (now - t0 >= 5.0) {
         log_("[fps] 实测 %.1f 帧/秒（上限 %d，%lu 帧 / %.1fs）",
@@ -568,6 +574,11 @@ static void framePace(int cap, double now) {
 //   corner → platform 吸角（tl/tr/bl/br/free）
 //   hide   → 全透明 + 输入区清空（platform 清区域，主循环那边整帧不画模型）
 //   alpha / idle / expr → 这三项每帧直接读 web::settings()，不需要额外动作
+//   ── 第十六节新增的九项 ──────────────────────────────────────
+//   idleStyle / look / lookOn / mouth / exprHold / voice / vol → 每帧读，不需要额外动作
+//   blink → 主循环每帧比一次 bk，变了才 SetBlinkingInterval
+//   fps   → framePace 自己检测 cap 变化
+//   所以 webApply 只认下面四个「要立刻重建/搬窗口」的，其余走一行日志就够。
 static void webApply(const char* key) {
     if (!strcmp(key, "scale"))       platSetScale(web::settings().scale);
     else if (!strcmp(key, "tap"))    platSetTapEnabled(web::settings().tap);
@@ -860,7 +871,7 @@ int main() {
         // 网页设置页：每帧收一个连接（非阻塞，最多两个 accept，绝不卡渲染）
         web::poll(now);
         const web::Settings& ws = web::settings();
-        // 第十五节：这两项不归渲染管，直接喂给 ctl —— 说话那一下读的就是它们
+        // 第十六节：这两项不归渲染管，直接喂给 ctl —— 说话那一下读的就是它们
         // （内部只在值变了才打日志，每帧调不刷屏）。
         ctl::setMouthScale(ws.mouth);
         ctl::setVoice(ws.voice, ws.vol);
@@ -873,7 +884,7 @@ int main() {
         // 隐藏：整帧不画模型，只清成透明再提交 —— 像素层面和空桌面完全一致，
         // 输入区在 platform 那边已经清空（点击穿透）。模型状态冻结在最后一帧。
         // 不 continue 的话下面每个参数都要加一层 if，反而更容易漏。
-        // 第十五节：隐藏期间也照样按 fps 上限睡，不然她「不在」的时候反而最烧 CPU。
+        // 第十六节：隐藏期间也照样按 fps 上限睡，不然她「不在」的时候反而最烧 CPU。
         if (ws.hide) {
             platSwapBuffers();
             platPollEvents();
@@ -946,7 +957,7 @@ int main() {
             const float mv = ctl::mouth(now);
             if (mv >= 0.0f) model->SetParameterValue(mouthI, mv, 1.0f);
         }
-        // 第十五节：表情到点回收（只有「计划在播」时跳过 —— 那时候由 planTick 收尾，
+        // 第十六节：表情到点回收（只有「计划在播」时跳过 —— 那时候由 planTick 收尾，
         // 计划附带的那个表情不该在中途被计时器拽回默认）。
         if (gExprUntil > -1e9 && now >= gExprUntil && !plan::active()) {
             log_("[expr] 停留 %.1fs 到点（exprHold=%.2f），回默认",
@@ -955,7 +966,7 @@ int main() {
             exprPlay("默认");
         }
         if (eyeBlink) {
-            // 第十五节：眨眼频率倍率。SDK 的间隔是「基准 4s」，真实间隔 0~2×基准 随机，
+            // 第十六节：眨眼频率倍率。SDK 的间隔是「基准 4s」，真实间隔 0~2×基准 随机，
             // 所以倍率是反着除：blink=2 → 基准 2s（0~4s 一次，明显更勤），blink=0.5 → 8s。
             // blink≈0 直接**不调 UpdateParameters**（让它自己眨会永远闭着），
             // 眼睛参数由 LoadParameters 保持默认（睁），日志打点照旧 —— 所以是「0 条闭眼」。
@@ -1058,7 +1069,7 @@ int main() {
 
         platSwapBuffers();
         platPollEvents();
-        // 第十五节：帧率上限（15/30/60）。睡在这里而不是循环开头 —— 这一帧的活已经干完。
+        // 第十六节：帧率上限（15/30/60）。睡在这里而不是循环开头 —— 这一帧的活已经干完。
         framePace(ws.fps, platTime());
     }
     web::shutdown();   // 先关设置页的监听，下面才是窗口/GL

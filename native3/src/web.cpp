@@ -630,7 +630,7 @@ std::string handleSet(const std::string& body, bool logIt) {
             if (nv != gSet.idle) { gSet.idle = nv; changed.push_back("idle"); }
             continue;
         }
-        // ── 第十五节新增的九项 ──────────────────────────────────────
+        // ── 第十六节新增的九项 ──────────────────────────────────────
         if (k == "look" && v.t == VNum) {
             const float nv = clampf(float(v.n), 0.0f, 2.0f);
             if (nv != gSet.look) { gSet.look = nv; changed.push_back("look"); }

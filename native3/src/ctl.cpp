@@ -64,7 +64,7 @@ bool gPlanPending = false;
 
 int gMood = -1;
 
-// 第十五节：网页上的两个倍率/开关。都由 main 每帧喂进来（ctl 不反向 include web）。
+// 第十六节：网页上的两个倍率/开关。都由 main 每帧喂进来（ctl 不反向 include web）。
 float gMouthScale = 1.0f;    // 嘴动时长倍率 0.5–3
 bool  gVoiceOn = false;      // 说话时要不要出声
 float gVol = 0.8f;           // 音量 0–1
@@ -181,7 +181,7 @@ int takeObjText(const std::string& s, const char* key, std::string& out) {
     return 0;
 }
 
-// ── 出声（第十五节）────────────────────────────────────
+// ── 出声（第十六节）────────────────────────────────────
 // 只播**预生成**的短句（CosyVoice 合成一句要几十秒，实时不划算），和 tools/body-voice.sh
 // 同一套约定：文件名 = md5(文本) 前 10 位 + .wav，索引在 $VOICE/index.tsv（key\ttab文本）。
 // 拿不到文件 / 没有 pw-play → 一行日志，静默继续（绝不影响说话和渲染）。
@@ -261,7 +261,7 @@ void handleLine(const std::string& raw, double now) {
             gSayDur = dur;
             gSayT0 = now;
             gTalking = true;
-            // 第十五节的「嘴动时长倍率」：这里不改 gSayDur（那是这句话的原始时长），
+            // 第十六节的「嘴动时长倍率」：这里不改 gSayDur（那是这句话的原始时长），
             // 只报告实际会动多久，mouth() 里乘同一个系数。
             log_("[ctl] say %.1fs（×%.2f -> 嘴动 %.1fs）: %s",
                  dur, gMouthScale, dur * gMouthScale, say.c_str());
@@ -435,7 +435,7 @@ void poll(double now) {
 float mouth(double now) {
     if (!gTalking) return -1.0f;
     const double t = now - gSayT0;
-    // 第十五节：嘴动时长 = 原始时长 × 网页上的 mouth 倍率（0.5–3）。
+    // 第十六节：嘴动时长 = 原始时长 × 网页上的 mouth 倍率（0.5–3）。
     // 张合频率（0.22s 一张一合）不变，只是「这句话她动多久嘴」变了。
     const double dur = gSayDur * static_cast<double>(gMouthScale);
     if (t < 0.0 || t >= dur) {
@@ -474,7 +474,7 @@ bool takePlan(std::string& out) {
 
 int mood() { return gMood; }
 
-// 第十五节：网页设置页的两项，由 main 每帧喂进来。
+// 第十六节：网页设置页的两项，由 main 每帧喂进来。
 //   · mouth 倍率只影响「接下来的」说话时长；正在说话的这句当场生效（t 和 dur 同一把尺）
 //   · voice/vol 在说话那一刻读，改了下一句就变
 void setMouthScale(float s) {
