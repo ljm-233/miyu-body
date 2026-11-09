@@ -26,10 +26,10 @@ P	SideHairX1	head	80	0.8000	-0.2000
 P	SideHairY2	head	80	0.8000	-0.2000
 P	FrontHairY1	head	80	0.8000	-0.2000
 P	FrontHairX1	head	80	0.8000	-0.2000
-P	Param53	chest	80	0.8000	-0.2000
-P	ChestY1	chest	80	0.8000	-0.2000
-P	ChestX2	chest	80	0.8000	-0.2000
-P	ChestX1	chest	80	0.8000	-0.2000
+P	Param53	chest	80	0.5500	-0.2000
+P	ChestY1	chest	80	0.5500	-0.2000
+P	ChestX2	chest	80	0.5500	-0.2000
+P	ChestX1	chest	80	0.5500	-0.2000
 P	SkirtY9	skirt	80	0.8000	-0.2000
 P	SkirtY7	skirt	80	0.8000	-0.2000
 P	SkirtY6	skirt	80	0.8000	-0.2000
