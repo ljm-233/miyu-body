@@ -997,3 +997,105 @@ tap 全在 `src/platform_wayland.cpp`：button 段改造 + 一组 `tapInit / tap
 - 每第 3 次的「换表情」是**换一份计划**（AngleZ + 眼珠 + 嘴张开度），不是 `.exp3.json` 表情文件；要真换表情仍走 socket 的 `{"expr":…}`
 - 冷却按「点击次数」计数（含被挡掉的），所以连点 5 次里第 3 次会被冷却压掉、计数照走 —— 这样「每第 3 次换一个」不会因为被挡而错位
 - 单击和拖动共用 BTN_LEFT：手抖着按住 400ms 以上再松开，不播反应（按 13.1 的规矩），要更灵敏就调 `TAP_MAX_S`
+
+## 十四、本地设置页：进程自己起 HTTP，浏览器里改完立刻生效（2026-11-09 22:4x–22:5x）
+
+一句话：**能用**。身体进程里多了一个 `127.0.0.1:8200` 的极简 HTTP 服务，浏览器打开就能调
+大小 / 不透明度 / 待机幅度 / 点击开关 / 表情开关 / 贴角 / 隐藏，改完 300ms 防抖发一条 POST，
+**当场生效、不重启**；值落到 `native3/state/settings.json`，重启服务后还是改后的样子。
+
+socket 那套（`say/mood/expr/plan`）一个字没动，页面里的「叫她一下 / 切个表情」就是自己当一次
+客户端往 `$XDG_RUNTIME_DIR/miyu-body.sock` 写一行 —— 没有第二个协议。
+
+### 14.1 新文件与接线
+
+| 文件 | 干什么 |
+| --- | --- |
+| `src/web.h` / `src/web.cpp` | HTTP 服务（socket + 手写请求解析）、设置模型、JSON 落盘/读回、内嵌单页 HTML、往 ctl socket 转发 |
+| `src/platform.h` | 新增 5 个「窗口层旋钮」：`platSetScale` / `platSetTapEnabled` / `platSnapCorner` / `platSetHidden` / `platOutputLabel` |
+| `src/platform_wayland.cpp` | 上面 5 个的真实现（重建 buffer、点击开关、吸角、隐藏）；`WlState` 加 `baseW/baseH/hidden` |
+| `src/platform_x11.cpp` | 备胎上的空实现（编译通过、行为不变） |
+| `src/main.cpp` | `web::init/poll/shutdown`；`webApply()` 按 key 分给各层；alpha 全屏乘算；hidden 整帧不画；待机倍率；expr 开关；`scanExpressions()` 扫 `model/Exp3` |
+| `CMakeLists.txt` | 两个 target 都加 `src/web.cpp`；顺带 `-Wall -Wextra` + 第三方头改 `SYSTEM` include |
+
+端口：默认 **8200**，`MIYU_WEB_PORT` 覆盖。被占用只在日志里说一句（`端口 8200 被占用（…）—— 设置页不启动，身体照常跑`），不崩、不退出。
+bind 地址是 `INADDR_LOOPBACK`，外面连不进来，所以没有任何鉴权。
+
+### 14.2 接口（三个路由，其余 404）
+
+| 方法 路径 | 作用 | 例子 |
+| --- | --- | --- |
+| `GET /` | 内嵌单页 HTML（C++ 字符串常量，**没有静态文件**，无外链无 CDN） | `curl -s 127.0.0.1:8200/ \| head -3` |
+| `GET /state` | 当前所有设置 + 状态 | `{"ok":true,"pid":800611,"output":"HDMI-A-3","window":"500x900","scale":1,"alpha":1,"tap":true,"expr":true,"idle":1,"corner":"free","hide":false,"port":8200,"expr_next":"体型1"}` |
+| `POST /set` | 改设置，立刻生效 | `curl -s -X POST 127.0.0.1:8200/set -d '{"alpha":0.6}'` → `{"ok":true,"applied":["alpha"]}` |
+
+`POST /set` 除了设置项还认三种「动作」：`{"say":"在","mood":60}`（转给 ctl，等价 `body-say.sh`）、
+`{"action":"expr_next"}`（按 `model/Exp3` 的字母序循环切一个，走 `{"expr":…}`）、
+`{"action":"restart"}`（`systemctl --user restart miyu-body`，**挂后台**再返回，不然这几秒她不动）。
+
+日志只打一行，不刷屏：
+
+```
+[plat-wl] 缩放 0.90 -> 逻辑 450x810 / 物理 450x810 / margin (640,120)
+[web] 生效：scale
+[web] POST /set {"alpha":0.8,"scale":0.9,"idle":1.5,"corner":"free"} → 已应用
+```
+
+非阻塞的写法：每帧 `poll(fd, 0)`，最多 `accept` 两个连接；连接不完整就留到下一帧再读（最多 4 个槽），
+**3 秒还收不全直接掐**。渲染一帧都没为它等过。
+
+### 14.3 七项设置，各自怎么真生效
+
+| key | 类型/范围 | 生效路径 | 关键实现 |
+| --- | --- | --- | --- |
+| `scale` | float 0.4–1.6 | `platSetScale()` → `zwlr_layer_surface_v1_set_size`(新逻辑尺寸) + 拆 `wl_egl_window`/`EGLSurface` 按新尺寸重建（**EGL context 和纹理不动**）+ `set_buffer_scale` 重设 | `reqW/reqH = baseW/baseH × scale`，基准单独存（拿 reqW 反算会累积误差）。位置保持：`posX/posY` 不动，只重新夹一遍 margin |
+| `alpha` | float 0.3–1.0 | 渲染末尾一次全屏乘算：`glBlendFunc(GL_ZERO, GL_SRC_COLOR)` + 覆盖全屏的定值色 quad → `dst = dst × k` | 混合是 premultiplied（`GL_ONE, ONE_MINUS_SRC_ALPHA`），所以 RGB 和 A 一起缩，对合成器就是整体半透明。**必须**先 `glUseProgram(0)` + `glDisable(GL_TEXTURE_2D)`（Cubism 留着 program 和纹理绑定）。`k=1` 时整段跳过 |
+| `tap` | bool | `platSetTapEnabled()` → 平台层的 `gTapOn` | 等价 `MIYU_NO_TAP=1` 但运行时可变；拖动不受影响（拖动开关是另一个 `MIYU_DRAG`） |
+| `expr` | bool | `web::settings().expr` 每帧现读 | 三处入口都挡：`ctl::takeExpr`（请求照吃、不切）、`planTick` 里计划附带的 `"expr"`；切回默认那条（计划播完）不挡 |
+| `idle` | float 0.0–3.0 | `idleTick()` 里把 `AngleX/AngleZ/PositionX` 三个目标值乘倍率 | 倍率本身过一道低通（`k += (want-k)*0.12`，收敛后贴死），滑块一拖到底不是定住而是几帧收放；`ParamBreath` 恒走，所以 0 = 完全不摆只剩呼吸 |
+| `corner` | `tl/tr/bl/br/free` | `platSnapCorner()` → `platSetPosition()` → `apply_margin()` | anchor 一直是 `TOP\|LEFT`，四角都靠 margin：顶两角 y=0（`TOP` 落在 exclusive zone 下沿）；**底两角要减掉顶部 bar 的 37 逻辑 px**，否则窗口整体被 bar 推下去、脚被裁掉。`MIYU_BAR_H` 可覆盖。`free` = 不动 |
+| `hide` | bool | `platSetHidden()` 清空输入区 + 主循环整帧不画模型（只 `glClear` 成 alpha 0 再 swap） | **不卸 surface**（卸了要等 configure，还可能被合成器改尺寸）。全透明 + 空 region = 和空桌面逐像素相同、点击全穿透、进程和循环照常。取消隐藏那一帧补算一次输入区（`justShown`） |
+
+落盘：**`native3/state/settings.json`**（`MIYU_STATE_DIR` 可改；默认取 `/proc/self/exe` 同级 `../state`，
+对应 `build/miyu-wayland ↔ native3/state`）。写 `.tmp` 再 `rename`，半截文件不会污染下次启动。
+
+```json
+{"scale":0.900,"alpha":0.800,"tap":true,"expr":true,"idle":1.500,"corner":"free","hide":false}
+```
+
+启动顺序（`main()`）：`web::init()` 读文件 → **立刻**把 scale / tap / corner / hide 应用一遍
+（不落这一步就只是页面显示对、行为回到默认）→ 再进 Cubism。`MIYU_NO_TAP=1` 压过文件里的 `tap`。
+
+### 14.4 页面
+
+深色（`#0d1117` 底 / `#7aa2f7` 主色 / `#bb9af7` 次色），窄栏 420px，`viewport-fit=cover` 手机上也能开。
+顶部状态 `运行中 · PID · 输出 HDMI-A-3 · 窗口 500x900`（每 5 秒刷一次，拖滑块时不会跟你抢控件值）；
+每个滑块旁边实时数字；滑块 300ms 防抖 POST，开关/下拉直接发；底部三按钮。
+
+### 14.5 验证数据（2026-11-09 22:47–22:55，HDMI-A-3，`grim -o HDMI-A-3`）
+
+测 hide / 贴角 / 大小的对照组是**把 HDMI 切到空工作区**（壁纸静态），否则被测的是浏览器自己刷字。
+
+| 项 | 证据 |
+| --- | --- |
+| 路由 | `GET /state` 返 JSON、`GET /` 9898 字节 HTML（`grep -oE 'https?://…' 页面 = 0 条外链`）、`/nope` = 404 |
+| alpha 0.6 | 她身上 RGB 均值 **162.3 → 107.5**（掉 33.8%，和 `0.6×她+0.4×背景` 的理论值对得上）；与背景的平均距离 **136.4 → 79.3** |
+| scale 0.8 | `/state` 的 `window` 变 `400x720`；同一位置截图量 bbox **高 729 → 584 px（0.801×）**、宽 329 → 279（边缘抗锯齿，高度才是可信的那个）；日志 `缩放 0.80 -> 逻辑 400x720 / margin (701,88)` —— margin 一分没动 |
+| corner=br | `吸角 br：屏 1920x1080 / 窗 500x900 / bar 37 -> margin (1420,143)`；bbox `x 1527..1855 y 288..1014`，质心 (1691,651)，距屏右 64 px、距屏底 65 px（那是她自己在窗口里的透明留白） |
+| hide=true | 前后差异 **119632 px**（她在），隐藏后**她这块区域两帧差 0 像素**（全图剩下的 202 px 是顶栏时钟）；隐藏期间注入单击 → 日志里**没有 `按下`**（点击穿过去了） |
+| tap 开关 | `tap=false`：注入单击 → 只有 `按下`，`[tap]` 0 条；`tap=true` 同一下 → `[tap] 第 3 次点击 local=(280,420) → 播 被戳3.json` |
+| expr 开关 | `expr=false` + `{"expr":"脸红"}` → `[expr]` 0 条；`expr=true` 同一条 → `[expr] -> 脸红（fade 0.35s）` |
+| idle 倍率 | `idle=0` → `[idle] 算 ax=0.00 … az=0.00 br=0.711`（呼吸照走）；`idle=2.5` → `ax=1.14 az=1.27` |
+| 落盘 + 重启 | 设 `scale=0.9 alpha=0.8 idle=1.5 corner=free` → `cat state/settings.json` 一致 → `systemctl --user restart` → `/state` 仍是这四个值、`window=450x810`；启动日志 `[web] 读回 …` + `[plat-wl] 缩放 0.90 -> 逻辑 450x810 / margin (640,120)` |
+| 三个按钮 | 叫她一下 → `[ctl] say 1.2s: 在`；切个表情 → `[web] 切表情 → 体型2` + `[expr] -> 体型2`；重启服务 → PID `798302 → 800611`，单元仍 `active`，`layer surface 挂在 HDMI-A-3 上` |
+| 编译 | 两个 target `make clean && make`：**0 warning / 0 error**（`-Wall -Wextra`；`Framework/src`、`Core/include`、`stb` 改成 `SYSTEM` include，第三方的 `-Wreorder` 之类不再刷屏） |
+| 老功能回归 | socket 照旧（`body-say.sh --expr` 有效）、单击反应照旧、输入区照旧（`881 条矩形 / 28.4% / bbox=[109,107..446,837]`）、`MIYU_OUTPUT=1` 保留、标题仍 `native2-test` |
+
+### 14.6 已知边界（别当成 bug）
+
+- `scale` 重建的是 `wl_egl_window`，那一瞬间输入区是空的；主循环下一帧（≤10 帧内）按新 framebuffer 重算，这中间点不到她
+- `hide` 用的是「全透明 + 空输入区」，不是卸 surface：所以进程还在、`eglSwapBuffers` 还在跑（每帧只清一张透明图），代价可以忽略但要记得它**没有真的销毁窗口**
+- 吸角的下边界靠 `bar 37 逻辑 px` 这个常量（本机实测）；换机器/关掉 bar 用 `MIYU_BAR_H=0`，不然底部两角会矮一截
+- `POST /set` 里认不出的键只记一行、不整包失败；`applied` 数组里 `say` / `expr_next` / `restart` 也各占一格
+- 页面 5 秒轮询只刷状态行，不动控件值（不然你正拖滑块，它被服务端值拽回去）
+- 表情循环用的是 `ls model/Exp3` 的字母序，不筛「好看不好看」，要固定就走 socket 推 `{"expr":…}`

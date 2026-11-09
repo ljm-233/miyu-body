@@ -84,3 +84,25 @@ bool platMoveToOutput(int index);  // 整个浮层搬到第 index 个 output 上
 //   ② 物理 → 逻辑：除以 buffer scale，再交给 alpha_region_apply
 //      （scale=2 时逻辑区域是物理尺寸的一半，算错了区域会大一倍）
 void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int threshold);
+
+// ── 运行时设置（网页设置页 / src/web.cpp 用，2026-11-09 22:5x）──────────
+// 这一组和上面那些不同：上面是「窗口层的能力」，这一组是「窗口层的旋钮」。
+// 全部要求：调用后立刻生效、不重启、失败只记日志不崩。
+
+// 视觉缩放 0.4–1.6：重建 wl_egl_window（+ set_buffer_scale），窗口视觉大小跟着变。
+// 位置保持（margin 不变，只按新尺寸重新夹一遍）。X11 实现里是空操作。
+bool platSetScale(float factor);
+
+// 单击反应开关（等价 MIYU_NO_TAP，但运行时可变）。拖动不受影响。
+void platSetTapEnabled(bool on);
+
+// 吸到当前 output 的四角之一：tl / tr / bl / br / free（free = 不动）。
+// 左上锚点靠 margin 实现；下方两角会自动减掉顶部 bar 的 exclusive zone。
+bool platSnapCorner(const char* corner);
+
+// 整个隐藏：全透明（framebuffer 清成 alpha 0）+ 输入区清空，点击直接穿透，
+// 进程照常跑、每帧照常换 buffer。false 恢复显示。
+void platSetHidden(bool hidden);
+
+// 当前挂在哪个 output 的名字（"HDMI-A-3"），设置页状态栏要显示。
+const char* platOutputLabel();

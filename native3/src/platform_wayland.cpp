@@ -113,6 +113,10 @@ static struct {
     int                      maskW    = 0, maskH = 0, maskTh = 8;
 
     int                      reqW     = 0, reqH = 0;   // 逻辑尺寸（请求值）
+    // 基准逻辑尺寸（platInit 传进来的 500x900）。reqW/reqH = base * 网页设置页的 scale。
+    // 基准必须单独存：拿 reqW 反算会累积误差（0.4 → 0.8 回不到 500）。
+    int                      baseW    = 0, baseH = 0;
+    int                      hidden   = 0;             // 设置页「隐藏」：全透明 + 输入区清空
     int                      cfgW     = 0, cfgH = 0;   // configure 给的逻辑尺寸
     int                      configured = 0;
     int                      closed   = 0;
@@ -221,6 +225,10 @@ static bool        gTapOn = true;             // MIYU_NO_TAP=1 关
 static std::string gPlansDir;                 // 计划目录（MIYU_PLANS_DIR 或按 exe 找）
 static int         gTapN = 0;                 // 第几次点击（含被冷却挡掉的）
 static double      gTapCoolUntil = 0.0;
+
+// 网页设置页的缩放（NOTES 第十四节）。存「最后一次真的应用过」的值，
+// 同一个值重复 POST 时不重建 buffer（页面滑块拖回来会发一串）。
+static float       gScaleNow = 1.0f;
 
 // 按下记账
 static bool   gPressArmed = false;
@@ -424,8 +432,12 @@ static void ptr_axis(void*, wl_pointer*, uint32_t, uint32_t axis, wl_fixed_t val
     LOG("pointer axis=%u value=%.2f（不处理）", axis, wl_fixed_to_double(value));
 }
 
+// 后面的 frame / axis_source / axis_stop / axis_discrete / axis_value120 /
+// axis_relative_direction / warp 我们都不接，显式补 nullptr —— 不然 -Wextra 的
+// -Wmissing-field-initializers 会一条一条报（协议头比这里用到的版本新）。
 static const wl_pointer_listener ptr_listener = {
-    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis
+    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis,
+    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
 };
 
 static void seat_caps(void*, wl_seat* s, uint32_t caps) {
@@ -823,6 +835,7 @@ bool platInit(int w, int h, const char* title) {
     if (W.inited) return true;
     if (w <= 0 || h <= 0) { LOG("非法尺寸 %dx%d", w, h); return false; }
     W.reqW = w; W.reqH = h;
+    W.baseW = w; W.baseH = h;   // 缩放要能来回，基准单独存（见 WlState 里那段注释）
 
     // 拖动开关：默认开，只有 MIYU_DRAG=0（严格等于 "0"）才关。
     {
@@ -1052,6 +1065,112 @@ void platGetLogicalSize(int* w, int* h) {
     if (h) *h = W.reqH;
 }
 
+// ── 运行时设置（网页设置页，NOTES 第十四节）────────────────────────────
+// 缩放：重建 wl_egl_window + 重设 buffer_scale。
+// 为什么不是「只改 EGL 视口」：layer surface 的逻辑尺寸是 set_size 定的，
+// 逻辑 px 就是屏幕上的可见尺寸；不改 set_size 只改 buffer 只会变糊/变锐，大小不变。
+//   · EGL context 和里面的纹理一个字节都不动（和跨屏搬家同一套做法）
+//   · 位置保持：posX/posY 不变，只是按新尺寸再夹一遍 margin
+//   · 输入区立刻清空一次（旧掩码是旧尺寸的），main 下一帧会按新尺寸重算
+bool platSetScale(float factor) {
+    if (factor < 0.4f) factor = 0.4f;
+    if (factor > 1.6f) factor = 1.6f;
+    if (factor == gScaleNow) return true;                 // 同一个值不重建（防抖）
+    gScaleNow = factor;
+    if (!W.inited || !W.surf || W.baseW <= 0) {
+        LOG("缩放记下 %.2f（窗口还没起来，init 时生效）", factor);
+        return false;
+    }
+    const int nw = (int)((float)W.baseW * factor + 0.5f);
+    const int nh = (int)((float)W.baseH * factor + 0.5f);
+    if (nw < 64 || nh < 64) { LOG("缩放 %.2f 太小（%dx%d），忽略", factor, nw, nh); return false; }
+    W.reqW = nw;
+    W.reqH = nh;
+
+    // ① 合成器那侧：新的逻辑尺寸
+    if (W.lsurf) zwlr_layer_surface_v1_set_size(W.lsurf, (uint32_t)nw, (uint32_t)nh);
+    wl_surface_commit(W.surf);
+
+    // ② 我们这侧：拆 EGLSurface + wl_egl_window，按新尺寸重建（context 留着）
+    if (W.esurf != EGL_NO_SURFACE) {
+        eglMakeCurrent(W.edpy, EGL_NO_SURFACE, EGL_NO_SURFACE, W.ectx);
+        eglDestroySurface(W.edpy, W.esurf);
+        W.esurf = EGL_NO_SURFACE;
+    }
+    if (W.ewin) { wl_egl_window_destroy(W.ewin); W.ewin = nullptr; }
+    if (!createEGLWindow()) { LOG("缩放 %.2f：重建 EGL window 失败", factor); W.closed = 1; return false; }
+
+    // ③ 输入区先清空（旧掩码是旧尺寸的）；main 下一帧按新 framebuffer 重算
+    if (W.comp) {
+        wl_region* empty = wl_compositor_create_region(W.comp);
+        if (empty) {
+            wl_surface_set_input_region(W.surf, empty);
+            wl_region_destroy(empty);
+        }
+    }
+    // ④ 位置保持（只重新夹一遍 margin）
+    apply_margin();
+    LOG("缩放 %.2f -> 逻辑 %dx%d / 物理 %dx%d / margin (%d,%d)",
+        factor, nw, nh, nw * W.scale, nh * W.scale, W.posX, W.posY);
+    return true;
+}
+
+void platSetTapEnabled(bool on) {
+    gTapOn = on;
+    LOG("点击反应：%s（网页设置页）", on ? "开" : "关");
+}
+
+// 吸角。anchor 一直是 TOP|LEFT，所以四角都靠 margin 表达：
+//   · 顶部两角：y=0 —— TOP 会落在 exclusive zone（顶上的 bar，约 37 逻辑 px）下沿
+//   · 底部两角：y = 屏高 - 窗高 - bar 高度，否则窗口一多半跑到屏外（bar 把可见区整体下推）
+//     bar 高度默认 37（本机实测），MIYU_BAR_H 可覆盖，别的机器/关掉 bar 时自己调。
+bool platSnapCorner(const char* corner) {
+    if (!W.inited) { LOG("吸角：窗口还没起来"); return false; }
+    if (!corner || !strcmp(corner, "free")) return true;      // free = 不动
+    int barH = 37;
+    if (const char* bh = getenv("MIYU_BAR_H")) barH = atoi(bh);
+    const int W_ = W.logicalW, H_ = W.logicalH;
+    if (W_ <= 0 || H_ <= 0) { LOG("吸角：还不知道当前 output 的逻辑尺寸"); return false; }
+
+    int x = W.posX, y = W.posY;
+    if (!strcmp(corner, "tl"))      { x = 0;                    y = 0; }
+    else if (!strcmp(corner, "tr")) { x = W_ - W.reqW;          y = 0; }
+    else if (!strcmp(corner, "bl")) { x = 0;                    y = H_ - W.reqH - barH; }
+    else if (!strcmp(corner, "br")) { x = W_ - W.reqW;          y = H_ - W.reqH - barH; }
+    else { LOG("吸角：不认识的角 %s", corner); return false; }
+
+    LOG("吸角 %s：屏 %dx%d / 窗 %dx%d / bar %d -> margin (%d,%d)",
+        corner, W_, H_, W.reqW, W.reqH, barH, x, y);
+    platSetPosition(x, y);
+    return true;
+}
+
+// 隐藏：不拆 surface（拆了要等 configure，还可能被合成器重置尺寸），
+// 改成「画一张全透明 + 输入区清空」—— 像素层面和空桌面完全一致，点击直接穿透，
+// 进程和渲染循环照常跑。main 那边在 hidden 时连模型都不画（省 CPU）。
+void platSetHidden(bool hidden) {
+    W.hidden = hidden ? 1 : 0;
+    if (!W.inited || !W.surf) return;
+    if (hidden) {
+        if (W.comp) {
+            wl_region* empty = wl_compositor_create_region(W.comp);
+            if (empty) {
+                wl_surface_set_input_region(W.surf, empty);
+                wl_region_destroy(empty);
+            }
+        }
+        wl_surface_commit(W.surf);
+        wl_display_flush(W.dpy);
+        LOG("隐藏：全透明 + 输入区清空（进程还在，点击穿透）");
+    } else {
+        LOG("显示：下一帧重算输入区");
+    }
+}
+
+const char* platOutputLabel() {
+    return W.curIdx >= 0 && W.curIdx < W.nouts ? W.outs[W.curIdx].label : "?";
+}
+
 void platShutdown() {
     if (!W.dpy) return;
     if (W.edpy != EGL_NO_DISPLAY) {
@@ -1099,6 +1218,10 @@ void platShutdown() {
 // 免得头发丝、手指这些细结构被降采样削掉 —— 削掉就是那块点不到。
 void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int threshold) {
     if (!W.surf || !W.comp || !rgba || w <= 0 || h <= 0) return;
+
+    // 隐藏期间不收输入区（设置页已经把区域清空了）。这里再建一遍就等于
+    // 把整块可点区域还回去，隐藏就白做了。恢复显示时 main 会重算一次。
+    if (W.hidden) return;
 
     const int s = W.scale > 0 ? W.scale : 1;
     const int lw = w / s;

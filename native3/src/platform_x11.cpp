@@ -134,3 +134,13 @@ void platSetInputRegionFromAlpha(const unsigned char*, int, int, int) {}
 
 // X11 版没有「按 alpha 算她本人包围盒」这套，视线跟随在 X11 上退回到窗口坐标
 bool platPersonBox(int*, int*, int*, int*) { return false; }
+
+// ── 运行时设置（网页设置页）在 X11 备胎上的空实现 ────────────────────
+// 这些能力是给 Wayland layer-shell 写的（重建 buffer / 输入区 / 输出名）。
+// X11 那版只是备胎，一律「接受但什么都不做」，这样 main.cpp 两个 target 共用一套调用。
+// alpha / idle / expr / hide 这几个是在 main 里落的（不经过这里），备胎上照常生效。
+bool platSetScale(float) { return false; }
+void platSetTapEnabled(bool) {}
+bool platSnapCorner(const char*) { return false; }
+void platSetHidden(bool) {}
+const char* platOutputLabel() { return "X11"; }

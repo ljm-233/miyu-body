@@ -4,6 +4,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 11)
 add_compile_definitions(CSM_TARGET_LINUX_GL)
+# 自己写的代码一律 -Wall -Wextra（要求「0 警告」）。第三方头（Cubism Framework /
+# stb / 协议头）用 SYSTEM include 排除，那些警告改不动也不该改。
+add_compile_options(-Wall -Wextra)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLFW REQUIRED glfw3)
@@ -17,10 +20,11 @@ set_target_properties(Live2DCubismCore PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/Core/include)
 
 # ── 目标 1：miyu —— X11(XWayland) + GLFW。备胎，行为已和 native2 对齐。
-add_executable(miyu src/main.cpp src/ctl.cpp src/plan.cpp src/platform_x11.cpp)
+add_executable(miyu src/main.cpp src/ctl.cpp src/plan.cpp src/web.cpp src/platform_x11.cpp)
 target_include_directories(miyu PRIVATE
   ${GLFW_INCLUDE_DIRS} ${GL_INCLUDE_DIRS}
-  Framework/src Core/include stb .)
+  .)
+target_include_directories(miyu SYSTEM PRIVATE Framework/src Core/include stb)
 target_link_directories(miyu PRIVATE lib ${GLFW_LIBRARY_DIRS} ${GL_LIBRARY_DIRS})
 target_link_libraries(miyu PRIVATE
   Framework Live2DCubismCore
@@ -41,6 +45,7 @@ add_executable(miyu-wayland
   src/main.cpp
   src/ctl.cpp
   src/plan.cpp
+  src/web.cpp
   src/platform_wayland.cpp
   src/layer-shell-protocol.c
   src/xdg-shell-protocol.c
@@ -48,7 +53,8 @@ add_executable(miyu-wayland
   src/alpha_region.c)
 target_include_directories(miyu-wayland PRIVATE
   ${GL_INCLUDE_DIRS} ${WL_INCLUDE_DIRS}
-  Framework/src Core/include stb .)
+  .)
+target_include_directories(miyu-wayland SYSTEM PRIVATE Framework/src Core/include stb)
 target_link_directories(miyu-wayland PRIVATE lib ${GL_LIBRARY_DIRS} ${WL_LIBRARY_DIRS})
 target_link_libraries(miyu-wayland PRIVATE
   Framework Live2DCubismCore

@@ -15,6 +15,8 @@
 #include <cstdarg>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
+#include <dirent.h>   // scanExpressions：扫 model/Exp3 给「切个表情」按钮
 #include <string>
 #include <vector>
 #include <fstream>
@@ -24,6 +26,7 @@
 #include "platform.h"
 #include "ctl.h"    // 本地控制口：外面推「她在说什么/什么心情」，见第十一节
 #include "plan.h"   // 动作计划播放器：外面推一份时间线，她照着演，见第十二节
+#include "web.h"    // 本地设置页：127.0.0.1:8200，改完立刻生效，见第十四节
 
 #include "CubismFramework.hpp"
 #include "Model/CubismMoc.hpp"
@@ -149,9 +152,17 @@ static void idleTick(Csm::CubismModel* model, double now) {
     }
     const float u = static_cast<float>((now - gIdle.segT0) / gIdle.segLen);
     const float s = u * u * (3.0f - 2.0f * u);           // smoothstep：起止都不突
-    const float ax = gIdle.fAx + (gIdle.tAx - gIdle.fAx) * s;
-    const float az = gIdle.fAz + (gIdle.tAz - gIdle.fAz) * s;
-    const float bz = gIdle.fBz + (gIdle.tBz - gIdle.fBz) * s;
+    // 网页设置页的「待机幅度」倍率（0 = 完全不摆，只留呼吸）。
+    // 倍率本身也过一道低通：滑块一拖到底时她不会突然定住/突然甩开，是几帧内收放。
+    static float kAmp = 1.0f;
+    {
+        const float want = web::settings().idle;
+        kAmp += (want - kAmp) * 0.12f;
+        if (fabsf(want - kAmp) < 0.002f) kAmp = want;          // 收敛后贴死，别永远差一点
+    }
+    const float ax = (gIdle.fAx + (gIdle.tAx - gIdle.fAx) * s) * kAmp;
+    const float az = (gIdle.fAz + (gIdle.tAz - gIdle.fAz) * s) * kAmp;
+    const float bz = (gIdle.fBz + (gIdle.tBz - gIdle.fBz) * s) * kAmp;
     const float br = 0.5f + 0.5f * sinf(static_cast<float>(now * 2.0 * 3.14159265358979 / 4.2));
     // 呼吸用 Set 不用 Add：ParamBreath 的默认值是 1.0，Add 上去直接顶到上限（实测一直 1.000）
     gIdle.lastAx = ax; gIdle.lastAz = az; gIdle.lastBz = bz; gIdle.lastBr = br;
@@ -357,7 +368,8 @@ static void planTick(Csm::CubismModel* model, double now) {
         if (en && *en) {
             // 走 exprPlay —— 和 MIYU_EXPR / ctl::takeExpr 是同一条路（自己 Create 那套
             // 不设 fadeIn、不进池子，实测切了看不出来）。
-            exprPlay(en);
+            // 网页设置页把「表情切换」关掉时，计划里带的 expr 也不切（第 14 节）。
+            if (web::settings().expr) exprPlay(en);
         }
     }
 
@@ -483,6 +495,40 @@ static void exprPlay(const std::string& name) {
     log_("[expr] -> %s（fade 0.35s，池里 %zu 个）", label.c_str(), gExprPool.size());
 }
 
+// ── 本地设置页（web.cpp）真正生效的那一半 ────────────────────────────
+// web 只管「收 HTTP → 改值 → 落盘」，然后喊一声 key；重活按 key 分给下面：
+//   scale  → 重建 wl_egl_window + buffer_scale（platform）
+//   tap    → 平台层的点击开关（等价 MIYU_NO_TAP，但运行时可变）
+//   corner → platform 吸角（tl/tr/bl/br/free）
+//   hide   → 全透明 + 输入区清空（platform 清区域，主循环那边整帧不画模型）
+//   alpha / idle / expr → 这三项每帧直接读 web::settings()，不需要额外动作
+static void webApply(const char* key) {
+    if (!strcmp(key, "scale"))       platSetScale(web::settings().scale);
+    else if (!strcmp(key, "tap"))    platSetTapEnabled(web::settings().tap);
+    else if (!strcmp(key, "corner")) platSnapCorner(web::settings().corner.c_str());
+    else if (!strcmp(key, "hide"))   platSetHidden(web::settings().hide);
+    log_("[web] 生效：%s", key);
+}
+
+// 「切个表情」按钮要的是「有哪几个表情」：扫 model/Exp3/*.exp3.json 的文件名。
+// 排个序，这样每次点都是同一个循环顺序，不会随机跳。
+static std::vector<std::string> scanExpressions(const char* dir) {
+    std::vector<std::string> out;
+    DIR* d = opendir(dir);
+    if (!d) { log_("[web] 扫不到表情目录 %s（那个按钮会空转）", dir); return out; }
+    const std::string suf = ".exp3.json";
+    while (struct dirent* e = readdir(d)) {
+        const std::string n = e->d_name;
+        if (n.size() > suf.size() &&
+            n.compare(n.size() - suf.size(), suf.size(), suf) == 0)
+            out.push_back(n.substr(0, n.size() - suf.size()));
+    }
+    closedir(d);
+    std::sort(out.begin(), out.end());
+    log_("[web] 表情 %zu 个（切个表情按这个顺序循环）", out.size());
+    return out;
+}
+
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
@@ -501,6 +547,21 @@ int main() {
         const char* ex = getenv("MIYU_X");
         const char* ey = getenv("MIYU_Y");
         platSetPosition(ex ? atoi(ex) : 640, ey ? atoi(ey) : 120);
+    }
+
+    // ── 本地设置页：起服务 + 把落盘的设置先落一遍 ──────────────────
+    // 顺序讲究：web::init 会读 state/settings.json，读回来的值要在这里就应用，
+    // 否则「重启服务后仍是改后的值」只有页面显示对、实际行为回到默认。
+    web::setExprNames(scanExpressions((std::string(kModelDir) + "Exp3").c_str()));
+    web::init(&webApply);
+    {
+        // MIYU_NO_TAP 是命令行上的一次性覆盖，压过设置文件的 tap（排查时它该说了算）
+        if (getenv("MIYU_NO_TAP") && web::settings().tap) web::settings().tap = false;
+        const web::Settings& s0 = web::settings();
+        platSetTapEnabled(s0.tap);
+        if (s0.scale != 1.0f) platSetScale(s0.scale);
+        if (s0.corner != "free") platSnapCorner(s0.corner.c_str());
+        if (s0.hide) platSetHidden(true);
     }
 
     // ── Cubism ──────────────────────────────────────────────
@@ -730,6 +791,24 @@ int main() {
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
+        // 网页设置页：每帧收一个连接（非阻塞，最多两个 accept，绝不卡渲染）
+        web::poll(now);
+        const web::Settings& ws = web::settings();
+        {   // 状态栏要的：输出名 + 窗口逻辑尺寸
+            int lw = 0, lh = 0;
+            platGetLogicalSize(&lw, &lh);
+            web::setStatus(platOutputLabel(), lw, lh);
+        }
+
+        // 隐藏：整帧不画模型，只清成透明再提交 —— 像素层面和空桌面完全一致，
+        // 输入区在 platform 那边已经清空（点击穿透）。模型状态冻结在最后一帧。
+        // 不 continue 的话下面每个参数都要加一层 if，反而更容易漏。
+        if (ws.hide) {
+            platSwapBuffers();
+            platPollEvents();
+            continue;
+        }
+
         // 2026-11-09：投影必须按**窗口宽高比**校正，光用画布尺寸会把模型拉扁。
         // 做法：先把画布等比缩放到窗口的 95%，再换成 NDC 系数。
         const float sH = static_cast<float>(H) * 0.95f / canvasH;
@@ -747,7 +826,9 @@ int main() {
         // 表情请求要在 UpdateMotion 之前切、嘴的包络要在表情之后写。
         ctl::poll(now);
         std::string exprReq;
-        if (ctl::takeExpr(exprReq)) exprPlay(exprReq);
+        // 设置页把「表情切换」关掉时，socket 推来的 expr 也不切（请求仍然被吃掉，
+        // 不留到下次打开时突然补一刀）
+        if (ctl::takeExpr(exprReq) && ws.expr) exprPlay(exprReq);
         std::string planReq;
         if (ctl::takePlan(planReq)) {
             if (planReq.empty()) {
@@ -808,6 +889,39 @@ int main() {
         renderer->SetMvpMatrix(&proj);
         renderer->DrawModel();
 
+        // ── 整体不透明度（网页设置页的 alpha，第 14 节）───────────────────
+        // 「乘到最终颜色上」用一次全屏乘算做完，别去动每个 drawable 的 opacity：
+        // 桌面 GL 的 framebuffer 带 alpha，混合是 premultiplied（GL_ONE,
+        // ONE_MINUS_SRC_ALPHA），所以 dst = dst * k 同时缩了颜色和 alpha ——
+        // 对合成器就是一个整体半透明的浮层，背后桌面照常透出来。
+        //   glBlendFunc(GL_ZERO, GL_SRC_COLOR) → dst = 0*src + dst*srcColor = dst*k
+        // 固定管线在 3.3 兼容画像里还在（EGL context 就是 COMPATIBILITY，见 platform），
+        // 但 Cubism 那边留着 program 和 GL_TEXTURE_2D 绑定，得先拆掉。
+        // 只在 k<1 时做：k=1 时这一趟纯属浪费（每帧一次全屏写）。
+        if (ws.alpha < 0.999f) {
+            glUseProgram(0);
+            glDisable(GL_TEXTURE_2D);
+            glBlendFunc(GL_ZERO, GL_SRC_COLOR);
+            glColor4f(ws.alpha, ws.alpha, ws.alpha, ws.alpha);
+            glMatrixMode(GL_PROJECTION);
+            glPushMatrix();
+            glLoadIdentity();
+            glMatrixMode(GL_MODELVIEW);
+            glPushMatrix();
+            glLoadIdentity();
+            glBegin(GL_QUADS);
+            glVertex2f(-1.0f, -1.0f);
+            glVertex2f( 1.0f, -1.0f);
+            glVertex2f( 1.0f,  1.0f);
+            glVertex2f(-1.0f,  1.0f);
+            glEnd();
+            glPopMatrix();
+            glMatrixMode(GL_PROJECTION);
+            glPopMatrix();
+            glMatrixMode(GL_MODELVIEW);
+            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);   // 复原，下面 input region 还要读
+        }
+
         // ── 输入区域：只有她身上的像素接点击，其它地方点击穿透 ──────────
         // 每 10 帧（或 framebuffer 尺寸变了）把 back buffer 的 alpha 读回来，
         // 交给平台层转成 wl_surface 的 input region。
@@ -821,22 +935,29 @@ int main() {
         static unsigned long frameNo = 0;
         static bool wasDragging = false;
         static unsigned long dragFrames = 0;
+        static bool wasHidden = false;
         const bool dragging = platIsDragging();
         const bool justReleased = wasDragging && !dragging;   // 松手这一帧
+        // 取消隐藏那一帧也要立刻重算：隐藏期间平台层把输入区清空过（点击穿透），
+        // 不补这一下她会「看得见但点不到」，要等 10 帧后才恢复。
+        const bool justShown = wasHidden && !ws.hide;
         wasDragging = dragging;
+        wasHidden = ws.hide;
         if (dragging) ++dragFrames;
-        if (!kNoRegion) {
+        if (!kNoRegion && !ws.hide) {
             ++frameNo;
             if (!dragging &&
-                (justReleased || frameNo == 1 || frameNo % 10 == 0 || W != lastRW || H != lastRH)) {
+                (justReleased || justShown || frameNo == 1 || frameNo % 10 == 0 ||
+                 W != lastRW || H != lastRH)) {
                 static std::vector<unsigned char> pix;
                 pix.resize(static_cast<size_t>(W) * static_cast<size_t>(H) * 4);
                 glPixelStorei(GL_PACK_ALIGNMENT, 1);
                 glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pix.data());
                 platSetInputRegionFromAlpha(pix.data(), W, H, 8);
-                if (W != lastRW || H != lastRH || justReleased)
+                if (W != lastRW || H != lastRH || justReleased || justShown)
                     log_("[main] 输入区重算（第 %lu 帧，framebuffer %dx%d%s，拖动期间跳过 %lu 帧）",
-                         frameNo, W, H, justReleased ? "，刚松手" : "", dragFrames);
+                         frameNo, W, H, justReleased ? "，刚松手" : (justShown ? "，刚取消隐藏" : ""),
+                         dragFrames);
                 if (justReleased) dragFrames = 0;
                 lastRW = W;
                 lastRH = H;
@@ -846,6 +967,7 @@ int main() {
         platSwapBuffers();
         platPollEvents();
     }
+    web::shutdown();   // 先关设置页的监听，下面才是窗口/GL
     platShutdown();
 
     // ── 收尾：拿到的都还回去（顺序：渲染器 → 模型 → moc → 框架）────
