@@ -387,10 +387,13 @@ int main() {
     // 2026-11-09 21:3x：默认播 Animation/脱捕.motion3 —— 13.15s、loop=true，
     // 驱动 AngleX/Y/Z + PositionX/Y/Z + 手臂四关节 + 眼睛嘴 + 呆滞/光效，
     // 是这整套素材里唯一一段「完整的动作」。之前把它当「会散架」是误判。
-    //   MIYU_IDLE_SINE=1   回退到我手写的正弦微动
-    //   MIYU_IDLE_MOTION=1 改播 IDLE.motion3（那是电击/冒汗/泪花的特效，不是待机）
-    const bool kUseSine = std::getenv("MIYU_IDLE_SINE") != nullptr;
-    const bool kUseLegacyIdle = std::getenv("MIYU_IDLE_MOTION") != nullptr;
+    // 2026-11-09 21:4x：这些都是**特殊动作**（脱捕/举手/竖手指/狗尾草），不该当待机一直播。
+    // 所以默认回到手写正弦微动；要播动作显式设 MIYU_MOTION=文件名。
+    //   MIYU_MOTION=脱捕.motion3.json   播指定动作（循环）
+    //   MIYU_NO_IDLE=1                  全关，只有 physics
+    const char* mfNow = std::getenv("MIYU_MOTION");
+    const bool kUseSine = (mfNow == nullptr);
+    const bool kUseLegacyIdle = false;
     Csm::CubismMotionManager* motionManager = nullptr;
     Csm::CubismMotion* idleMotion = nullptr;
     if (kNoIdle) {
@@ -398,8 +401,10 @@ int main() {
     } else if (kUseSine) {
         log_("[main] 待机：手写正弦微动（MIYU_IDLE_SINE）");
     } else {
-        const std::string ip = std::string(kModelDir) +
-            (kUseLegacyIdle ? "Animation/IDLE.motion3.json" : "Animation/脱捕.motion3.json");
+        // MIYU_MOTION=文件名（不带路径）可以指定播哪一段，默认脱捕
+        const char* mf = std::getenv("MIYU_MOTION");
+        const std::string ip = std::string(kModelDir) + "Animation/" +
+            (mf ? mf : (kUseLegacyIdle ? "IDLE.motion3.json" : "脱捕.motion3.json"));
         std::vector<char> ib = slurp(ip);
         if (ib.empty()) {
             log_("[main] 待机动作：读不到 %s", ip.c_str());
