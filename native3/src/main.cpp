@@ -1541,6 +1541,7 @@ int main() {
 
     double lastT = platTime();
     while (!platShouldClose()) {
+        const double tLoop0 = platTime();   // 整个循环体的总耗时
         const double now = platTime();
         float dt = static_cast<float>(now - lastT);
         lastT = now;
@@ -1701,16 +1702,26 @@ int main() {
                 }
             }
         }
+        // 2026-11-10：分段计时（每 5 秒打一行），用来找出每帧真正的开销在哪。
+        // 关帧率不重要时，这段能指出 physics / Update / Draw / 后处理 各占多少。
+        static double tPhys = 0, tUpd = 0, tDraw = 0, tPost = 0, tIn = 0, tAll = 0;
+        static int nFrames = 0;
+        static double lastProf = 0;
+        const double tA = platTime();
         if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
+        const double tB = platTime();
         model->Update();
+        const double tC = platTime();
         renderer->SetMvpMatrix(&proj);
         renderer->DrawModel();
+        const double tD = platTime();
 
         // ── 十七：抄模型 alpha → 垫背景三件 → （十八）FXAA → 合成回窗口 ─────
         // 顺序不能换：capturePrev 必须紧跟在 DrawModel 后面（这时目标里只有她，
         // 抄下来的 alpha 才是干净的）；三件必须在这里画（它们在模型下面，见
         // postfx 顶部注释①）；FXAA 必须在**三件之后**（它要混整张成品，包括影子边和
         // 气泡边）；合成必须在 swap 之前。
+        const double tE0 = platTime();
         postfx::capturePrev();
         {
             int pcx = 0, pcy = 0, phw = 0, phh = 0;
@@ -1726,6 +1737,18 @@ int main() {
             GLuint src = postfx::targetTex();
             if (wantFxaa && postfx::applyFxaa(DW, DH)) src = postfx::fxTex();
             postfx::composite(ws.alpha, W, H, src);
+        }
+        {
+            const double tF = platTime();
+            tPhys += tB - tA; tUpd += tC - tB; tDraw += tD - tC; tPost += tF - tE0;
+            ++nFrames;
+            if (now - lastProf > 5.0) {
+                lastProf = now;
+                const double n = nFrames > 0 ? nFrames : 1;
+                log_("[prof] 每帧 物理%.2f 更新%.2f 绘制%.2f 后处理%.2f ms | %d 帧/5s",
+                     tPhys/n*1000, tUpd/n*1000, tDraw/n*1000, tPost/n*1000, nFrames);
+                tPhys = tUpd = tDraw = tPost = 0; nFrames = 0;
+            }
         }
 
         // ── 整体不透明度（网页设置页的 alpha，第 14 节）───────────────────
@@ -1815,8 +1838,31 @@ int main() {
             }
         }
 
-        platSwapBuffers();
-        platPollEvents();
+        {
+            const double tG = platTime();
+            platSwapBuffers();
+            const double tH = platTime();
+            platPollEvents();
+            const double tI = platTime();
+            // swap 和事件处理也计时（niri 下 swap 可能等 frame callback，事件里可能重算输入区）
+            static double tSwap = 0, tEv = 0; static int nSw = 0;
+            static double lastSw = 0;
+            tSwap += tH - tG; tEv += tI - tH; ++nSw;
+            if (now - lastSw > 5.0) {
+                lastSw = now;
+                const double n = nSw > 0 ? nSw : 1;
+                log_("[prof2] 每帧 swap%.2f 事件%.2f ms | %d 帧/5s", tSwap/n*1000, tEv/n*1000, nSw);
+                tSwap = tEv = 0; nSw = 0;
+            }
+            static double tLoopSum = 0; static int nLoop = 0; static double lastLoop = 0;
+            tLoopSum += platTime() - tLoop0; ++nLoop;
+            if (now - lastLoop > 5.0) {
+                lastLoop = now;
+                log_("[prof3] 循环体总耗时 %.2f ms/帧 | %d 帧/5s | 折合单核 %.1f%%",
+                     tLoopSum/nLoop*1000, nLoop, tLoopSum/5.0*100);
+                tLoopSum = 0; nLoop = 0;
+            }
+        }
         // 第十六节：帧率上限（15/30/60）。睡在这里而不是循环开头 —— 这一帧的活已经干完。
         framePace(ws.fps, platTime());
     }
