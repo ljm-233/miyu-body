@@ -102,6 +102,7 @@ struct IdleRig {
     Csm::csmInt32 iBreath = -1, iAx = -1, iAz = -1, iBz = -1;
     double segT0 = 0.0, segLen = 4.0;
     float fAx = 0, tAx = 0, fAz = 0, tAz = 0, fBz = 0, tBz = 0;
+    float lastAx = 0, lastAz = 0, lastBz = 0, lastBr = 0;   // 供视线在此基础上叠加
     bool ready = false;
 };
 static IdleRig gIdle;
@@ -126,9 +127,9 @@ static void idleTick(Csm::CubismModel* model, double now) {
         gIdle.segT0 = now;
         gIdle.segLen = 3.0 + 5.0 * idleRnd();          // 3~8 秒换一个姿态
         gIdle.fAx = gIdle.tAx; gIdle.fAz = gIdle.tAz; gIdle.fBz = gIdle.tBz;
-        gIdle.tAx = (idleRnd() * 2.0f - 1.0f) * 7.0f;  // 头左右 ±7 度
-        gIdle.tAz = (idleRnd() * 2.0f - 1.0f) * 3.5f;  // 歪头 ±3.5 度
-        gIdle.tBz = (idleRnd() * 2.0f - 1.0f) * 2.5f;  // 重心 ±2.5
+        gIdle.tAx = (idleRnd() * 2.0f - 1.0f) * 1.2f;  // AngleX 是整体平移不是转头，只给 ±1.2
+        gIdle.tAz = (idleRnd() * 2.0f - 1.0f) * 0.8f;  // 歪头 ±0.8（同样道理，多了像纸片歪）
+        gIdle.tBz = (idleRnd() * 2.0f - 1.0f) * 1.5f;  // 重心 ±1.5
     }
     const float u = static_cast<float>((now - gIdle.segT0) / gIdle.segLen);
     const float s = u * u * (3.0f - 2.0f * u);           // smoothstep：起止都不突
@@ -137,10 +138,13 @@ static void idleTick(Csm::CubismModel* model, double now) {
     const float bz = gIdle.fBz + (gIdle.tBz - gIdle.fBz) * s;
     const float br = 0.5f + 0.5f * sinf(static_cast<float>(now * 2.0 * 3.14159265358979 / 4.2));
     // 呼吸用 Set 不用 Add：ParamBreath 的默认值是 1.0，Add 上去直接顶到上限（实测一直 1.000）
+    gIdle.lastAx = ax; gIdle.lastAz = az; gIdle.lastBz = bz; gIdle.lastBr = br;
+    // 一律用 Set：AngleX/AngleZ 和 ParamEyeBall 一样**不会被 LoadParameters 归零**，
+    // 用 Add 会每帧累加，几帧就顶死在 ±30（实测 ax 一直是 30.00）。
     if (gIdle.iBreath >= 0) model->SetParameterValue(gIdle.iBreath, br, 1.0f);
-    if (gIdle.iAx >= 0)     model->AddParameterValue(gIdle.iAx, ax, 1.0f);
-    if (gIdle.iAz >= 0)     model->AddParameterValue(gIdle.iAz, az, 1.0f);
-    if (gIdle.iBz >= 0)     model->AddParameterValue(gIdle.iBz, bz, 1.0f);
+    if (gIdle.iAx >= 0)     model->SetParameterValue(gIdle.iAx, ax, 1.0f);
+    if (gIdle.iAz >= 0)     model->SetParameterValue(gIdle.iAz, az, 1.0f);
+    if (gIdle.iBz >= 0)     model->SetParameterValue(gIdle.iBz, bz, 1.0f);
     // 诊断：每 2 秒打一行，**在 Add 之后**读（在之前读是上一帧 Load 重置后的 0，会骗人）
     static double lastLog = -1e9;
     if (now - lastLog > 2.0) {
@@ -238,10 +242,11 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     gLook.ex += (nx * 1.0f - gLook.ex) * a;
     gLook.ey += (ny * 1.0f - gLook.ey) * a;
 
-    // 头用 Add：待机微动也写 ParamAngleX，Add 才是「叠在它上面」（实测 Add 前读到的
-    // 恰好是 idle 本帧算的值，说明这两个参数每帧确实被 LoadParameters 归零了）。
-    if (gLook.iAx >= 0) model->AddParameterValue(gLook.iAx, gLook.cx, 1.0f);
-    if (gLook.iAy >= 0) model->AddParameterValue(gLook.iAy, gLook.cy, 1.0f);
+    // 2026-11-09 21:5x：AngleX/AngleZ **也不会被 LoadParameters 归零**，用 Add 会累加，
+    // 实测 ax 一直顶在 30.00（还带得她整个人歪）。所以这里也必须 Set：
+    // 值 = 待机那本帧算出来的 + 视线偏移，两件事合成一次写。
+    if (gLook.iAx >= 0) model->SetParameterValue(gLook.iAx, gIdle.lastAx + gLook.cx, 1.0f);
+    if (gLook.iAy >= 0) model->SetParameterValue(gLook.iAy, gLook.cy, 1.0f);
     // 眼珠必须用 **Set**，不能用 Add —— 实测出来的，跟"默认 0 就用 Add"的经验相反：
     // ParamEyeBallX/Y（本模型索引 76/77）**不会被 LoadParameters 归零**，Add 一帧一帧累加，
     // 约 4 帧就顶到 -1/+1（日志里 eyeX 一直钉在 -1.00，平滑值才 -0.33）。
