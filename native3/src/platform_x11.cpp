@@ -144,3 +144,17 @@ void platSetTapEnabled(bool) {}
 bool platSnapCorner(const char*) { return false; }
 void platSetHidden(bool) {}
 const char* platOutputLabel() { return "X11"; }
+
+// 二十：拖动三件（抓起反馈 / 松手惯性 / 贴边软阻力）。
+// X11 这条路窗口拖动是 GLFW 自己的（platform.h 里写明 platIsDragging 恒 false），
+// 三个旋钮在备胎上都没有落点 —— 接受调用、什么都不做，两个 target 共用一套调用。
+void platSetDragFeel(bool, bool, bool) {}
+
+// 二十：X11 备胎没有拖动速度（platIsDragging 恒 false），倾斜永远回 0。
+void platSetDragSpring(float) {}
+
+bool platDragVelocity(float* vx, float* vy) {
+    if (vx) *vx = 0.0f;
+    if (vy) *vy = 0.0f;
+    return false;
+}

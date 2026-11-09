@@ -143,6 +143,269 @@ static IdleStyle idleStyleOf(const char* name) {
     return IdleStyle{1.0f, 2.5f, 6.0f};
 }
 
+// ── 二十：时间感 —— 她知道自己几点（2026-11-10 01:xx）──────────────────
+// 只调**参数**，不改帧率、不改动作库：时段给出两个乘数（待机幅度 / 眨眼频率），
+// 在 idleStyle 和网页 idle 之上**再乘一次**（不是覆盖），所以「活泼 + 白天」还是活泼，
+// 「活泼 + 深夜」就是打六折的活泼。
+//
+// 三件必须遵守的事：
+//   ① 取 **本地时间**（localtime_r），不是 UTC；机器的时区就是他的时区。
+//   ② 每 60 秒重判一次（每帧调 localtime 是浪费，但每分钟一次完全无所谓），
+//      跨时段时打一行日志 —— 不然「她怎么突然安静了」查不出来。
+//   ③ MIYU_FAKE_HOUR=2 覆盖钟点，只给验证用（真机上没人在 02:00 蹲着看待机幅度）。
+struct TimeSeg {
+    const char* name;   // 深夜 / 清晨 / 白天 / 傍晚
+    const char* span;   // 日志里显示的时段
+    float amp;          // 待机幅度倍率
+    float blink;        // 眨眼频率倍率
+    bool  doze;         // 每 40–90 秒来一次 3 秒的低头
+};
+static TimeSeg timeSegOf(int hour) {
+    if (hour >= 0  && hour < 6)  return TimeSeg{"深夜", "0–5",   0.60f, 0.55f, true};
+    if (hour >= 6  && hour < 9)  return TimeSeg{"清晨", "6–9",   1.15f, 1.00f, false};
+    if (hour >= 9  && hour < 18) return TimeSeg{"白天", "9–18",  1.00f, 1.00f, false};
+    if (hour >= 18 && hour < 23) return TimeSeg{"傍晚", "18–23", 0.90f, 0.90f, false};
+    return TimeSeg{"深夜", "23–5", 0.60f, 0.55f, true};   // 23 点往后也算深夜（表里没写的半小时段）
+}
+
+static TimeSeg gSeg{"白天", "9–18", 1.0f, 1.0f, false};
+static int    gSegHour    = -999;      // 上次判出来的钟点（-999 = 还没判过）
+static double gSegCheckT  = -1e9;      // 上次判的时刻（60 秒一次）
+static double gDozeNext   = 0.0;       // 下一次低头的时刻（0 = 还没排）
+
+static float timeAmp()   { return web::settings().timeAware ? gSeg.amp   : 1.0f; }
+static float timeBlink() { return web::settings().timeAware ? gSeg.blink : 1.0f; }
+
+// 每帧调，但只有到点（60 秒）才真的去问钟
+static void timeTick(double now) {
+    if (now - gSegCheckT < 60.0) return;
+    gSegCheckT = now;
+    int h = -1;
+    if (const char* fh = std::getenv("MIYU_FAKE_HOUR")) {
+        h = std::atoi(fh);                       // 验证用：假钟点，真逻辑
+        if (h < 0) h = 0;
+        if (h > 23) h = 23;
+    } else {
+        const std::time_t t = std::time(nullptr);
+        struct tm lt{};
+        localtime_r(&t, &lt);
+        h = lt.tm_hour;
+    }
+    if (h == gSegHour) return;
+    const TimeSeg seg = timeSegOf(h);
+    const bool first = (gSegHour == -999);
+    gSegHour = h;
+    gSeg = seg;
+    gDozeNext = 0.0;                             // 换时段：低头重新排期
+    char who[48];
+    if (std::getenv("MIYU_FAKE_HOUR")) std::snprintf(who, sizeof who, "假钟 %d 点", h);
+    else                               std::snprintf(who, sizeof who, "本地 %d 点", h);
+    log_("[time] %s时段：%s（%s，%s）待机 ×%.2f 眨眼 ×%.2f%s | timeAware=%s",
+         first ? "首次判定 → " : "跨时段 → ", seg.name, who, seg.span,
+         seg.amp, seg.blink, seg.doze ? " + 每 40–90 秒一次低头（3.0s）" : "",
+         web::settings().timeAware ? "开" : "关（乘数不生效）");
+}
+
+// ── 二十之二：拖动 → 让**各个部位**甩起来（喂 physics，不是整体歪）────────
+// 他最后那句话是准的：「是身体各个部位，不是整体」。整张图转（投影矩阵）看着就是
+// 一张画在转，不是她。**部位级摆动只有一条路：把 AngleX/AngleZ/PositionY 喂给 physics。**
+//
+// 原理（16.2 那条反过来用）：
+//   · AngleX/AngleY/AngleZ/PositionX/Y/Z 自己**不驱动任何 drawable**
+//   · 但它们是 physics3.json 的**输入**，输出是头发、裙摆、尾巴、配饰那几十根摇摆参数
+//   · 所以「这些参数一直是常数 → 物理没有输入变化 → 头发裙摆纹丝不动 → 看起来像
+//     一张图在平移」，这正是他觉得呆的原因。喂进去，physics 每帧 Evaluate 就会把各
+//     部位甩起来，而且每根的刚度/相位不同 → 天然的「各部位，不是整体」
+//
+// 数值按他给的（v 是**弹簧速度** px/s，不是鼠标速度）：
+//   AngleX    = clamp(-vx * 0.035, ±16)   ← 往右拖取反 = 往后仰
+//   AngleZ    = clamp( vx * 0.02,  ±10)
+//   PositionY = clamp( vy * 0.02,  ±12)
+// 有速度就每帧 Set；弹簧停稳后以 0.15s 时间常数衰减回 0。
+struct SwayRig {
+    float ax = 0, az = 0, py = 0;
+    float vxKeep = 0, vyKeep = 0;
+};
+static SwayRig gSway;
+static constexpr float  SWAY_TAU_S = 0.15f;   // 停稳后回 0 的时间常数
+
+// 每帧一次：算目标 → Set 进模型。必须在 idleTick/lookTick 之后（它们每帧先写绝对值），
+// 在 planTick 之前（计划仍是这一帧最后的写入者）。
+static void swayTick(Csm::CubismModel* model, float dt, double now) {
+    static Csm::csmInt32 iAz = -2, iPy = -2;
+    if (iAz == -2) {
+        Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+        iAz = model->GetParameterIndex(m->GetId("AngleZ"));
+        iPy = model->GetParameterIndex(m->GetId("PositionY"));
+    }
+    const web::Settings& ws = web::settings();
+    const float gain = ws.dragSway;
+
+    float vx = 0.0f, vy = 0.0f;
+    // 注意是 platDragVelocity（弹簧速度），**不要求正在拖** ——
+    // 松手滑行那一段物理还要接着甩，那才是「惯性看得出来」的地方
+    const bool vActive = platDragVelocity(&vx, &vy);
+
+    float tax = 0.0f, taz = 0.0f, tpy = 0.0f;
+    if (vActive) {
+        tax = -vx * 0.035f; if (tax >  16.0f) tax =  16.0f; if (tax < -16.0f) tax = -16.0f;
+        taz =  vx * 0.02f;  if (taz >  10.0f) taz =  10.0f; if (taz < -10.0f) taz = -10.0f;
+        tpy =  vy * 0.02f;  if (tpy >  12.0f) tpy =  12.0f; if (tpy < -12.0f) tpy = -12.0f;
+        tax *= gain; taz *= gain; tpy *= gain;
+        gSway.vxKeep = vx; gSway.vyKeep = vy;
+        // 一点点平滑（0.05s）：弹簧速度本身是连续的，但撞边会在两帧之间反号，
+        // 直接 Set 会让头发「咔」一下。0.05s 只压尖峰，不影响跟手。
+        const float a = (dt / 0.05f > 1.0f) ? 1.0f : dt / 0.05f;
+        gSway.ax += (tax - gSway.ax) * a;
+        gSway.az += (taz - gSway.az) * a;
+        gSway.py += (tpy - gSway.py) * a;
+    } else {
+        // 停稳了：0.15s 时间常数回 0（物理会自己晃回去，不用我们给反向脉冲）
+        const float a = (dt / SWAY_TAU_S > 1.0f) ? 1.0f : dt / SWAY_TAU_S;
+        gSway.ax += (0.0f - gSway.ax) * a;
+        gSway.az += (0.0f - gSway.az) * a;
+        gSway.py += (0.0f - gSway.py) * a;
+        if (std::fabs(gSway.ax) < 0.02f) gSway.ax = 0.0f;
+        if (std::fabs(gSway.az) < 0.02f) gSway.az = 0.0f;
+        if (std::fabs(gSway.py) < 0.02f) gSway.py = 0.0f;
+    }
+
+    // 静止时的极慢轻摆（swayIdle，只在 lively 下）：同样喂 AngleX/AngleZ 让部位晃，
+    // 而不是整张图歪。15 秒一个来回。
+    float eax = 0.0f, eaz = 0.0f;
+    if (ws.swayIdle && !vActive && ws.idleStyle == "lively") {
+        eax = 1.2f * std::sin(static_cast<float>(now * 2.0 * 3.14159265 / 15.0 + 1.7));
+        eaz = 0.6f * std::sin(static_cast<float>(now * 2.0 * 3.14159265 / 15.0 + 0.4));
+    }
+
+    const float ax = gSway.ax + eax, az = gSway.az + eaz, py = gSway.py;
+    if (gIdle.iAx >= 0) model->SetParameterValue(gIdle.iAx, model->GetParameterValue(gIdle.iAx) + ax, 1.0f);
+    if (iAz >= 0)       model->SetParameterValue(iAz, model->GetParameterValue(iAz) + az, 1.0f);
+    // PositionX 只影响物理（重心），给一点横向的力，裙摆会跟着拖
+    if (gIdle.iBz >= 0) model->SetParameterValue(gIdle.iBz, model->GetParameterValue(gIdle.iBz) + ax * 0.25f, 1.0f);
+    // PositionY：写绝对值（它不会被 LoadParameters 归零，读回来加会累到参数上限）
+    if (iPy >= 0) model->SetParameterValue(iPy, py, 1.0f);
+
+    // 日志：每 0.5 秒一行（他点名要的格式）
+    static double lastLog = -1e9;
+    if ((vActive || std::fabs(ax) > 0.05f || std::fabs(az) > 0.05f || std::fabs(py) > 0.05f)
+        && now - lastLog > 0.5) {
+        lastLog = now;
+        log_("[sway] vx=%.0f vy=%.0f -> AngleX=%.1f AngleZ=%.1f PositionY=%.1f%s",
+             gSway.vxKeep, gSway.vyKeep, ax, az, py, vActive ? "（弹簧在动）" : "（衰减中）");
+    }
+}
+
+// 投影整体倾斜（swayTilt，默认 0 = 关）。整张图转看着像画在转，所以默认不给。
+static float swayTiltDeg(double now, float dt) {
+    static float ang = 0, vel = 0;
+    const web::Settings& ws = web::settings();
+    const float maxDeg = ws.swayTilt;
+    if (maxDeg <= 0.001f) { ang = vel = 0; return 0.0f; }
+    float vx = 0.0f, vy = 0.0f;
+    const bool vActive = platDragVelocity(&vx, &vy);
+    if (vActive) {
+        float deg = (vx / 500.0f) * 3.0f * (maxDeg / 4.5f);
+        if (deg >  maxDeg) deg =  maxDeg;
+        if (deg < -maxDeg) deg = -maxDeg;
+        const float a = (dt / 0.06f > 1.0f) ? 1.0f : dt / 0.06f;
+        ang += (deg - ang) * a;
+        vel = (deg - ang) / 0.06f;
+    } else {
+        const float acc = -18.0f * 18.0f * ang - 2.0f * 0.65f * 18.0f * vel;
+        vel += acc * dt;
+        ang += vel * dt;
+        if (std::fabs(ang) < 0.005f && std::fabs(vel) < 0.02f) { ang = 0; vel = 0; }
+    }
+    (void)now;
+    return ang;
+}
+
+// ── 二十：两段「小动作」（抓起来那一下 / 深夜低头）──────────────────────
+// 都是**短脉冲**：一个平滑的 0…1…0 包络，乘到 AngleX / PositionY 的增量上。
+// 为什么不用 plans/*.json：计划是「外面的时间线」，会盖掉待机/视线一整段；
+// 这两个是叠在待机上的几十毫秒抖动，写死在这儿更省事，也不用新增文件。
+// PositionY 只驱动 physics（头发/裙摆），所以视觉上就是「被拎起来晃了一下」——
+// 这一条是他要的效果，不是妥协。
+struct Pulse { bool on; double t0; double dur; float aAngle; float aPosY; };
+static Pulse gGrab{false, 0, 0.42, -2.4f, 6.0f};   // 0.42s：微微上提 + 一点点后仰
+static Pulse gDoze{false, 0, 3.00, -1.5f, -7.0f};   // 3.00s：低头（和 点头.json 同一套参数）
+
+// 返回这个脉冲这一帧的 0…1 包络（缓入缓出），跑完自己关掉
+static float pulseEnv(Pulse& p, double now) {
+    if (!p.on) return 0.0f;
+    const double u = (now - p.t0) / p.dur;
+    if (u >= 1.0) { p.on = false; return 0.0f; }
+    if (u < 0.0)  return 0.0f;
+    return 0.5f - 0.5f * std::cos(static_cast<float>(2.0 * 3.14159265358979 * u));
+}
+
+static void feelTick(Csm::CubismModel* model, double now) {
+    static Csm::csmInt32 iAx = -2, iPy = -2;
+    if (iAx == -2) {
+        Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+        iAx = model->GetParameterIndex(m->GetId("AngleX"));
+        iPy = model->GetParameterIndex(m->GetId("PositionY"));
+    }
+
+    // 起播判定：开始拖的那一瞬（platform 每帧告诉我们的）
+    static bool wasDrag = false;
+    const bool nowDrag = platIsDragging();
+    if (nowDrag && !wasDrag) {
+        if (web::settings().grab) {
+            gGrab.on = true; gGrab.t0 = now;
+            log_("[grab] 抓起反馈起播：%.2fs（AngleX %+.1f° / PositionY %+.1f，"
+                 "视觉上是头发裙摆被拎起来晃一下）", gGrab.dur, gGrab.aAngle, gGrab.aPosY);
+        } else {
+            log_("[grab] 开始拖动（抓起反馈关着，不播）");
+        }
+    }
+    wasDrag = nowDrag;
+
+    // 深夜低头：40–90 秒一次，只在它自己的时段里排
+    if (web::settings().timeAware && gSeg.doze) {
+        if (!gDoze.on) {
+            if (gDozeNext <= 0.0) gDozeNext = now + 40.0 + 50.0 * double(idleRnd());
+            if (now >= gDozeNext) {
+                gDoze.on = true; gDoze.t0 = now;
+                gDozeNext = 0.0;
+                log_("[doze] 深夜低头起播：%.1fs 缓入缓出（AngleX %+.1f / PositionY %+.1f）",
+                     gDoze.dur, gDoze.aAngle, gDoze.aPosY);
+            }
+        }
+    } else if (gDoze.on) {
+        gDoze.on = false;                      // 换时段/关掉 timeAware：立刻收
+        log_("[doze] 低头被打断（时段变了或 timeAware 关了）");
+    }
+
+    const float eGrab = pulseEnv(gGrab, now);
+    const float eDoze = pulseEnv(gDoze, now);
+    const float ea = eGrab * gGrab.aAngle + eDoze * gDoze.aAngle;
+    const float ep = eGrab * gGrab.aPosY + eDoze * gDoze.aPosY;
+    // AngleX：叠在**当前值**上再 Set（待机/视线这一帧已经写过它了）。
+    // PositionY：**直接写绝对值**，绝对不要读回来加 —— 它和 AngleX 一样不会被
+    // LoadParameters 归零，加了就一帧一帧累积（实测 3 帧就从 0 顶到参数上限 30.00，
+    // 她整个人往上飘出去）。待机不碰 PositionY，所以「脉冲值 = 绝对值」是对的。
+    static float lastPy = 0.0f;
+    if (ea != 0.0f || ep != 0.0f || lastPy != 0.0f) {
+        if (iAx >= 0) model->SetParameterValue(iAx, model->GetParameterValue(iAx) + ea, 1.0f);
+        if (iPy >= 0) model->SetParameterValue(iPy, ep, 1.0f);
+        lastPy = ep;
+        // 诊断：每 0.1 秒一行，把「包络走到哪、最终写进去多少」报出来 ——
+        // 「抓起那一下到底动了没有」只能靠这几个数，截图看不出 0.4 秒的过程
+        static double lastFeel = -1e9;
+        if (now - lastFeel > 0.1) {
+            lastFeel = now;
+            log_("[grab] 进行中：%s包络%.2f/%s包络%.2f → ΔAngleX=%+.2f ΔPositionY=%+.2f"
+                 " | 写入后 angleX=%.2f positionY=%.2f",
+                 gGrab.on ? "" : "（抓起已完）", eGrab, gDoze.on ? "" : "（低头已完）", eDoze, ea, ep,
+                 iAx >= 0 ? model->GetParameterValue(iAx) : -999.0f,
+                 iPy >= 0 ? model->GetParameterValue(iPy) : -999.0f);
+        }
+    }
+}
+
+
 static void idleTick(Csm::CubismModel* model, double now) {
     if (!gIdle.ready) idleInit(model);
 
@@ -169,10 +432,12 @@ static void idleTick(Csm::CubismModel* model, double now) {
     const float u = static_cast<float>((now - gIdle.segT0) / gIdle.segLen);
     const float s = u * u * (3.0f - 2.0f * u);           // smoothstep：起止都不突
     // 网页设置页的「待机幅度」倍率（0 = 完全不摆，只留呼吸）× 风格系数。
-    // 倍率本身过一道低通：滑块一拖到底、风格一换，都不会定住或甩开，是几帧内收放。
+    // 二十：再乘一次**时段**系数（深夜 0.6 / 清晨 1.15 / 白天 1.0 / 傍晚 0.9）。
+    // 三层是**相乘**不是覆盖 —— 「活泼 + 深夜」= 打六折的活泼，不是退回「自然」。
+    // 倍率本身过一道低通：滑块一拖到底、风格一换、跨时段，都不会定住或甩开，是几帧内收放。
     static float kAmp = 1.0f;
     {
-        const float want = style.amp * web::settings().idle;
+        const float want = style.amp * web::settings().idle * timeAmp();
         kAmp += (want - kAmp) * 0.12f;
         if (fabsf(want - kAmp) < 0.002f) kAmp = want;          // 收敛后贴死，别永远差一点
     }
@@ -188,12 +453,14 @@ static void idleTick(Csm::CubismModel* model, double now) {
     if (gIdle.iAx >= 0)     model->SetParameterValue(gIdle.iAx, ax, 1.0f);
     if (gIdle.iAz >= 0)     model->SetParameterValue(gIdle.iAz, az, 1.0f);
     if (gIdle.iBz >= 0)     model->SetParameterValue(gIdle.iBz, bz, 1.0f);
-    // 诊断：每 2 秒打一行，**在 Add 之后**读（在之前读是上一帧 Load 重置后的 0，会骗人）
+    // 诊断：每 2 秒打一行，**在 Add 之后**读（在之前读是上一帧 Load 重置后的 0，会骗人）。
+    // 二十：多打 amp 一项 —— 时段到底有没有生效，就看这个数（深夜应 ≈ 白天的 0.6 倍）。
     static double lastLog = -1e9;
     if (now - lastLog > 2.0) {
         lastLog = now;
-        log_("[idle] 算 ax=%.2f | 写入后模型 ax=%.2f az=%.2f br=%.3f",
-             ax,
+        log_("[idle] 算 ax=%.2f amp=%.3f（风格 %.2f × 设置 %.2f × 时段 %.2f %s）"
+             " | 写入后模型 ax=%.2f az=%.2f br=%.3f",
+             ax, kAmp, style.amp, web::settings().idle, timeAmp(), gSeg.name,
              gIdle.iAx >= 0 ? model->GetParameterValue(gIdle.iAx) : -999.0f,
              gIdle.iAz >= 0 ? model->GetParameterValue(gIdle.iAz) : -999.0f,
              gIdle.iBreath >= 0 ? model->GetParameterValue(gIdle.iBreath) : -999.0f);
@@ -1687,6 +1954,12 @@ static void webApply(const char* key) {
     else if (!strcmp(key, "tap"))    platSetTapEnabled(web::settings().tap);
     else if (!strcmp(key, "corner")) platSnapCorner(web::settings().corner.c_str());
     else if (!strcmp(key, "hide"))   platSetHidden(web::settings().hide);
+    // 二十：拖动体感三件一起推给平台层（`grab` 的判定在 main，但平台也要知道，
+    // 好让日志和「关掉时立刻收」这件事在同一个地方说完）；timeAware 每帧读，不用动作。
+    else if (!strcmp(key, "grab") || !strcmp(key, "inertia") || !strcmp(key, "edgeSoft"))
+        platSetDragFeel(web::settings().grab, web::settings().inertia,
+                        web::settings().edgeSoft);
+    else if (!strcmp(key, "dragSpring")) platSetDragSpring(web::settings().dragSpring);
     log_("[web] 生效：%s", key);
 }
 
@@ -1739,6 +2012,9 @@ int main() {
         if (getenv("MIYU_NO_TAP") && web::settings().tap) web::settings().tap = false;
         const web::Settings& s0 = web::settings();
         platSetTapEnabled(s0.tap);
+        // 二十：拖动手感三项开机就要落一遍（settings.json 里存的是关的话要真关掉）
+        platSetDragFeel(s0.grab, s0.inertia, s0.edgeSoft);
+        platSetDragSpring(s0.dragSpring);
         if (s0.scale != 1.0f) platSetScale(s0.scale);
         if (s0.corner != "free") platSnapCorner(s0.corner.c_str());
         if (s0.hide) platSetHidden(true);
@@ -1974,6 +2250,9 @@ int main() {
 
         // 网页设置页：每帧收一个连接（非阻塞，最多两个 accept，绝不卡渲染）
         web::poll(now);
+        // 二十：时段判定（内部只在 60 秒到点时才真的问钟，每帧调不花钱）。
+        // 必须放在 idleTick / 眨眼之前 —— 它们这一帧就要读乘数。
+        timeTick(now);
         const web::Settings& ws = web::settings();
         // 第十六节：这两项不归渲染管，直接喂给 ctl —— 说话那一下读的就是它们
         // （内部只在值变了才打日志，每帧调不刷屏）。
@@ -2044,6 +2323,20 @@ int main() {
         const float k = (sH < sW) ? sH : sW;
         Csm::CubismMatrix44 proj;
         proj.Scale(2.0f * k / static_cast<float>(W), 2.0f * k / static_cast<float>(H));
+        // 二十之二：可选的整体倾斜（swayTilt，默认 0 = 关）。乘在 Scale 之后 =
+        // 在 NDC 里绕画面中心转，画布怎么缩放都不影响角度。
+        const float swayDeg = swayTiltDeg(now, dt);
+        if (std::fabs(swayDeg) > 0.001f) {
+            const float rad = swayDeg * 3.14159265f / 180.0f;
+            const float cs = std::cos(rad), sn = std::sin(rad);
+            Csm::CubismMatrix44 rot;
+            Csm::csmFloat32 rm[16] = { cs, -sn, 0, 0,
+                                             sn,  cs, 0, 0,
+                                              0,   0, 1, 0,
+                                              0,   0, 0, 1 };
+            rot.SetMatrix(rm);
+            proj.MultiplyByMatrix(&rot);
+        }
 
         // 顺序是死规矩：LoadParameters → 动作 → 眨眼 → physics → Update。
         // 眨眼必须夹在动作之后（动作会写参数，眨眼要压过它）、Update 之前（Update 才把
@@ -2095,6 +2388,13 @@ int main() {
         int lw = 0, lh = 0;
         platGetLogicalSize(&lw, &lh);
         lookTick(model, dt, now, lw, lh);
+        // 二十之二：拖动 → 喂 physics，让各部位甩起来（必须在待机/视线之后，
+        // 计划之前；它是在当前值上加，不覆盖待机）
+        swayTick(model, dt, now);
+        // 二十：抓起来那一下 + 深夜低头。位置就在这儿 —— 待机/视线已经写完，
+        // 它俩是**在结果上再加一点**（读当前值再 Set），不会把待机抹掉；
+        // 计划还在后面，所以「计划在播」时这两个小脉冲照样会被计划盖过去（对的）。
+        feelTick(model, now);
         // 计划：最后一个写参数的（盖过待机/IDLE motion/视线），之后才是眨眼和 physics
         planTick(model, now);
         // 计划要是也写了嘴，正在说话时把嘴抢回来说话那一边（顺序上计划在后面，所以补这一下）
@@ -2116,12 +2416,14 @@ int main() {
             // blink≈0 直接**不调 UpdateParameters**（让它自己眨会永远闭着），
             // 眼睛参数由 LoadParameters 保持默认（睁），日志打点照旧 —— 所以是「0 条闭眼」。
             static float lastBlinkK = -1.0f;
-            const float bk = ws.blink;
+            // 二十：时段再乘一次（深夜 ×0.55 = 更少眨）。乘出来的值才是有效倍率，
+            // 所以 lastBlinkK 比的就是乘完的 —— 跨时段时它会变，间隔跟着重设。
+            const float bk = ws.blink * timeBlink();
             if (bk != lastBlinkK) {
                 lastBlinkK = bk;
                 if (bk > 0.001f) eyeBlink->SetBlinkingInterval(4.0f / bk);
-                log_("[blink] 频率倍率 %.2f -> 间隔基准 %.2fs（0 = 不眨）",
-                     bk, bk > 0.001f ? 4.0f / bk : 0.0f);
+                log_("[blink] 频率倍率 %.2f（设置 %.2f × 时段 %.2f %s）-> 间隔基准 %.2fs（0 = 不眨）",
+                     bk, ws.blink, timeBlink(), gSeg.name, bk > 0.001f ? 4.0f / bk : 0.0f);
             }
             if (bk > 0.001f) eyeBlink->UpdateParameters(model, dt);
             if (eyeLi >= 0) {

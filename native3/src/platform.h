@@ -106,3 +106,18 @@ void platSetHidden(bool hidden);
 
 // 当前挂在哪个 output 的名字（"HDMI-A-3"），设置页状态栏要显示。
 const char* platOutputLabel();
+
+// ── 二十：拖动体感三件（2026-11-10 01:xx）────────────────────────────
+// grab     : 开始拖那一瞬的短动作（判断在 main：它每帧问 platIsDragging）
+// inertia  : 松手后按最后 ~120ms 的速度继续滑一段再停（platform 自己算）
+// edgeSoft : 贴边软阻力（越往外拖位移按 0.55 倍生效，不再是硬卡死）
+// 三项都要求「改完立刻生效、不重启」；X11 备胎上是空实现。
+void platSetDragFeel(bool grab, bool inertia, bool edgeSoft);
+
+// ── 二十：拖动速度（逻辑 px/秒），给「身体倾斜」用 ────────────────────
+// 没在拖 / 拖但停住 → false（调用方把倾斜目标归 0）。
+// 只给水平方向也一起算：倾斜用 vx，轻微缩放用 |vy|。
+bool platDragVelocity(float* vx, float* vy);
+
+// 弹簧增益（设置页 dragSpring 0–2）：乘在 ω 上。0.5 更软更重、2 更硬更跟手。
+void platSetDragSpring(float gain);

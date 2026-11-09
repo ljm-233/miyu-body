@@ -234,6 +234,24 @@ const char* kHtml = R"HTML(<!doctype html>
       {k:'mouth', t:'range', min:0.5, max:3, step:0.1, label:'嘴动',
        d:'说完一句嘴还动多久（开合快慢不变）'}
     ]},
+    {g:'手感', items:[
+      {k:'grab', t:'bool', label:'抓起反馈',
+       d:'按住开始拖的那一下她会颠一下（0.42 秒，上身微提 + 一点后仰，头发裙摆跟着晃）'},
+      {k:'inertia', t:'bool', label:'松手惯性',
+       d:'松手后按你最后那一下的速度再滑一小段才停；再按住她立刻刹住'},
+      {k:'dragSway', t:'range', min:0, max:2, step:0.1, label:'拖动摆动',
+       d:'拖她的时候整个人会真的歪过去（动的是投影，不是参数——参数她身上看不见）。1 = 拖得越快歪得越多，松手回弹'},
+      {k:'swayIdle', t:'bool', label:'静止轻摆',
+       d:'不动的时候极慢地歪一点点（15 秒一个来回，0.3°）；只在「活泼」待机风格下生效'},
+      {k:'dragSpring', t:'range', min:0, max:2, step:0.1, label:'拖动弹簧',
+       d:'拖动不是刚性跟随：她有一点点「重」，弹簧追你，快速拖能看到落后十几到几十像素。0.5 更软更沉，2 更跟手'},
+      {k:'swayTilt', t:'range', min:0, max:4.5, step:0.5, label:'整体倾斜',
+       d:'拖动时整张图绕中心歪一点（度）。默认 0 = 关——整体歪看着像「一张画在转」，他要的是各部位在甩，那个由「拖动摆动」给'},
+      {k:'edgeSoft', t:'bool', label:'贴边软阻力',
+       d:'拖到屏幕边外面越拖越沉（那一段位移只按 55% 生效），不再硬卡在边上'},
+      {k:'timeAware', t:'bool', label:'时间感',
+       d:'按本地钟点换状态：深夜幅度打六折、眨眼变少、每 40–90 秒低头一次；清晨比白天精神一点'}
+    ]},
     {g:'性能', items:[
       {k:'fps', t:'select', label:'帧率', num:true,
        opts:[['30','30 最省电'],['60','60 默认'],['120','120'],['200','200 副屏上限'],
@@ -565,7 +583,16 @@ void saveSettings() {
           << ",\"aa\":\"" << gSet.aa << "\""
           << ",\"shadow\":" << gSet.shadow
           << ",\"rim\":" << gSet.rim
-          << ",\"particles\":" << gSet.particles << "}\n";
+          << ",\"particles\":" << gSet.particles
+          // 二十：拖动体感三件 + 时间感
+          << ",\"grab\":" << (gSet.grab ? "true" : "false")
+          << ",\"inertia\":" << (gSet.inertia ? "true" : "false")
+          << ",\"edgeSoft\":" << (gSet.edgeSoft ? "true" : "false")
+          << ",\"timeAware\":" << (gSet.timeAware ? "true" : "false")
+          << ",\"dragSway\":" << gSet.dragSway
+          << ",\"swayIdle\":" << (gSet.swayIdle ? "true" : "false")
+          << ",\"swayTilt\":" << gSet.swayTilt
+          << ",\"dragSpring\":" << gSet.dragSpring << "}\n";
     }
     if (std::rename(tmp.c_str(), gPath.c_str()) != 0)
         logw("设置存不下来（rename 失败）：%s", gPath.c_str());
@@ -609,6 +636,16 @@ void loadSettings() {
         else if (k == "shadow" && v.t == VNum) gSet.shadow = clampf(float(v.n), 0.0f, 1.0f);
         else if (k == "rim" && v.t == VNum) gSet.rim = clampf(float(v.n), 0.0f, 1.0f);
         else if (k == "particles" && v.t == VNum) gSet.particles = clampf(float(v.n), 0.0f, 1.0f);
+        // ── 二十：拖动体感三件 + 时间感（四个都是 bool，缺了就用默认 true）──
+        else if (k == "grab" && v.t == VBool) gSet.grab = v.b;
+        else if (k == "inertia" && v.t == VBool) gSet.inertia = v.b;
+        else if (k == "edgeSoft" && v.t == VBool) gSet.edgeSoft = v.b;
+        else if (k == "timeAware" && v.t == VBool) gSet.timeAware = v.b;
+        // 二十之二：摆动两件
+        else if (k == "dragSway" && v.t == VNum) gSet.dragSway = clampf(float(v.n), 0.0f, 2.0f);
+        else if (k == "swayIdle" && v.t == VBool) gSet.swayIdle = v.b;
+        else if (k == "swayTilt" && v.t == VNum) gSet.swayTilt = clampf(float(v.n), 0.0f, 4.5f);
+        else if (k == "dragSpring" && v.t == VNum) gSet.dragSpring = clampf(float(v.n), 0.0f, 2.0f);
         // 十八：aa 是新主键；ssaa 是旧键（映射过来，读了不炸）。
         // 两个都出现时 aa 赢 —— 所以先记「见过 aa」，旧键只在没见 aa 时生效。
         else if (k == "aa" && v.t == VStr) {
@@ -712,6 +749,16 @@ std::string stateJson() {
     s += ",\"shadow\":" + std::to_string(gSet.shadow);
     s += ",\"rim\":" + std::to_string(gSet.rim);
     s += ",\"particles\":" + std::to_string(gSet.particles);
+    // 二十：拖动体感三件 + 时间感
+    s += ",\"grab\":" + std::string(gSet.grab ? "true" : "false");
+    s += ",\"inertia\":" + std::string(gSet.inertia ? "true" : "false");
+    s += ",\"edgeSoft\":" + std::string(gSet.edgeSoft ? "true" : "false");
+    s += ",\"timeAware\":" + std::string(gSet.timeAware ? "true" : "false");
+    // 二十之二：摆动两件
+    s += ",\"dragSway\":" + std::to_string(gSet.dragSway);
+    s += ",\"swayIdle\":" + std::string(gSet.swayIdle ? "true" : "false");
+    s += ",\"swayTilt\":" + std::to_string(gSet.swayTilt);
+    s += ",\"dragSpring\":" + std::to_string(gSet.dragSpring);
     s += ",\"fps_now\":" + (gFps < 0.0 ? std::string("null") : std::to_string(gFps));
     s += ",\"port\":" + std::to_string(gPort);
     s += ",\"expr_next\":\"" + jsonEsc(gExprs.empty() ? "" : gExprs[gExprIdx % gExprs.size()]) + "\"";
@@ -842,6 +889,43 @@ std::string handleSet(const std::string& body, bool logIt) {
             continue;
         }
         // 十八：aa 主键 + ssaa 旧键（旧页面/旧脚本照旧能改）
+        // ── 二十：拖动体感三件 + 时间感（四个 bool，改完立刻生效）──────
+        if (k == "grab" && v.t == VBool) {
+            if (v.b != gSet.grab) { gSet.grab = v.b; changed.push_back("grab"); }
+            continue;
+        }
+        if (k == "inertia" && v.t == VBool) {
+            if (v.b != gSet.inertia) { gSet.inertia = v.b; changed.push_back("inertia"); }
+            continue;
+        }
+        if (k == "edgeSoft" && v.t == VBool) {
+            if (v.b != gSet.edgeSoft) { gSet.edgeSoft = v.b; changed.push_back("edgeSoft"); }
+            continue;
+        }
+        if (k == "timeAware" && v.t == VBool) {
+            if (v.b != gSet.timeAware) { gSet.timeAware = v.b; changed.push_back("timeAware"); }
+            continue;
+        }
+        // ── 二十之二：摆动两件（每帧读，不需要额外动作）──────────────
+        if (k == "dragSway" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 2.0f);
+            if (nv != gSet.dragSway) { gSet.dragSway = nv; changed.push_back("dragSway"); }
+            continue;
+        }
+        if (k == "swayIdle" && v.t == VBool) {
+            if (v.b != gSet.swayIdle) { gSet.swayIdle = v.b; changed.push_back("swayIdle"); }
+            continue;
+        }
+        if (k == "swayTilt" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 4.5f);
+            if (nv != gSet.swayTilt) { gSet.swayTilt = nv; changed.push_back("swayTilt"); }
+            continue;
+        }
+        if (k == "dragSpring" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 2.0f);
+            if (nv != gSet.dragSpring) { gSet.dragSpring = nv; changed.push_back("dragSpring"); }
+            continue;
+        }
         if ((k == "aa" || k == "ssaa") && v.t == VStr) {
             std::string c;
             if (!normAa(v.s, c)) {
@@ -881,6 +965,8 @@ std::string handleSet(const std::string& body, bool logIt) {
             "scale", "alpha", "tap", "expr", "idle", "corner", "hide",
             "idleStyle", "look", "lookOn", "blink", "mouth", "exprHold", "fps",
             "voice", "vol", "aa", "shadow", "rim", "particles",
+            "grab", "inertia", "edgeSoft", "timeAware", "dragSway", "swayIdle",
+            "swayTilt", "dragSpring",
         };
         changed.clear();
         for (const char* k : kAll) changed.push_back(k);

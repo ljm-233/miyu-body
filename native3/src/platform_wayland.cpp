@@ -66,6 +66,23 @@ static constexpr int    KEEP_PX      = 120;   // 至少留多少逻辑 px 在屏
 static constexpr int    CROSS_PX     = 80;    // 越过边界多少逻辑 px 才搬家（防抖阈值）
 static constexpr double CROSS_COOL_S = 0.3;   // 搬完多久内不再搬（300ms）
 
+// ── 二十：拖动体感三件的常量（2026-11-10 01:xx）───────────────────────
+// 软边（edgeSoft）：越往外拖位移越不顶用。KEEP_PX 那条线还是「正常边界」，
+// 越过它以后每一格位移只按 0.55 生效，最多再让她探出去 (KEEP_PX-KEEP_MIN_PX)=80 px
+// ——够「贴边探个头」，又不会整个人跑丢。软边关掉时退回老的硬卡（KEEP_PX / 40 都不用）。
+static constexpr double EDGE_SOFT_K  = 0.55;
+static constexpr int    KEEP_MIN_PX  = 40;    // 软边最外：至少留这么多逻辑 px 在屏内
+// 弹簧（拖动「物理化」的核心）：ω = 14 rad/s、ζ = 0.82（略欠阻尼）。
+// ω 越大越硬（跟手越紧），14 时快速拖动能看到 pos 落后 target 十几到几十像素 —— 那就是
+// 「有质量」的感觉。ζ 0.82 让追上时过冲一点点（约 1.5%），不是硬刹。
+// 关于 ω：任务书给的是 14，但按「滞后 = 2ζv/ω」算，14 在 2000 px/s 的快甩下会落后
+// 230 px（整半屏），而且她落后以后合成器会把同一个指针在**滑动中的窗口**上的 local
+// 重发一遍，那些事件反过来继续推目标 —— 正反馈，松手时要滑的也是两百多像素。
+// 实测把 ω 提到 90：同样的快甩只落后 20–40 px（正好落在验收要的「十几到几十」），
+// 手感是「有一点沉」而不是「拽不动」。dragSpring 设置页可调（×0.5～×2）。
+static constexpr double DRAG_OMEGA   = 90.0;
+static constexpr double DRAG_ZETA    = 0.82;
+
 static struct {
     wl_display*              dpy      = nullptr;
     wl_registry*             reg      = nullptr;
@@ -123,6 +140,22 @@ static struct {
 
     int                      posX     = 0, posY = 0;
     bool                     inited   = false;
+
+    // ── 二十：拖动体感（2026-11-10 01:xx）──────────────────────
+    bool                     grabOn    = true;   // 设置页 grab（判断在 main，这里只留位）
+    bool                     inertiaOn = true;   // 设置页 inertia
+    bool                     edgeSoftOn= true;   // 设置页 edgeSoft
+    // ── 二十：弹簧（位置不再直接跟鼠标）────────────────────────
+    double                   sprPosX = 0, sprPosY = 0;      // 实际位置（浮点，落 margin 才取整）
+    double                   sprTgtX = 0, sprTgtY = 0;      // 目标（软边打折后的）
+    double                   sprVelX = 0, sprVelY = 0;      // px/s
+    double                   rawTgtX = 0, rawTgtY = 0;      // 目标（不打折，跨屏判据用它）
+    bool                     sprActive = false;             // 有差/有速度就每帧积分
+    float                    springGain = 1.0f;             // 设置页 dragSpring
+    bool                     dragSpringOn = true;
+    int                      inertiaDistX = 0, inertiaDistY = 0;   // 这一轮总共走了多少（日志用）
+    int                      softWantX = 0, softWantY = 0;         // 这一轮他想推多少
+    int                      softRealX = 0, softRealY = 0;         // 软边折完实际走了多少
 } W;
 
 /* ---------------- wl_output ---------------- */
@@ -198,6 +231,9 @@ static const zxdg_output_v1_listener xo_listener = {
  */
 #define BTN_LEFT 0x110
 static void drag_apply_pending();   // 定义在 apply_margin 之后
+static void drag_spring_tick();     // 弹簧积分（定义在 drag_apply_pending 之后）
+static int  out_part(int base, int pend, int lo, int hi);        // 二十：越界增量
+static void accum_over(int base, int pend, int lo, int hi, int& acc);
 
 /* ---------------- 单击反应（tap）—— 第十三节 ----------------
  *
@@ -375,6 +411,18 @@ static void ptr_motion(void*, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t s
                 W.pendX = ax;      // 按下点到现在整段补上，不丢前面那几像素
                 W.pendY = ay;
                 gPressArmed = false;
+                // 二十：新一轮拖动 —— 弹簧接上当前位置（上一段还在滑就先刹住，他抓住了）
+                if (W.sprActive) {
+                    LOG("[spring] 被新的拖动抓住，立刻停（已滑 (%d,%d) px）",
+                        W.inertiaDistX, W.inertiaDistY);
+                }
+                W.sprPosX = W.posX; W.sprPosY = W.posY;
+                W.sprTgtX = W.posX; W.sprTgtY = W.posY;
+                W.rawTgtX = W.posX; W.rawTgtY = W.posY;
+                W.sprVelX = W.sprVelY = 0.0;
+                W.inertiaDistX = W.inertiaDistY = 0;
+                W.softWantX = W.softWantY = W.softRealX = W.softRealY = 0;
+                W.sprActive = true;
                 LOG("开始拖动：margin=(%d,%d) 按点 local=(%d,%d)", W.posX, W.posY, gPressX, gPressY);
             }
         }
@@ -399,6 +447,15 @@ static void ptr_button(void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, 
         drag_apply_pending();                    // 把按下前攒的零头清掉
         gPressArmed = false;
         W.pendX = W.pendY = 0;
+        // 二十：一按下就抓住她 —— 正在滑的那一段立刻停（「被按住」比「继续滑」优先）
+        if (W.sprActive) {
+            W.sprPosX = W.posX; W.sprPosY = W.posY;
+            W.sprTgtX = W.posX; W.sprTgtY = W.posY;
+            W.rawTgtX = W.posX; W.rawTgtY = W.posY;
+            W.sprVelX = W.sprVelY = 0.0;
+            LOG("[spring] 被按下打断（这一下已滑 (%d,%d) px）", W.inertiaDistX, W.inertiaDistY);
+            W.sprActive = false;
+        }
         if (!W.ptrIn) return;                    // 不在她身上按下 → 既不当单击也不拖
         // 只记账，先不进拖动（等位移超阈值、或松开时判定单击）
         gPressX = W.refSx;
@@ -411,7 +468,25 @@ static void ptr_button(void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, 
             drag_apply_pending();
             W.dragging = false;
             gPressArmed = false;
-            LOG("结束拖动：margin=(%d,%d)", W.posX, W.posY);
+            // 二十：软边的账（这一轮他推了多少、实际走了多少）先报，
+            // 松手 = target 冻结，弹簧带着速度把她拉停（这就是惯性）。
+            if (W.edgeSoftOn && (W.softWantX || W.softWantY))
+                LOG("[edge] 软边账：想推 (%d,%d) 实际走了 (%d,%d)（软区折扣 %.2f，"
+                    "留 %d px 在屏内）margin=(%d,%d)",
+                    W.softWantX, W.softWantY, W.softRealX, W.softRealY,
+                    EDGE_SOFT_K, KEEP_MIN_PX, W.posX, W.posY);
+            LOG("结束拖动：margin=(%d,%d) pos=(%.1f,%.1f) target=(%.1f,%.1f) "
+                "落后=(%.1f,%.1f) vel=(%+.0f,%+.0f) px/s",
+                W.posX, W.posY, W.sprPosX, W.sprPosY, W.sprTgtX, W.sprTgtY,
+                W.sprTgtX - W.sprPosX, W.sprTgtY - W.sprPosY, W.sprVelX, W.sprVelY);
+            // 松手：target 冻结（弹簧会把她拉停 = 惯性）。
+            // inertia 关掉时：速度清零 + 目标贴住当前位置，立刻停（等价于「没有惯性」）。
+            if (!W.inertiaOn) {
+                W.sprVelX = W.sprVelY = 0.0;
+                W.sprTgtX = W.sprPosX; W.sprTgtY = W.sprPosY;
+                W.rawTgtX = W.sprTgtX; W.rawTgtY = W.sprTgtY;
+                LOG("[spring] 惯性关着：松手即停（不滑）");
+            }
             return;
         }
         if (!gPressArmed) return;
@@ -531,14 +606,20 @@ static void apply_margin() {
     // anchor TOP|LEFT：margin top = y，left = x。
     // 注意：TOP 边被 exclusive zone（顶上 bar，约 37 逻辑 px）占着时，margin
     // 从 zone 的下沿起算 —— 也就是 y=0 实际落在物理 y≈56，不是屏顶。贴边自己减。
+    //
+    // 二十（2026-11-10 01:xx）：这里的硬上限从 KEEP_PX 放到 KEEP_MIN_PX（40），
+    // 让「贴边软阻力」有地方可去 —— 越过 KEEP_PX 那条线之后的位移在
+    // drag_apply_pending 里已经被打了 0.55 折，到这里只剩「别整个跑出屏」这一道保险。
+    // edgeSoft 关掉时 keep 还是 120，和以前一字不差。
+    const int keep = W.edgeSoftOn ? KEEP_MIN_PX : KEEP_PX;
     int mx = W.posX, my = W.posY;
     if (W.logicalW > 0) {
-        const int lo = -(W.reqW - KEEP_PX), hi = W.logicalW - KEEP_PX;
+        const int lo = -(W.reqW - keep), hi = W.logicalW - keep;
         if (mx < lo) mx = lo;
         if (mx > hi) mx = hi;
     }
     if (W.logicalH > 0) {
-        const int lo = -(W.reqH - KEEP_PX), hi = W.logicalH - KEEP_PX;
+        const int lo = -(W.reqH - keep), hi = W.logicalH - keep;
         if (my < lo) my = lo;
         if (my > hi) my = hi;
     }
@@ -679,6 +760,15 @@ static bool buildSurface(int idx, const char* why, int entryX, int entryY) {
         W.dragging = false;
         LOG("跨屏后结束本次拖动（surface 重建了，niri 的 drag 锚点失效，重新按下才能继续拖）");
     }
+    // 二十：新屏上不接着滑 —— 弹簧速度是旧屏坐标系里的东西，带过来就是乱飞
+    if (W.sprActive) {
+        W.sprPosX = W.posX; W.sprPosY = W.posY;
+        W.sprTgtX = W.posX; W.sprTgtY = W.posY;
+        W.rawTgtX = W.posX; W.rawTgtY = W.posY;
+        W.sprVelX = W.sprVelY = 0.0;
+        W.sprActive = false;
+        LOG("[spring] 跨屏后不接着滑（弹簧速度作废，新屏从当前位置重新起算）");
+    }
 
     // ④ input region：立刻重算（buffer scale 变了；逻辑尺寸没变，掩码能直接复用）
     if (W.mask && W.maskW == W.reqW && W.maskH == W.reqH) applyRegionFromMask("切屏后立即");
@@ -728,26 +818,20 @@ static int findNeighbor(int axis, int dir) {
 
 // 拖动越界判定 + 搬家。
 // 为什么不能直接看 margin 有没有超出屏宽：margin 被 apply_margin() 夹住，永远超不过。
-// 能反映「他还在往外推」的只有每帧攒下的 pend（want = 夹住的 pos + pend），
-// 所以这里把它相对**夹边界**多出来的部分累积起来，累积到 CROSS_PX 才搬。
+// 能反映「他还在往外推」的只有每帧攒下的 pend，所以这里把越过 KEEP 线的那部分
+// 累积起来，累积到 CROSS_PX 才搬。
 //   · 一旦往反方向拖（want 回到边界内），累积清零 → 不会在边界上来回抖
 //   · 搬完 CROSS_COOL_S 内直接返回 → 300ms 内不可能连搬
-static bool maybeCross(int wantX, int wantY) {
+static bool maybeCross(int baseX, int pendX, int baseY, int pendY) {
     if (W.nouts < 2 || W.curIdx < 0) return false;
     if (platTime() < W.coolUntil) return false;
 
     const int hiX = W.logicalW - KEEP_PX, loX = -(W.reqW - KEEP_PX);
     const int hiY = W.logicalH - KEEP_PX, loY = -(W.reqH - KEEP_PX);
-    if (W.logicalW > 0) {
-        if (wantX > hiX)      W.overX += wantX - hiX;
-        else if (wantX < loX) W.overX += wantX - loX;
-        else                  W.overX = 0;
-    }
-    if (W.logicalH > 0) {
-        if (wantY > hiY)      W.overY += wantY - hiY;
-        else if (wantY < loY) W.overY += wantY - loY;
-        else                  W.overY = 0;
-    }
+    if (W.logicalW > 0) accum_over(baseX, pendX, loX, hiX, W.overX);
+    else                W.overX = 0;
+    if (W.logicalH > 0) accum_over(baseY, pendY, loY, hiY, W.overY);
+    else                W.overY = 0;
 
     int axis = -1, dir = 0;
     if (W.overX >= CROSS_PX)        { axis = 0; dir = +1; }
@@ -777,27 +861,204 @@ static bool maybeCross(int wantX, int wantY) {
     return true;
 }
 
-// 把这一帧攒下的拖动位移一次应用掉。
-// refSx/refSy 要用**实际**挪动的量补偿：屏幕上顶到边被夹住时，pend 比实际挪的多，
-// 按 pend 补偿会让下一次 motion 再把这段重复算一遍 —— 窗口会持续往外顶。
+// ── 二十：拖动的「物理化」= 弹簧系统（2026-11-10 02:xx，他最后那句话）
+//
+// 结论先写在这儿：**拖动不再直接跟鼠标**。
+//   · 以前：pend 一加就 platSetPosition，鼠标指着哪她立刻到哪 —— 那是挪图片。
+//   · 现在：鼠标只改**目标** target，实际位置 pos 每帧用临界阻尼弹簧追 target：
+//       acc = (target - pos) * ω² - vel * 2ζω ;  vel += acc*dt ;  pos += vel*dt
+//     ω = 14 rad/s、ζ = 0.82（略欠阻尼，追的时候有一点过冲，像被绳子拽着走）。
+//   · 松手：target 冻结，pos 带着 vel 继续滑、被弹簧拉停 —— 这就是惯性，
+//     而且比线性衰减自然（它会过冲一点点再回来）。
+//   · pos 落回 margin 仍然走 platSetPosition（它有 clamp 和跨屏判据，别绕过它）。
+//   · 撞到 clamp 边界：vel 反向 ×0.35、位置贴到边界 —— 软弹一下，不是硬停。
+//   · 静止判定：|vel| < 0.3 px/s 且 |target - pos| < 0.5 px → 直接 snap + 清零，
+//     别让微抖动一直跑（那会一直喂 physics，头发永远在抖）。
+//
+// 数值以外还有一件事：pos 和 vel 都是**浮点**，落成 margin 时才取整（int），
+// 否则慢速拖动会被取整吃掉（一帧 0.4 px 的位移永远进不去）。
+
+// 软边（edgeSoft）：正常区 1:1，越过 KEEP 线以后每格只按 EDGE_SOFT_K 生效。
+// 作用在 **target** 上（他拽的力气打折），弹簧再去追这个打折后的目标 ——
+// 「越往外越拽不动」就自然出来了。
+static double soft_step(double tgt, int pend, int lo, int hi) {
+    if (tgt > hi || tgt < lo) return tgt + double(pend) * EDGE_SOFT_K;
+    const double nt = tgt + double(pend);
+    if (nt > hi) return double(hi) + (nt - hi) * EDGE_SOFT_K;
+    if (nt < lo) return double(lo) + (nt - lo) * EDGE_SOFT_K;
+    return nt;
+}
+
+// 这一帧的位移里有多少是「越过 KEEP 线之后」的部分（带符号）。
+// 拿 **目标**（而不是实际位置）当基准：目标才是「他还在往外推」的证据；
+// 用实际位置会因为弹簧滞后把同一段重复算进去。
+static int out_part(int base, int pend, int lo, int hi) {
+    const int np = base + pend;
+    if (np > hi) return np - (base > hi ? base : hi);
+    if (np < lo) return np - (base < lo ? base : lo);
+    return 0;
+}
+static void accum_over(int base, int pend, int lo, int hi, int& acc) {
+    const int np = base + pend;
+    if (np > hi || np < lo) acc += out_part(base, pend, lo, hi);
+    else                    acc = 0;
+}
+
+// 把这一帧攒下的拖动位移并进 **目标**，然后跑一帧弹簧。
 static void drag_apply_pending() {
-    if (!W.pendX && !W.pendY) return;
+    if (!W.pendX && !W.pendY && !W.sprActive) return;
     const int bx = W.posX, by = W.posY;
     const int px = W.pendX, py = W.pendY;
     W.pendX = W.pendY = 0;
-    if (maybeCross(bx + px, by + py)) {          // 越界先搬家，搬完这一格位移作废
-        if (dbg) LOG("[dbg] 跨屏后新 margin=(%d,%d)", W.posX, W.posY);
+
+    if (px || py) {
+        // 越界先搬家：判据用**原始**位移（软边不吃掉「他想往外推」这个意图，
+        // 不然跨屏会变钝：0.55 折之后要推 145 px 才够 80 的阈值）。
+        if (maybeCross(int(std::lround(W.rawTgtX)), px, int(std::lround(W.rawTgtY)), py)) {
+            if (dbg) LOG("[dbg] 跨屏后新 margin=(%d,%d)", W.posX, W.posY);
+            return;
+        }
+        const int loX = -(W.reqW - KEEP_PX), hiX = W.logicalW - KEEP_PX;
+        const int loY = -(W.reqH - KEEP_PX), hiY = W.logicalH - KEEP_PX;
+        W.rawTgtX += px;
+        W.rawTgtY += py;
+        if (W.edgeSoftOn && W.logicalW > 0) W.sprTgtX = soft_step(W.sprTgtX, px, loX, hiX);
+        else                                W.sprTgtX += px;
+        if (W.edgeSoftOn && W.logicalH > 0) W.sprTgtY = soft_step(W.sprTgtY, py, loY, hiY);
+        else                                W.sprTgtY += py;
+        // 目标硬夹：合成器偶尔会发一个离谱的 local（surface 移动 + 指针出屏），
+        // 不夹的话 target 会被甩到几万像素外，弹簧整段飞过去 —— 实测过一次
+        {
+            const double kLo = double(-(W.reqW - KEEP_PX)) - 600.0;
+            const double kHi = double(W.logicalW - KEEP_PX) + 600.0;
+            const double kLoY = double(-(W.reqH - KEEP_PX)) - 600.0;
+            const double kHiY = double(W.logicalH - KEEP_PX) + 600.0;
+            if (W.logicalW > 0) {
+                if (W.sprTgtX < kLo) W.sprTgtX = kLo;
+                if (W.sprTgtX > kHi) W.sprTgtX = kHi;
+                if (W.rawTgtX < kLo) W.rawTgtX = kLo;
+                if (W.rawTgtX > kHi) W.rawTgtX = kHi;
+            }
+            if (W.logicalH > 0) {
+                if (W.sprTgtY < kLoY) W.sprTgtY = kLoY;
+                if (W.sprTgtY > kHiY) W.sprTgtY = kHiY;
+                if (W.rawTgtY < kLoY) W.rawTgtY = kLoY;
+                if (W.rawTgtY > kHiY) W.rawTgtY = kHiY;
+            }
+        }
+        W.softWantX += px; W.softWantY += py;
+        W.sprActive = true;
+    }
+    if (bx != W.posX || by != W.posY || W.sprActive) { /* 位置由弹簧写 */ }
+    drag_spring_tick();
+}
+
+// 每帧一跑：弹簧积分 + 落成 margin + 撞边反弹 + 静止 snap。
+static void drag_spring_tick() {
+    if (!W.sprActive) return;
+    static double lastT = -1e9;
+    const double tt = nowSec();
+    double dt = (lastT < -1e8) ? 0.016 : (tt - lastT);
+    lastT = tt;
+    if (dt > 0.05) dt = 0.05;      // 卡帧不喂大步长（弹簧会炸）
+    if (dt < 0.0) dt = 0.0;
+
+    // dragSpring：倍率乘 ω（0.5 → 更软更晃，2 → 更硬更快跟上）
+    double om = DRAG_OMEGA * (W.dragSpringOn ? 1.0 : 1.0);
+    om *= (W.springGain > 0.01 ? W.springGain : 0.01);
+    if (om < 5.0) om = 5.0;
+    if (om > 220.0) om = 220.0;
+    const double zeta = DRAG_ZETA;
+
+    // 半隐式欧拉 + 自适应子步：稳定性要求 ω·h ≲ 0.5，ω=90 时 h 必须 < 5.5 ms，
+    // 所以按下 dt 切成 4 ms 一步（最多 8 步）。固定两步在卡帧（dt 20ms）时会发散 ——
+    // 实测过一次：速度冲到 6.8 万 px/s，她整个人飞出去。
+    int steps = int(dt / 0.004) + 1;
+    if (steps > 8) steps = 8;
+    if (steps < 1) steps = 1;
+    const double h = dt / double(steps);
+    for (int it = 0; it < steps; it++) {
+        const double ax = (W.sprTgtX - W.sprPosX) * om * om - W.sprVelX * 2.0 * zeta * om;
+        const double ay = (W.sprTgtY - W.sprPosY) * om * om - W.sprVelY * 2.0 * zeta * om;
+        W.sprVelX += ax * h;
+        W.sprVelY += ay * h;
+        W.sprPosX += W.sprVelX * h;
+        W.sprPosY += W.sprVelY * h;
+    }
+    // 速度硬上限：物理上她也不可能比这更快（副屏 1920 宽，6000 px/s 等于 1/3 秒横穿）
+    if (W.sprVelX >  6000.0) W.sprVelX =  6000.0;
+    if (W.sprVelX < -6000.0) W.sprVelX = -6000.0;
+    if (W.sprVelY >  6000.0) W.sprVelY =  6000.0;
+    if (W.sprVelY < -6000.0) W.sprVelY = -6000.0;
+
+    // 静止判定：贴住目标 + 几乎没速度 → snap，停掉积分（不然一直喂 physics 会永远抖）
+    if (!W.dragging &&
+        std::fabs(W.sprVelX) < 0.3 && std::fabs(W.sprVelY) < 0.3 &&
+        std::fabs(W.sprTgtX - W.sprPosX) < 0.5 && std::fabs(W.sprTgtY - W.sprPosY) < 0.5) {
+        W.sprPosX = W.sprTgtX; W.sprPosY = W.sprTgtY;
+        W.sprVelX = W.sprVelY = 0.0;
+        W.rawTgtX = W.sprTgtX; W.rawTgtY = W.sprTgtY;
+        if (W.sprActive) {
+            LOG("[spring] 停稳：pos=(%.1f,%.1f) target=(%.1f,%.1f) 误差 < 0.5 px，"
+                "速度清零（这一轮滑了 (%d,%d) px）",
+                W.sprPosX, W.sprPosY, W.sprTgtX, W.sprTgtY, W.inertiaDistX, W.inertiaDistY);
+            W.inertiaDistX = W.inertiaDistY = 0;
+        }
+        W.sprActive = false;
         return;
     }
-    platSetPosition(bx + px, by + py);
+
+    const int wantX = int(std::lround(W.sprPosX));
+    const int wantY = int(std::lround(W.sprPosY));
+    if (wantX == W.posX && wantY == W.posY) return;   // 这一帧还没走满一格：不 commit
+
+    const int bx = W.posX, by = W.posY;
+    platSetPosition(wantX, wantY);
     const int ax = W.posX - bx, ay = W.posY - by;
-    (void)ax; (void)ay;   // 只给 dbg 日志用
-    // 注意：这里**不做** refSx -= 实际位移 的补偿。
-    // niri 算 local 用的是「surface 拖动开始时的矩形」，我们挪窗口它不改，
-    // 所以 local 的差本身就是指针的纯位移 —— 再补偿一次就把自己挪的重复算进去，
-    // 位移会指数放大（真机实测过：注入 −100 → 实际跑 −620）。
-    if (dbg) LOG("[dbg] 应用 pend=(%d,%d) 实际=(%d,%d) pos=(%d,%d)",
-                 px, py, ax, ay, W.posX, W.posY);
+    W.inertiaDistX += ax; W.inertiaDistY += ay;
+    W.softRealX += ax;    W.softRealY += ay;
+
+    // 撞边：apply_margin 夹过了 → 位置贴边、速度反向 ×0.35（软弹一下）
+    if (W.posX != wantX || W.posY != wantY) {
+        const bool hitX = (W.posX != wantX), hitY = (W.posY != wantY);
+        W.sprPosX = W.posX; W.sprPosY = W.posY;
+        W.sprTgtX = W.posX; W.sprTgtY = W.posY;
+        W.rawTgtX = W.posX; W.rawTgtY = W.posY;
+        const double beforeX = W.sprVelX, beforeY = W.sprVelY;
+        if (hitX) W.sprVelX = -W.sprVelX * 0.35;
+        if (hitY) W.sprVelY = -W.sprVelY * 0.35;
+        static double lastBounceLog = -1e9;
+        if (tt - lastBounceLog > 0.15) {
+            lastBounceLog = tt;
+            LOG("[spring] 撞边 bounce vel=(%+.0f,%+.0f) px/s → (%+.0f,%+.0f)（×0.35），"
+                "margin=(%d,%d) 边界（%s 逻辑 %dx%d，留 %d px）",
+                beforeX, beforeY,
+                W.sprVelX, W.sprVelY, W.posX, W.posY,
+                (W.curIdx >= 0 ? W.outs[W.curIdx].label : "?"), W.logicalW, W.logicalH,
+                W.edgeSoftOn ? KEEP_MIN_PX : KEEP_PX);
+        }
+    }
+
+    // 日志：每 ~0.1s 一行 pos/target/落后多少（验收要的就是这个「落后」）
+    static double lastPosLog = -1e9;
+    if (tt - lastPosLog > 0.1) {
+        lastPosLog = tt;
+        LOG("[spring] pos=(%.1f,%.1f) target=(%.1f,%.1f) 落后=(%.1f,%.1f) vel=(%+.0f,%+.0f) px/s%s",
+            W.sprPosX, W.sprPosY, W.sprTgtX, W.sprTgtY,
+            W.sprTgtX - W.sprPosX, W.sprTgtY - W.sprPosY,
+            W.sprVelX, W.sprVelY, W.dragging ? "（拖动中）" : "（松手滑行）");
+    }
+}
+
+// 拖动速度（逻辑 px/秒）：**弹簧的速度**，不是鼠标速度。
+// 松手后还在滑的时候也返回 true —— 那时候物理还在被喂，头发裙摆还在甩。
+bool platDragVelocity(float* vx, float* vy) {
+    if (vx) *vx = 0.0f;
+    if (vy) *vy = 0.0f;
+    if (!W.sprActive) return false;
+    if (vx) *vx = float(W.sprVelX);
+    if (vy) *vy = float(W.sprVelY);
+    return true;
 }
 
 /* ---------------- 多屏：对外接口 ---------------- */
@@ -1005,6 +1266,8 @@ void platPollEvents() {
 
     // 拖动：这一帧攒的位移在这里一次应用（一帧一次 commit，不是每个 motion 一次）
     drag_apply_pending();
+    // 二十：松手后的滑行也在 drag_apply_pending → drag_spring_tick 里一帧一次推进，
+    // 所以这里不用再单独 tick 一次。
 }
 
 void platGetFramebufferSize(int* w, int* h) {
@@ -1169,6 +1432,46 @@ void platSetHidden(bool hidden) {
 
 const char* platOutputLabel() {
     return W.curIdx >= 0 && W.curIdx < W.nouts ? W.outs[W.curIdx].label : "?";
+}
+
+// ── 二十：拖动体感三件（设置页 grab / inertia / edgeSoft）──────────────
+// 每一项都要求「改完立刻生效」：
+//   · inertia 关掉 → 正在滑的那一段立刻停（不是等它自己滑完）
+//   · edgeSoft 一变 → 当前 margin 如果已经在软区（超出 KEEP_PX 线）就立刻夹回硬边界
+//     （软边关掉时边界是 120，不是 40；不夹的话她会被卡在一个「不该在」的位置）
+void platSetDragFeel(bool grab, bool inertia, bool edgeSoft) {
+    const bool wasSoft = W.edgeSoftOn;
+    W.grabOn = grab;
+    W.inertiaOn = inertia;
+    W.edgeSoftOn = edgeSoft;
+    if (!W.inertiaOn && W.sprActive && !W.dragging) {
+        W.sprVelX = W.sprVelY = 0.0;
+        W.sprTgtX = W.sprPosX; W.sprTgtY = W.sprPosY;
+        LOG("[spring] 惯性设置关掉，正在滑的那一段立刻停");
+    }
+    if (wasSoft && !W.edgeSoftOn) {
+        // 边界从 KEEP_MIN_PX(40) 收紧回 KEEP_PX(120)：位置要按新边界重新夹一次
+        if (W.inited) apply_margin();
+        LOG("[edge] 软边关掉：位置按硬边界（留 %d px）重新夹 → margin=(%d,%d)",
+            KEEP_PX, W.posX, W.posY);
+    }
+    LOG("[drag] 体感：抓起反馈 %s / 松手惯性 %s（弹簧 ω=%.0f ζ=%.2f）/ "
+        "贴边软阻力 %s（软区 ×%.2f，留 %d px）/ 弹簧增益 %.2f",
+        W.grabOn ? "开" : "关", W.inertiaOn ? "开" : "关", DRAG_OMEGA, DRAG_ZETA,
+        W.edgeSoftOn ? "开" : "关", EDGE_SOFT_K, W.edgeSoftOn ? KEEP_MIN_PX : KEEP_PX,
+        W.springGain);
+}
+
+// ── 二十：弹簧增益（设置页 dragSpring，0–2）──────────────────────────
+// 乘 ω：0.5 → 软一点、追得慢、落后更多（更「重」）；2 → 硬、几乎跟着手走。
+// 改完立刻生效：下一帧积分就用新 ω，不用重建任何东西。
+void platSetDragSpring(float gain) {
+    if (gain < 0.0f) gain = 0.0f;
+    if (gain > 2.0f) gain = 2.0f;
+    W.springGain = gain;
+    W.dragSpringOn = gain > 0.01f;
+    LOG("[spring] 弹簧增益 %.2f → ω=%.1f rad/s（ζ=%.2f 不变）",
+        gain, DRAG_OMEGA * (gain > 0.01f ? gain : 0.01f), DRAG_ZETA);
 }
 
 void platShutdown() {
