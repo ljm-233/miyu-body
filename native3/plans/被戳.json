@@ -1,53 +1,58 @@
 {
  "version": 1,
- "title": "被戳",
+ "title": "被戳·躲",
  "view": "full",
  "actions": [
   {
    "kind": "trajectory",
-   "duration": 1.3,
+   "duration": 1.7,
    "frames": [
     {
      "time": 0.0,
      "values": {
       "AngleX": 0,
       "AngleZ": 0,
+      "PositionY": 0,
       "ParamEyeBallX": 0,
       "ParamEyeBallY": 0,
-      "PositionY": 0
+      "ParamMouthOpenY": 0
      }
     },
     {
-     "time": 0.18,
+     "time": 0.2,
      "values": {
-      "AngleX": -7,
-      "AngleZ": 4,
-      "ParamEyeBallX": -0.5,
-      "ParamEyeBallY": -0.4,
-      "PositionY": -3
+      "AngleX": -16,
+      "AngleZ": 11,
+      "PositionY": -9,
+      "ParamEyeBallX": -0.9,
+      "ParamEyeBallY": -0.8,
+      "ParamMouthOpenY": 0.45
      }
     },
     {
-     "time": 0.75,
+     "time": 0.9,
      "values": {
-      "AngleX": -6,
-      "AngleZ": 5,
-      "ParamEyeBallX": -0.6,
-      "ParamEyeBallY": -0.35,
-      "PositionY": -2
+      "AngleX": -14,
+      "AngleZ": 10,
+      "PositionY": -7,
+      "ParamEyeBallX": -0.85,
+      "ParamEyeBallY": -0.7,
+      "ParamMouthOpenY": 0.3
      }
     },
     {
-     "time": 1.3,
+     "time": 1.7,
      "values": {
       "AngleX": 0,
       "AngleZ": 0,
+      "PositionY": 0,
       "ParamEyeBallX": 0,
       "ParamEyeBallY": 0,
-      "PositionY": 0
+      "ParamMouthOpenY": 0
      }
     }
    ]
   }
- ]
+ ],
+ "expr": "＞＜"
 }

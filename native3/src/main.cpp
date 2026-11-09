@@ -333,9 +333,34 @@ static void planTakeover(double now) {
     gPlanRig.hasSnap = false;
 }
 
+static Csm::CubismExpressionMotionManager* gExprMgr = nullptr;   // 前置声明：planTick 要用
+
 static void planTick(Csm::CubismModel* model, double now) {
     if (!plan::active()) return;
     if (!gPlanRig.ready) planInit(model);
+
+    // 换了新计划就看它有没有指定表情（"expr":"＞＜"），有就切一次。
+    // 这样「被戳一下」能同时换脸，光动身体不够明显。
+    static double lastStart = -1e9;
+    const double st = plan::startTime();
+    if (st != lastStart) {
+        lastStart = st;
+        const char* en = plan::expr();
+        log_("[plan] 起播「%s」%s%s", plan::title()[0] ? plan::title() : "(无题)",
+             (en && *en) ? " 附带表情：" : "", (en && *en) ? en : "");
+        if (en && *en && gExprMgr) {
+            const std::string ep = std::string(kModelDir) + "Exp3/" + en + ".exp3.json";
+            std::vector<char> eb = slurp(ep);
+            if (!eb.empty()) {
+                Csm::CubismExpressionMotion* e = Csm::CubismExpressionMotion::Create(
+                    reinterpret_cast<const Csm::csmByte*>(eb.data()),
+                    static_cast<Csm::csmSizeInt>(eb.size()));
+                if (e) { gExprMgr->StartMotion(e, false); log_("[plan] 表情切到 %s", en); }
+            } else {
+                log_("[plan] 表情读不到：%s", ep.c_str());
+            }
+        }
+    }
 
     plan::Sample sm;
     if (!plan::sample(now, sm)) return;      // 播完（plan 内部已经 stop），交回待机
@@ -387,7 +412,6 @@ static void planTick(Csm::CubismModel* model, double now) {
 //     （expression 的结束路径只 CSM_DELETE 队列 entry，不碰 motion 本体）。
 //     全部塞进 gExprPool，退出时统一删 —— 切换次数是人给的，不会涨爆。
 //   · 队列 entry 在管理器析构时才释放，所以先删管理器、再删 pool，别反过来。
-static Csm::CubismExpressionMotionManager* gExprMgr = nullptr;
 static std::vector<Csm::ACubismMotion*> gExprPool;
 static std::string gExprName = "(无)";
 

@@ -180,6 +180,7 @@ double gTotal = 0.0;
 double gT0 = 0.0;
 bool gOn = false;
 char gTitle[128] = {0};
+char gExpr[64] = {0};
 
 float interp(const std::vector<Key>& k, double t) {
     if (k.empty()) return 0.0f;
@@ -374,6 +375,10 @@ void start(const std::string& json, double now) {
     gT0 = now;
     gOn = true;
     gTitle[0] = '\0';
+    gExpr[0] = 0;
+    if (const J* e = body->at("expr"); e != nullptr && e->t == J::STR) {
+        std::snprintf(gExpr, sizeof(gExpr), "%s", e->str.c_str());
+    }
     if (const J* t = body->at("title"); t != nullptr && t->t == J::STR && !t->str.empty()) {
         std::snprintf(gTitle, sizeof(gTitle), "%s", t->str.c_str());
     }
@@ -397,6 +402,7 @@ bool active() { return gOn; }
 double startTime() { return gT0; }
 double total() { return gTotal; }
 const char* title() { return gTitle; }
+const char* expr() { return gExpr; }
 
 bool drives(const char* name) {
     const int slot = slotOf(name);

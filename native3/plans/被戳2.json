@@ -1,45 +1,54 @@
 {
  "version": 1,
- "title": "被戳2",
+ "title": "被戳·抬头",
  "view": "full",
  "actions": [
   {
    "kind": "trajectory",
-   "duration": 1.1,
+   "duration": 1.6,
    "frames": [
     {
      "time": 0.0,
      "values": {
+      "AngleX": 0,
       "AngleY": 0,
       "AngleZ": 0,
-      "ParamEyeBallX": 0
+      "ParamEyeBallX": 0,
+      "ParamMouthOpenY": 0
      }
     },
     {
-     "time": 0.2,
+     "time": 0.25,
      "values": {
-      "AngleY": 6,
-      "AngleZ": -5,
-      "ParamEyeBallX": 0.6
+      "AngleX": 12,
+      "AngleY": 9,
+      "AngleZ": -13,
+      "ParamEyeBallX": 0.9,
+      "ParamMouthOpenY": 0.4
      }
     },
     {
-     "time": 0.6,
+     "time": 0.85,
      "values": {
-      "AngleY": -2,
-      "AngleZ": -3,
-      "ParamEyeBallX": 0.4
+      "AngleX": 9,
+      "AngleY": 5,
+      "AngleZ": -11,
+      "ParamEyeBallX": 0.8,
+      "ParamMouthOpenY": 0.25
      }
     },
     {
-     "time": 1.1,
+     "time": 1.6,
      "values": {
+      "AngleX": 0,
       "AngleY": 0,
       "AngleZ": 0,
-      "ParamEyeBallX": 0
+      "ParamEyeBallX": 0,
+      "ParamMouthOpenY": 0
      }
     }
    ]
   }
- ]
+ ],
+ "expr": "兔牙"
 }

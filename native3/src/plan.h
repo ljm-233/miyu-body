@@ -51,6 +51,10 @@ double total();
 // 当前这份计划的标题（日志用），没有就是 ""。
 const char* title();
 
+// 计划里可选的表情名（`"expr":"＞＜"`）。没有就是 ""。
+// 起播时由 main 触发一次切换，这样「被戳一下」能同时换脸。
+const char* expr();
+
 // 这份计划有没有在驱动某个参数（嘴要判断：计划驱动嘴时，说话仍然优先）。
 bool drives(const char* name);
 
