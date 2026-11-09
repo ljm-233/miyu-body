@@ -35,7 +35,7 @@ struct Settings {
     float       blink  = 1.0f;      // 0–2   眨眼频率倍率（0 = 完全不眨）
     float       mouth  = 1.0f;      // 0.5–3 说话时嘴动时长倍率
     float       exprHold = 1.0f;    // 0.2–5 表情停留时长倍率（到点淡回默认）
-    int         fps    = 60;        // 15/30/60 帧率上限（省电）
+    int         fps    = 30;        // 30/60/120/200/240。默认 30：60 帧吃一个核的 21%，30 帧只要 10%
     bool        voice  = false;     // 说话时出声（播 voice/*.wav，没有就静默）
     float       vol    = 0.8f;      // 0–1   音量（pw-play --volume）
 
