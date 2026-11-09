@@ -983,9 +983,12 @@ static void probeTick(Csm::CubismModel* model, double now) {
 struct PartPokeRig {
     bool   on = false;
     int    lastGen = 0;
-    double t0 = 0.0, dur = 1.30;   // 拉长到 1.3s，峰值停留 0.55s 左右看得清
+    double t0 = 0.0, dur = 0.62, lastT = 0.0;
     std::string part;
-    struct Ch { Csm::csmInt32 idx; float base, peak, dip; };
+    // 2026-11-10 02:4x：他要「物理运动」，不是线性弹一下。
+    // 每个参数带自己的位移 x 和速度 v，点一下给冲量，之后靠弹簧-阻尼自己晃回去，
+    // 会过冲、会震荡两下才停——那才像被戳过的软地方。
+    struct Ch { Csm::csmInt32 idx; float base, peak, dip; float x, v; };
     Ch     ch[4];
     int    n = 0;
 };
@@ -995,11 +998,11 @@ static PartPokeRig gPartPoke;
 static float pokeCurve(double u) {
     // 2026-11-10 02:1x：他说「点一下就没了，来不及看」。原来 0.16 就到峰、0.42 就往下走，
     // 峰值只停一瞬间。改成**冲起来先保持一段**（0.12→0.55 都是满幅），再回弹、再归零。
-    static const double kT[5] = {0.00, 0.12, 0.55, 0.75, 1.00};
-    static const float  kV[5] = {0.0f, 1.00f, 1.00f, -0.2f, 0.0f};
+    static const double kT[4] = {0.00, 0.16, 0.42, 1.00};
+    static const float  kV[4] = {0.0f, 1.0f, -0.2f, 0.0f};
     if (u <= kT[0]) return kV[0];
     if (u >= kT[3]) return kV[3];
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 3; ++i) {
         if (u <= kT[i + 1]) {
             const double f = (u - kT[i]) / (kT[i + 1] - kT[i]);
             return static_cast<float>(kV[i] + (kV[i + 1] - kV[i]) * f);
@@ -1057,6 +1060,9 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
             c.peak = pk;
             c.dip = dp;
         }
+        // 冲量：按这块参数自身的摆幅给一个初速度，弹簧接着把它拉回来
+        c.x = 0.0f;
+        c.v = (p.peak - c.base) * 8.0f;
         char buf[96];
         std::snprintf(buf, sizeof buf, "%s(%.1f->%.1f/%.1f) ", p.name.c_str(),
                       c.base, c.peak, c.dip);
@@ -1081,21 +1087,37 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
         if (!part.empty() && web::settings().tapPart) partPokeStart(model, part, now);
     }
     if (!gPartPoke.on) return;
-    const double u = (now - gPartPoke.t0) / gPartPoke.dur;
-    if (u >= 1.0) {
-        // 收尾：参数写回默认值（这几个参数不吃 LoadParameters 的归零，见 16.2）
-        for (int i = 0; i < gPartPoke.n; ++i)
-            model->SetParameterValue(gPartPoke.ch[i].idx, gPartPoke.ch[i].base, 1.0f);
-        gPartPoke.on = false;
-        log_("[part] %s 弹完（%.2fs），参数回默认", gPartPoke.part.c_str(), gPartPoke.dur);
-        return;
-    }
-    const float k = pokeCurve(u);
+
+    // 弹簧-阻尼积分：a = -k*x - c*v，欠阻尼 → 冲出去、回来时过冲、震两下停。
+    // k=150 / c=9 → ω≈12.2 rad/s、ζ≈0.37，周期约 0.5s，看得见两下回弹。
+    static const float K = 150.0f, C = 9.0f;
+    const float h = 1.0f / 240.0f;
+    // 2026-11-10 02:5x：子步数必须**按真实帧间隔**算。她跑 200Hz（5ms 一帧），
+    // 固定走 6 个子步等于把时间加速 6 倍，弹簧 0.5s 的震荡挤进 0.08s——看着就是秒停。
+    float dt = static_cast<float>(now - gPartPoke.lastT);
+    gPartPoke.lastT = now;
+    if (dt < 0.0f || dt > 0.1f) dt = 0.005f;
+    int subs = static_cast<int>(dt / h + 0.5f);
+    if (subs < 1) subs = 1;
+    if (subs > 16) subs = 16;
+    bool alive = false;
     for (int i = 0; i < gPartPoke.n; ++i) {
-        const PartPokeRig::Ch& c = gPartPoke.ch[i];
-        const float v = (k >= 0.0f) ? c.base + (c.peak - c.base) * k
-                                    : c.base + (c.dip - c.base) * (k / -0.2f);
-        model->SetParameterValue(c.idx, v, 1.0f);
+        PartPokeRig::Ch& c = gPartPoke.ch[i];
+        for (int sub = 0; sub < subs; ++sub) {
+            const float a = -K * c.x - C * c.v;
+            c.v += a * h;
+            c.x += c.v * h;
+        }
+        if (std::fabs(c.x) > 0.002f || std::fabs(c.v) > 0.05f) alive = true;
+        model->SetParameterValue(c.idx, c.base + c.x, 1.0f);
+    }
+    if (!alive) {
+        for (int i = 0; i < gPartPoke.n; ++i) {
+            model->SetParameterValue(gPartPoke.ch[i].idx, gPartPoke.ch[i].base, 1.0f);
+            gPartPoke.ch[i].x = gPartPoke.ch[i].v = 0.0f;
+        }
+        gPartPoke.on = false;
+        log_("[part] %s 晃完，参数回默认", gPartPoke.part.c_str());
     }
 }
 
