@@ -1,0 +1,44 @@
+{
+ "origin": [
+  415,
+  160
+ ],
+ "masks": {
+  "head": 0,
+  "chest": 0,
+  "arm": 904,
+  "skirt": 2260,
+  "leg": 1059,
+  "tail": 11175
+ },
+ "roots": {
+  "AngleX": {
+   "name": "OX",
+   "amp": 9.0,
+   "per": {
+    "head": 0,
+    "chest": 0,
+    "arm": 1,
+    "skirt": 1,
+    "leg": 0,
+    "tail": 1
+   },
+   "val": {
+    "head": 0,
+    "chest": 0,
+    "arm": 9.0,
+    "skirt": 9.0,
+    "leg": 0,
+    "tail": -9.0
+   }
+  }
+ },
+ "pick": {
+  "head": [],
+  "chest": [],
+  "arm": [],
+  "skirt": [],
+  "leg": [],
+  "tail": []
+ }
+}

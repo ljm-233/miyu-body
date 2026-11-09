@@ -1981,3 +1981,106 @@ CubismPhysics 写输出参数时 `weight=1.0` 是**硬覆盖**
   `key*`（表情开关）被排除了 —— 想做「点裙摆换一条裙子」的话，那是另一套开关，别混进来。
 - 头发/裙子/尾巴的**物理**参数（`LateHair*`、`SkirtLayer*`、`ribbon*`）量出来都是活的，
   但它们是被 physics 每帧覆盖的输出，只能当 physics 的输入间接用，不能直接当部位参数。
+
+## 二十二、点哪动哪重做：从模型自带的物理图出发（2026-11-10 02:2x–03:5x）
+
+他说「为什么你做的胸部不行，去学学自带的」「去学学自带的那些文件，去重做一遍这些点击物理」。
+上一版（二十节）错在哪：直接往 `ChestX1/ChestY1/SkirtY3` 写数 —— 而那些是
+`physics3.json` 里的 **Output.Destination**，是物理算出来的**结果**。手写 = 顶掉结果，
+网格被直接拉过去，形状发尖。正确口子是 **Input.Source**：拨它，物理自己把这块带起来。
+
+### 22.1 物理图（tools/physics-map.py → state/physics-map.{json,md}）
+
+`大肥鱼.physics3.json` 131 条 PhysicsSetting 串成一张有向图（Input.Source → Output.Destination）：
+
+| 项 | 数 |
+|---|---|
+| PhysicsSetting | 131 |
+| 参数节点 | 323 |
+| 边 | 773 |
+| **根**（只被输入、从不被输出 = 可以拨的旋钮） | **31** |
+| **叶子**（只被输出、从不被输入 = 视觉结果） | **273** |
+| 中间节点（两头都占，比如 `ParamBodyAngleX`） | 19 |
+| 反馈环 | 0（确实是 DAG） |
+| 最长传导链 | 5 层（`ParamBrowLY → ParamBrowLAngleSmoothing → ParamBrowLAngle → ShockL → LHighLight1`） |
+
+每个部位的根（`part_roots`，名字优先、cdi3 分组兜底）：
+
+| 部位 | 叶子 | 能拨到它的根（前几个） |
+|---|---|---|
+| head | 125 | BrowInnerUp / CheeckPuff / EyeSmile / JawOpen / … / AngleX / AngleY / AngleZ |
+| chest | 10 | PositionZ / LeanInput / PositionY / ParamBreath / PositionX |
+| arm | 31 | Movement1–3（动作开关）/ PositionX / PositionY / PositionZ |
+| skirt | 72 | Clothes1（长短裙开关）/ PositionY / LeanInput / PositionZ / ParamBreath |
+| leg | 15 | PositionX / PositionZ / PositionY / LeanInput / Clothes2 |
+| tail | 20 | Param42 / Clothes2 / Clothes1 / LeanInput / ParamBreath / AngleZ |
+
+**关键发现：`ChestX*` 的 Input.Source 就是 `ParamBodyAngleX`**（Setting64），而
+`ParamBodyAngleX` 本身是根 `PositionX` 的输出（Setting4）。所以他 02:1x 验的那条
+「ParamBodyAngleX 0→25，胸部变 86%」正是「拨胸物理的输入」这一步 —— 不是拨 `ChestX1`。
+
+### 22.2 部位判定改成按剪影（不再用 bbox 矩形）
+
+`state/part-zones.tsv` 的格子图**是身体自己算的**（`src/main.cpp: partZoneTick`）：
+每个 drawable 都挂着 cdi3 里的一个 part（`头 / 前发 / 后发 / 胸 / 短裙 / 长裙 / 手臂 / 手 / 腿 / 尾巴 / 腰部衣服 …`），
+把 drawable 的**顶点**按渲染用同一套投影换算成窗口归一化坐标（u=lx/窗口宽），
+光栅化进 60×120 的格子；后画的盖先画的（等于取脸上最上层）。
+
+- 715 个 drawable，挂了 part 的 712 个，认得出部位的 484 个（head 243 / chest 83 / arm 49 / skirt 56 / leg 42 / tail 11）；
+  认不出的（作者的「组 N」「文件夹」「图层…」）不猜，靠 2 圈泛洪从最近的已标格借一个。
+- 再用**她本人的 alpha** 裁一遍（5×5 采样，过 1/4 不透明才算她在）：透明地方画的眼镜/帽子/素材盒子不进格子。
+- 点下去查这张表（`partpoke::classify`），u/v 是**窗口归一化**，和 bbox 一点关系都没有 ——
+  右边那条大尾巴再也不会把横向撑歪。
+- 每 8 秒或变化超过阈值就把格子落盘到 `state/part-zones.tsv`，工具读的是同一份。
+
+### 22.3 点击 = 拨驱动参数（弹簧不动）
+
+`state/param-parts.tsv` 现在只有 7 行 P，全是物理**输入**：`AngleX / AngleY / ParamBodyAngleX / ParamBodyAngleZ / HipAngleX / ParamBreath`。
+点一下 → 给这些参数一个冲量（`v = amp × √k ≈ 12.25`，所以峰值 ≈ amp）→ 弹簧-阻尼（k=150 c=9，没改）自己晃回去。
+单极参数（`ParamBreath` 0..1、默认 0）撞到下界会把方向翻过来，不然负冲量被压成 0（踩过：日志里 `ParamBreath(+0.00)`）。
+
+### 22.4 验收（**数字，不是感觉**）
+
+量法：身体带 `MIYU_POKE=<部位>` 起来，2 秒后真点一下那个部位，然后每 8 帧导一帧（GL 读回、窗口坐标、带 alpha），
+逐像素比、按格子统计（`tools/part-poke-check.py` → `state/poke-check.json`）。
+**不用 grim**：桌面在动（终端一直滚），截图还有个顶栏 39px 的坐标偏移（顺带发现：日志里 `[box] 全局` 少了 bar 的 exclusive zone，比真位置高 39px，工具一律改用导帧）。
+
+| 点哪 | 自己动 | 别的最大 | 倍数 | 过 2× |
+|---|---|---|---|---|
+| 头 head | 5572 px | tail 911 | **6.12×** | ✅ |
+| 胸 chest | 2398 px | tail 5182 | **0.46×** | ❌ |
+| 手臂 arm | 3501 px | tail 7512 | **0.47×** | ❌ |
+| 裙 skirt | 1033 px | leg 5965 | **0.17×** | ❌ |
+| 腿 leg | 6816 px | tail 2272 | **3.00×** | ✅ |
+| 尾 tail | 10539 px | arm 1789 | **5.89×** | ✅ |
+
+**3 个过、3 个没过，原因在模型，不在代码**（实测账本 `state/part-roots.json` 里 22 个驱动参数 × 6 个部位的完整表）：
+
+- 胸、手臂、裙在物理图里**没有任何专属输入**：`Chest*` 吃 `ParamBodyAngleX(80)/ParamBodyAngleZ(20)`，
+  `手臂` 吃 `ParamBodyAngleX(52–73)/PositionY`，`SkirtX*` 吃 `HipAngleX(50)` —— 全是同一批身体角度。
+  拨它就是「整个人往前倾一下」，胸、手、裙、腿一起动。
+- 更要命的是那条**大尾巴**：`Param_Angle_Rotation84–89`（Setting130）吃 `ParamBodyAngleX(40)/ParamBodyAngleZ(30)/LeanInput(40)/ParamBreath(15)`，
+  它比胸/手/裙**更吃身体角度**，占地又比它们大（尾巴格子 866 个 vs 胸 190 个），
+  所以「别的部位最大」永远是尾巴。点胸 5182 px 的尾巴位移就是这么来的。
+- 裙和腿共用一个输入（`HipAngleX`），拨哪边另一边都跟着 —— 0.17× 是这么来的。
+- 缩小幅度试过（3.0→1.2 / 2.5→1.0 / 3.5→1.2）：倍数不掉也没涨（0.41 / 0.39 / 0.18），线性关系，不是幅度问题。
+
+形状：`state/shot-chest-physics.png`（点胸前后 3 帧，间隔约 65ms）—— 胸口那块布/蝴蝶结是**整块平移+物理回弹**，
+没有上一版那种尖角/撕开。因为写的已经是 `ParamBodyAngleX`，`ChestX1..3` 全是物理算出来的。
+
+分区图：`state/shot-zones.png`（她的实拍 + 分区，窗口坐标）—— 头/胸/手/裙/腿/尾六块都贴着身体。
+
+### 22.5 回归
+
+- 可点区域：`881 条矩形 / 127912 px / 28.4% / bbox=[109,107..446,837]`，和改之前一模一样（逐像素穿透没动）。
+- 设置页 `http://127.0.0.1:8200/` 200，`/state` 全默认（fps 240、aa smaa、tap true…）。
+- 服务 `active`，`MIYU_OUTPUT=1`，输出 HDMI-A-3，窗口 500x900。
+- 拖动 / 跨屏 / 待机 / 时间感的代码一行没动（只动了 partpoke.h、main.cpp 的部位格子与冲量、platform_wayland.cpp 的点击判定里那 20 行）。
+- `cmake --build build --clean-first` 两个 target 0 警告 0 错误。
+
+### 22.6 下一步（如果还要往 2× 上推）
+
+1. 给胸/手/裙单独做**局部物理**：在 physics3.json 里加一条只吃「局部输入」的 setting
+   （比如 `ParamChestPoke` → `ChestX*`），这样点胸就真的只动胸。要改模型文件，得他点头。
+2. 或者接受「身体一动尾巴跟着甩」这个物理事实，把判据改成「自己是不是动得最多**的那一档**」。
+3. 尾巴的冲量还可以再大（现在 0.5，5.89× 已经很稳），但别再往上，会甩出画面。

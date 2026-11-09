@@ -1,0 +1,7964 @@
+{
+ "source": "/home/link/.dsh/miyu/body/model/大肥鱼.physics3.json",
+ "settings": 131,
+ "nodes": 323,
+ "edges": 773,
+ "roots": [
+  "AngleX",
+  "AngleY",
+  "AngleZ",
+  "BrowInnerUp",
+  "CheeckPuff",
+  "Clothes1",
+  "Clothes2",
+  "EyeSmile",
+  "JawOpen",
+  "LEyeSquint",
+  "LeanInput",
+  "MouthX",
+  "Mouthpucker",
+  "Movement1",
+  "Movement2",
+  "Movement3",
+  "Param42",
+  "ParamBreath",
+  "ParamBrowLY",
+  "ParamBrowRY",
+  "ParamEyeBallX",
+  "ParamEyeBallY",
+  "ParamEyeLOpen",
+  "ParamEyeROpen",
+  "ParamMouthForm",
+  "ParamMouthOpenY",
+  "Paramshuiyin7",
+  "PositionX",
+  "PositionY",
+  "PositionZ",
+  "REyeSquint"
+ ],
+ "leaves": [
+  "AngleXbs",
+  "AngleYbs",
+  "CheeckPuff2",
+  "CheeckPuffL",
+  "CheeckPuffR",
+  "CheeksWiggleX",
+  "CheeksWiggleXL",
+  "CheeksWiggleXR",
+  "CheeksWiggleY",
+  "ChestX1",
+  "ChestX2",
+  "ChestX3",
+  "ChestXBS",
+  "ChestY1",
+  "ChestY2",
+  "ChestY3",
+  "ChestY4",
+  "Emotion",
+  "FrontHairX1",
+  "FrontHairX2",
+  "FrontHairX3",
+  "FrontHairX4",
+  "FrontHairY1",
+  "FrontHairY2",
+  "FrontHairY3",
+  "FrontHairY4",
+  "GemHighlightx",
+  "GemHighlighty",
+  "GemReflection",
+  "Hat2phB",
+  "Hat2phC",
+  "Hat2phD",
+  "Hat2pha",
+  "Hat_XA",
+  "Hat_XB",
+  "Hat_XC",
+  "Hat_YA",
+  "Hat_YB",
+  "Hat_YC",
+  "HipAngleX2",
+  "HipAngleYDOWN",
+  "HipAngleYUP",
+  "HipZ1",
+  "HipZ2",
+  "KiraA",
+  "KiraB",
+  "KiraC",
+  "KiraD",
+  "LArm",
+  "LBowX1",
+  "LBowX3",
+  "LBowX4",
+  "LEGAngleZ2",
+  "LEar1",
+  "LEar2",
+  "LEar3",
+  "LEyeLashX1",
+  "LEyeLashX2",
+  "LEyeball1",
+  "LEyeball2",
+  "LEyeball3",
+  "LEyes1",
+  "LEyes2",
+  "LFlip",
+  "LFlip2",
+  "LForearm",
+  "LHand",
+  "LHand2",
+  "LHighLight1",
+  "LHighLight2",
+  "LHighLight3",
+  "LJewelry1",
+  "LJewelry2",
+  "LJewelry3",
+  "LParamGlowA",
+  "LParamGlowB",
+  "LRibbonX1",
+  "LRibbonX2",
+  "LRibbonX3",
+  "LRibbonX4",
+  "LSleeveX1",
+  "LSleeveX2",
+  "LSleeveX3",
+  "LSleeveY",
+  "LSleeveY2",
+  "LSleeveY3",
+  "LWrist",
+  "LaceLX1",
+  "LaceLX2",
+  "LaceLX3",
+  "LaceRX",
+  "LaceRX2",
+  "LaceRX3",
+  "LaceX1",
+  "LaceX2",
+  "LaceX3",
+  "LaceY1",
+  "LaceY2",
+  "LaceY3",
+  "LateHairX1",
+  "LateHairX2",
+  "LateHairX3",
+  "LateHairX4",
+  "LateHairX5",
+  "LateHairY1",
+  "LateHairY2",
+  "LateHairY3",
+  "LateHairY4",
+  "LateHairY5",
+  "LateHairZ",
+  "LateSideHairX1",
+  "LateSideHairX2",
+  "LateSideHairX3",
+  "LateSideHairX4",
+  "LateSideHairX5",
+  "LateSideHairY1",
+  "LateSideHairY2",
+  "LateSideHairY3",
+  "LateSideHairY4",
+  "LateSideHairY5",
+  "LipPhysics1",
+  "LipPhysics2",
+  "LipPhysics3",
+  "LowX2",
+  "Param25",
+  "Param33",
+  "Param34",
+  "Param35",
+  "Param44",
+  "Param45",
+  "Param46",
+  "Param47",
+  "Param48",
+  "Param49",
+  "Param50",
+  "Param52",
+  "Param53",
+  "Param54",
+  "ParamBodyAngleX2",
+  "ParamBodyAngleY2",
+  "ParamBrowLY2",
+  "ParamBrowLY3",
+  "ParamBrowRY2",
+  "ParamBrowRY3",
+  "ParamHipAngleZ",
+  "ParamHipAngleZ2",
+  "ParamTongueUpDown",
+  "ParamTongueWidth",
+  "Param_Angle_Rotation84",
+  "Param_Angle_Rotation85",
+  "Param_Angle_Rotation86",
+  "Param_Angle_Rotation87",
+  "Param_Angle_Rotation88",
+  "Param_Angle_Rotation89",
+  "PoutOffsetXL",
+  "PoutOffsetXR",
+  "Press",
+  "PupilX",
+  "PupilY",
+  "RArm",
+  "RBowX1",
+  "RBowX2",
+  "RBowX3",
+  "RBowX4",
+  "RBowX5",
+  "RBowX6",
+  "RBowX7",
+  "RBowX8",
+  "REar1",
+  "REar2",
+  "REar3",
+  "REyeLashX1",
+  "REyeLashX2",
+  "REyeball1",
+  "REyeball2",
+  "REyeball3",
+  "REyes1",
+  "REyes2",
+  "RFlip",
+  "RFlip2",
+  "RForearm",
+  "RHand",
+  "RHand2",
+  "RHighLight1",
+  "RHighLight2",
+  "RHighLight3",
+  "RJewelry1",
+  "RJewelry2",
+  "RJewelry3",
+  "RParamGlowA",
+  "RParamGlowB",
+  "RParamGlowC",
+  "RRibbonX1",
+  "RRibbonX2",
+  "RRibbonX3",
+  "RRibbonX4",
+  "RSleeveX1",
+  "RSleeveX2",
+  "RSleeveX3",
+  "RSleeveY1",
+  "RSleeveY2",
+  "RSleeveY3",
+  "RWrist",
+  "Shine",
+  "ShineBIG",
+  "ShineX",
+  "ShortPonytailX1",
+  "ShortPonytailX2",
+  "ShortPonytailXBS",
+  "ShortPonytailXBS2",
+  "ShortPonytailY",
+  "ShortPonytailY2",
+  "ShortPonytailYBS",
+  "ShortPonytailYBS2",
+  "ShoulderY",
+  "ShoulderZ",
+  "SideHairLBS",
+  "SideHairLX1",
+  "SideHairLX2",
+  "SideHairLX3",
+  "SideHairRBS",
+  "SideHairRX1",
+  "SideHairRX2",
+  "SideHairRX3",
+  "SideHairX1",
+  "SideHairX2",
+  "SideHairX3",
+  "SideHairX4",
+  "SideHairY1",
+  "SideHairY2",
+  "SideHairY3",
+  "SideHairY4",
+  "SkirtLayerX1",
+  "SkirtLayerX2",
+  "SkirtLayerX3",
+  "SkirtLayerX4",
+  "SkirtLayerX5",
+  "SkirtLayerX6",
+  "SkirtLayerY1",
+  "SkirtLayerY2",
+  "SkirtLayerY3",
+  "SkirtLayerY4",
+  "SkirtLayerY5",
+  "SkirtSpecial",
+  "SkirtSpecial2",
+  "SkirtX1",
+  "SkirtX2",
+  "SkirtX3",
+  "SkirtX4",
+  "SkirtY",
+  "SkirtY2",
+  "SkirtY3",
+  "SkirtY4",
+  "SkirtY5",
+  "SkirtY6",
+  "SkirtY7",
+  "SkirtY8",
+  "SkirtY9",
+  "SkirtYBS",
+  "ribbonX1",
+  "ribbonX2",
+  "ribbonX3",
+  "ribbonX4",
+  "ribbonX5",
+  "ribbonX6",
+  "ribbonX7",
+  "ribbonY1",
+  "ribbonY2",
+  "ribbonY3",
+  "ribbonY4",
+  "ribbonY5",
+  "ribbonY6",
+  "ribbonY7"
+ ],
+ "intermediate": [
+  "Emotion2",
+  "HipAngleX",
+  "HipAngleY",
+  "HipAngleZ",
+  "LControl",
+  "ParamAngleX",
+  "ParamAngleY",
+  "ParamAngleZ",
+  "ParamBodyAngleRX",
+  "ParamBodyAngleX",
+  "ParamBodyAngleY",
+  "ParamBodyAngleZ",
+  "ParamBrowLAngle",
+  "ParamBrowLAngleSmoothing",
+  "ParamBrowRAngle",
+  "ParamBrowRAngleSmoothing",
+  "RControl",
+  "ShockL",
+  "ShockR"
+ ],
+ "cyclic_components": [],
+ "longest_chain_layers": 5,
+ "longest_chain": [
+  "ParamBrowLY",
+  "ParamBrowLAngleSmoothing",
+  "ParamBrowLAngle",
+  "ShockL",
+  "LHighLight1"
+ ],
+ "part_roots": {
+  "head": {
+   "leaves": 125,
+   "roots": [
+    {
+     "id": "BrowInnerUp",
+     "name": "BrowInnerUp",
+     "hops": 1,
+     "own_leaves": 2,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting36",
+      "PhysicsSetting37"
+     ]
+    },
+    {
+     "id": "CheeckPuff",
+     "name": "鼓脸",
+     "hops": 1,
+     "own_leaves": 5,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting47",
+      "PhysicsSetting91",
+      "PhysicsSetting92"
+     ]
+    },
+    {
+     "id": "EyeSmile",
+     "name": "微笑",
+     "hops": 1,
+     "own_leaves": 8,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting28",
+      "PhysicsSetting29",
+      "PhysicsSetting30",
+      "PhysicsSetting31"
+     ]
+    },
+    {
+     "id": "JawOpen",
+     "name": "下巴开闭",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting48"
+     ]
+    },
+    {
+     "id": "LEyeSquint",
+     "name": "L-Eye Squint",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting37"
+     ]
+    },
+    {
+     "id": "MouthX",
+     "name": "MouthX",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting49"
+     ]
+    },
+    {
+     "id": "Mouthpucker",
+     "name": "撅嘴",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting48"
+     ]
+    },
+    {
+     "id": "ParamEyeBallX",
+     "name": "眼珠 X",
+     "hops": 1,
+     "own_leaves": 2,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting104"
+     ]
+    },
+    {
+     "id": "ParamEyeBallY",
+     "name": "眼珠 Y",
+     "hops": 1,
+     "own_leaves": 4,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting104",
+      "PhysicsSetting105",
+      "PhysicsSetting26"
+     ]
+    },
+    {
+     "id": "ParamEyeLOpen",
+     "name": "左眼　开闭",
+     "hops": 1,
+     "own_leaves": 14,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting103",
+      "PhysicsSetting25",
+      "PhysicsSetting29",
+      "PhysicsSetting31",
+      "PhysicsSetting32",
+      "PhysicsSetting44"
+     ]
+    },
+    {
+     "id": "ParamEyeROpen",
+     "name": "右眼  开闭",
+     "hops": 1,
+     "own_leaves": 14,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting102",
+      "PhysicsSetting24",
+      "PhysicsSetting28",
+      "PhysicsSetting30",
+      "PhysicsSetting33",
+      "PhysicsSetting45"
+     ]
+    },
+    {
+     "id": "ParamMouthForm",
+     "name": "嘴　变形",
+     "hops": 1,
+     "own_leaves": 20,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting100",
+      "PhysicsSetting107",
+      "PhysicsSetting38",
+      "PhysicsSetting40",
+      "PhysicsSetting47",
+      "PhysicsSetting90"
+     ]
+    },
+    {
+     "id": "ParamMouthOpenY",
+     "name": "嘴　张开和闭合",
+     "hops": 1,
+     "own_leaves": 6,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting106",
+      "PhysicsSetting107",
+      "PhysicsSetting48",
+      "PhysicsSetting90"
+     ]
+    },
+    {
+     "id": "Paramshuiyin7",
+     "name": "-----下面是按键-----",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting46"
+     ]
+    },
+    {
+     "id": "REyeSquint",
+     "name": "R-Eye Squint",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting36"
+     ]
+    },
+    {
+     "id": "ParamBrowLY",
+     "name": "左眉上下",
+     "hops": 1,
+     "own_leaves": 14,
+     "leaf_share": 0.833,
+     "settings": [
+      "PhysicsSetting100",
+      "PhysicsSetting34",
+      "PhysicsSetting37",
+      "PhysicsSetting40",
+      "PhysicsSetting43",
+      "PhysicsSetting46"
+     ]
+    },
+    {
+     "id": "ParamBrowRY",
+     "name": "右眉上下",
+     "hops": 1,
+     "own_leaves": 14,
+     "leaf_share": 0.833,
+     "settings": [
+      "PhysicsSetting100",
+      "PhysicsSetting35",
+      "PhysicsSetting36",
+      "PhysicsSetting38",
+      "PhysicsSetting42",
+      "PhysicsSetting46"
+     ]
+    },
+    {
+     "id": "AngleZ",
+     "name": "OZ",
+     "hops": 1,
+     "own_leaves": 52,
+     "leaf_share": 0.703,
+     "settings": [
+      "PhysicsSetting3",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleX",
+     "name": "OX",
+     "hops": 1,
+     "own_leaves": 54,
+     "leaf_share": 0.684,
+     "settings": [
+      "PhysicsSetting1",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleY",
+     "name": "OY",
+     "hops": 1,
+     "own_leaves": 54,
+     "leaf_share": 0.684,
+     "settings": [
+      "PhysicsSetting104",
+      "PhysicsSetting105",
+      "PhysicsSetting2",
+      "PhysicsSetting52",
+      "PhysicsSetting55",
+      "PhysicsSetting56"
+     ]
+    },
+    {
+     "id": "Clothes2",
+     "name": "2. 大小变",
+     "hops": 1,
+     "own_leaves": 16,
+     "leaf_share": 0.667,
+     "settings": [
+      "PhysicsSetting118",
+      "PhysicsSetting127",
+      "PhysicsSetting130",
+      "PhysicsSetting51",
+      "PhysicsSetting55",
+      "PhysicsSetting61"
+     ]
+    },
+    {
+     "id": "ParamBreath",
+     "name": "呼吸",
+     "hops": 1,
+     "own_leaves": 47,
+     "leaf_share": 0.398,
+     "settings": [
+      "PhysicsSetting108",
+      "PhysicsSetting109",
+      "PhysicsSetting116",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting51"
+     ]
+    },
+    {
+     "id": "LeanInput",
+     "name": "Lean Input",
+     "hops": 1,
+     "own_leaves": 18,
+     "leaf_share": 0.269,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting118",
+      "PhysicsSetting125",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "PositionX",
+     "name": "OPX",
+     "hops": 2,
+     "own_leaves": 6,
+     "leaf_share": 0.072,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting18",
+      "PhysicsSetting22",
+      "PhysicsSetting4",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionZ",
+     "name": "OPYZ",
+     "hops": 2,
+     "own_leaves": 5,
+     "leaf_share": 0.062,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting13",
+      "PhysicsSetting17",
+      "PhysicsSetting23",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionY",
+     "name": "OPY",
+     "hops": 2,
+     "own_leaves": 2,
+     "leaf_share": 0.027,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting13",
+      "PhysicsSetting14",
+      "PhysicsSetting15",
+      "PhysicsSetting16",
+      "PhysicsSetting18"
+     ]
+    }
+   ]
+  },
+  "chest": {
+   "leaves": 10,
+   "roots": [
+    {
+     "id": "PositionZ",
+     "name": "OPYZ",
+     "hops": 1,
+     "own_leaves": 10,
+     "leaf_share": 0.111,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting13",
+      "PhysicsSetting17",
+      "PhysicsSetting23",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "LeanInput",
+     "name": "Lean Input",
+     "hops": 1,
+     "own_leaves": 6,
+     "leaf_share": 0.075,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting118",
+      "PhysicsSetting125",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "PositionY",
+     "name": "OPY",
+     "hops": 1,
+     "own_leaves": 6,
+     "leaf_share": 0.068,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting13",
+      "PhysicsSetting14",
+      "PhysicsSetting15",
+      "PhysicsSetting16",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "ParamBreath",
+     "name": "呼吸",
+     "hops": 1,
+     "own_leaves": 5,
+     "leaf_share": 0.034,
+     "settings": [
+      "PhysicsSetting108",
+      "PhysicsSetting109",
+      "PhysicsSetting116",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting51"
+     ]
+    },
+    {
+     "id": "PositionX",
+     "name": "OPX",
+     "hops": 2,
+     "own_leaves": 10,
+     "leaf_share": 0.096,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting18",
+      "PhysicsSetting22",
+      "PhysicsSetting4",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    }
+   ]
+  },
+  "arm": {
+   "leaves": 31,
+   "roots": [
+    {
+     "id": "Movement1",
+     "name": "1. 狗尾草",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting128"
+     ]
+    },
+    {
+     "id": "Movement2",
+     "name": "2. 抚胸",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting128"
+     ]
+    },
+    {
+     "id": "Movement3",
+     "name": "3. 竖食指",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting128"
+     ]
+    },
+    {
+     "id": "PositionZ",
+     "name": "OPYZ",
+     "hops": 1,
+     "own_leaves": 19,
+     "leaf_share": 0.235,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting13",
+      "PhysicsSetting17",
+      "PhysicsSetting23",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionY",
+     "name": "OPY",
+     "hops": 1,
+     "own_leaves": 17,
+     "leaf_share": 0.233,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting13",
+      "PhysicsSetting14",
+      "PhysicsSetting15",
+      "PhysicsSetting16",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "PositionX",
+     "name": "OPX",
+     "hops": 1,
+     "own_leaves": 19,
+     "leaf_share": 0.229,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting18",
+      "PhysicsSetting22",
+      "PhysicsSetting4",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "ParamBreath",
+     "name": "呼吸",
+     "hops": 1,
+     "own_leaves": 18,
+     "leaf_share": 0.153,
+     "settings": [
+      "PhysicsSetting108",
+      "PhysicsSetting109",
+      "PhysicsSetting116",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting51"
+     ]
+    },
+    {
+     "id": "LeanInput",
+     "name": "Lean Input",
+     "hops": 1,
+     "own_leaves": 4,
+     "leaf_share": 0.06,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting118",
+      "PhysicsSetting125",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "ParamBrowLY",
+     "name": "左眉上下",
+     "hops": 2,
+     "own_leaves": 3,
+     "leaf_share": 0.167,
+     "settings": [
+      "PhysicsSetting100",
+      "PhysicsSetting34",
+      "PhysicsSetting37",
+      "PhysicsSetting40",
+      "PhysicsSetting43",
+      "PhysicsSetting46"
+     ]
+    },
+    {
+     "id": "ParamBrowRY",
+     "name": "右眉上下",
+     "hops": 2,
+     "own_leaves": 3,
+     "leaf_share": 0.167,
+     "settings": [
+      "PhysicsSetting100",
+      "PhysicsSetting35",
+      "PhysicsSetting36",
+      "PhysicsSetting38",
+      "PhysicsSetting42",
+      "PhysicsSetting46"
+     ]
+    },
+    {
+     "id": "AngleX",
+     "name": "OX",
+     "hops": 2,
+     "own_leaves": 2,
+     "leaf_share": 0.025,
+     "settings": [
+      "PhysicsSetting1",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleY",
+     "name": "OY",
+     "hops": 2,
+     "own_leaves": 2,
+     "leaf_share": 0.025,
+     "settings": [
+      "PhysicsSetting104",
+      "PhysicsSetting105",
+      "PhysicsSetting2",
+      "PhysicsSetting52",
+      "PhysicsSetting55",
+      "PhysicsSetting56"
+     ]
+    }
+   ]
+  },
+  "skirt": {
+   "leaves": 72,
+   "roots": [
+    {
+     "id": "Clothes1",
+     "name": "1. 长短裙切换",
+     "hops": 1,
+     "own_leaves": 10,
+     "leaf_share": 0.714,
+     "settings": [
+      "PhysicsSetting62",
+      "PhysicsSetting68",
+      "PhysicsSetting69"
+     ]
+    },
+    {
+     "id": "PositionY",
+     "name": "OPY",
+     "hops": 1,
+     "own_leaves": 38,
+     "leaf_share": 0.521,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting13",
+      "PhysicsSetting14",
+      "PhysicsSetting15",
+      "PhysicsSetting16",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "LeanInput",
+     "name": "Lean Input",
+     "hops": 1,
+     "own_leaves": 24,
+     "leaf_share": 0.358,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting118",
+      "PhysicsSetting125",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "PositionZ",
+     "name": "OPYZ",
+     "hops": 1,
+     "own_leaves": 29,
+     "leaf_share": 0.358,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting13",
+      "PhysicsSetting17",
+      "PhysicsSetting23",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "ParamBreath",
+     "name": "呼吸",
+     "hops": 1,
+     "own_leaves": 33,
+     "leaf_share": 0.28,
+     "settings": [
+      "PhysicsSetting108",
+      "PhysicsSetting109",
+      "PhysicsSetting116",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting51"
+     ]
+    },
+    {
+     "id": "PositionX",
+     "name": "OPX",
+     "hops": 2,
+     "own_leaves": 29,
+     "leaf_share": 0.349,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting18",
+      "PhysicsSetting22",
+      "PhysicsSetting4",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "AngleZ",
+     "name": "OZ",
+     "hops": 2,
+     "own_leaves": 18,
+     "leaf_share": 0.243,
+     "settings": [
+      "PhysicsSetting3",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleX",
+     "name": "OX",
+     "hops": 2,
+     "own_leaves": 18,
+     "leaf_share": 0.228,
+     "settings": [
+      "PhysicsSetting1",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleY",
+     "name": "OY",
+     "hops": 2,
+     "own_leaves": 18,
+     "leaf_share": 0.228,
+     "settings": [
+      "PhysicsSetting104",
+      "PhysicsSetting105",
+      "PhysicsSetting2",
+      "PhysicsSetting52",
+      "PhysicsSetting55",
+      "PhysicsSetting56"
+     ]
+    }
+   ]
+  },
+  "leg": {
+   "leaves": 15,
+   "roots": [
+    {
+     "id": "PositionX",
+     "name": "OPX",
+     "hops": 1,
+     "own_leaves": 12,
+     "leaf_share": 0.108,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting18",
+      "PhysicsSetting22",
+      "PhysicsSetting4",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionZ",
+     "name": "OPYZ",
+     "hops": 1,
+     "own_leaves": 10,
+     "leaf_share": 0.086,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting13",
+      "PhysicsSetting17",
+      "PhysicsSetting23",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionY",
+     "name": "OPY",
+     "hops": 1,
+     "own_leaves": 8,
+     "leaf_share": 0.082,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting13",
+      "PhysicsSetting14",
+      "PhysicsSetting15",
+      "PhysicsSetting16",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "LeanInput",
+     "name": "Lean Input",
+     "hops": 1,
+     "own_leaves": 5,
+     "leaf_share": 0.06,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting118",
+      "PhysicsSetting125",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "Clothes2",
+     "name": "2. 大小变",
+     "hops": 1,
+     "own_leaves": 1,
+     "leaf_share": 0.042,
+     "settings": [
+      "PhysicsSetting118",
+      "PhysicsSetting127",
+      "PhysicsSetting130",
+      "PhysicsSetting51",
+      "PhysicsSetting55",
+      "PhysicsSetting61"
+     ]
+    },
+    {
+     "id": "AngleX",
+     "name": "OX",
+     "hops": 1,
+     "own_leaves": 2,
+     "leaf_share": 0.013,
+     "settings": [
+      "PhysicsSetting1",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleY",
+     "name": "OY",
+     "hops": 1,
+     "own_leaves": 2,
+     "leaf_share": 0.013,
+     "settings": [
+      "PhysicsSetting104",
+      "PhysicsSetting105",
+      "PhysicsSetting2",
+      "PhysicsSetting52",
+      "PhysicsSetting55",
+      "PhysicsSetting56"
+     ]
+    }
+   ]
+  },
+  "tail": {
+   "leaves": 20,
+   "roots": [
+    {
+     "id": "Param42",
+     "name": "R手腕 Z",
+     "hops": 1,
+     "own_leaves": 5,
+     "leaf_share": 1.0,
+     "settings": [
+      "PhysicsSetting131"
+     ]
+    },
+    {
+     "id": "Clothes2",
+     "name": "2. 大小变",
+     "hops": 1,
+     "own_leaves": 7,
+     "leaf_share": 0.292,
+     "settings": [
+      "PhysicsSetting118",
+      "PhysicsSetting127",
+      "PhysicsSetting130",
+      "PhysicsSetting51",
+      "PhysicsSetting55",
+      "PhysicsSetting61"
+     ]
+    },
+    {
+     "id": "Clothes1",
+     "name": "1. 长短裙切换",
+     "hops": 1,
+     "own_leaves": 4,
+     "leaf_share": 0.286,
+     "settings": [
+      "PhysicsSetting62",
+      "PhysicsSetting68",
+      "PhysicsSetting69"
+     ]
+    },
+    {
+     "id": "LeanInput",
+     "name": "Lean Input",
+     "hops": 1,
+     "own_leaves": 12,
+     "leaf_share": 0.179,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting118",
+      "PhysicsSetting125",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting18"
+     ]
+    },
+    {
+     "id": "ParamBreath",
+     "name": "呼吸",
+     "hops": 1,
+     "own_leaves": 16,
+     "leaf_share": 0.136,
+     "settings": [
+      "PhysicsSetting108",
+      "PhysicsSetting109",
+      "PhysicsSetting116",
+      "PhysicsSetting130",
+      "PhysicsSetting14",
+      "PhysicsSetting51"
+     ]
+    },
+    {
+     "id": "AngleZ",
+     "name": "OZ",
+     "hops": 1,
+     "own_leaves": 4,
+     "leaf_share": 0.054,
+     "settings": [
+      "PhysicsSetting3",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleX",
+     "name": "OX",
+     "hops": 1,
+     "own_leaves": 4,
+     "leaf_share": 0.051,
+     "settings": [
+      "PhysicsSetting1",
+      "PhysicsSetting52",
+      "PhysicsSetting56",
+      "PhysicsSetting57",
+      "PhysicsSetting60",
+      "PhysicsSetting83"
+     ]
+    },
+    {
+     "id": "AngleY",
+     "name": "OY",
+     "hops": 1,
+     "own_leaves": 4,
+     "leaf_share": 0.051,
+     "settings": [
+      "PhysicsSetting104",
+      "PhysicsSetting105",
+      "PhysicsSetting2",
+      "PhysicsSetting52",
+      "PhysicsSetting55",
+      "PhysicsSetting56"
+     ]
+    },
+    {
+     "id": "PositionZ",
+     "name": "OPYZ",
+     "hops": 2,
+     "own_leaves": 12,
+     "leaf_share": 0.148,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting13",
+      "PhysicsSetting17",
+      "PhysicsSetting23",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionX",
+     "name": "OPX",
+     "hops": 2,
+     "own_leaves": 12,
+     "leaf_share": 0.145,
+     "settings": [
+      "PhysicsSetting12",
+      "PhysicsSetting18",
+      "PhysicsSetting22",
+      "PhysicsSetting4",
+      "PhysicsSetting5",
+      "PhysicsSetting74"
+     ]
+    },
+    {
+     "id": "PositionY",
+     "name": "OPY",
+     "hops": 2,
+     "own_leaves": 5,
+     "leaf_share": 0.068,
+     "settings": [
+      "PhysicsSetting10",
+      "PhysicsSetting13",
+      "PhysicsSetting14",
+      "PhysicsSetting15",
+      "PhysicsSetting16",
+      "PhysicsSetting18"
+     ]
+    }
+   ]
+  }
+ },
+ "part_of": {
+  "REyes1": "head",
+  "ParamBrowLAngle": "head",
+  "ribbonX2": "skirt",
+  "ChestY3": "chest",
+  "SkirtY4": "skirt",
+  "PoutOffsetXL": "head",
+  "RParamGlowB": "head",
+  "ParamBreath": "other",
+  "SkirtY7": "skirt",
+  "LSleeveX1": "arm",
+  "LaceLX2": "skirt",
+  "CheeckPuff2": "head",
+  "PositionX": "other",
+  "SkirtY8": "skirt",
+  "RRibbonX3": "skirt",
+  "ChestXBS": "chest",
+  "LipPhysics1": "head",
+  "Movement3": "head",
+  "ParamAngleZ": "leg",
+  "SkirtX1": "skirt",
+  "RBowX8": "skirt",
+  "PositionY": "other",
+  "SideHairLX1": "head",
+  "ParamBrowLAngleSmoothing": "head",
+  "FrontHairY3": "head",
+  "Hat_XC": "head",
+  "Press": "head",
+  "Hat_YB": "head",
+  "LEyes2": "head",
+  "FrontHairX3": "head",
+  "RWrist": "arm",
+  "KiraD": "head",
+  "HipAngleY": "leg",
+  "ParamEyeBallY": "head",
+  "LateHairY5": "head",
+  "CheeckPuffR": "head",
+  "EyeSmile": "head",
+  "LEGAngleZ2": "leg",
+  "SideHairRX1": "head",
+  "ParamTongueUpDown": "head",
+  "Hat2pha": "head",
+  "HipAngleX2": "leg",
+  "Param34": "leg",
+  "REyes2": "head",
+  "SideHairRX3": "head",
+  "LaceX2": "skirt",
+  "ribbonY5": "skirt",
+  "SkirtX4": "skirt",
+  "SkirtSpecial2": "skirt",
+  "LJewelry1": "head",
+  "FrontHairX4": "head",
+  "Param_Angle_Rotation89": "tail",
+  "ParamBrowLY": "head",
+  "SkirtLayerY5": "skirt",
+  "SideHairRX2": "head",
+  "ParamBrowRY2": "head",
+  "LaceRX2": "skirt",
+  "SkirtLayerX5": "skirt",
+  "RJewelry3": "head",
+  "AngleY": "other",
+  "LFlip2": "arm",
+  "FrontHairY4": "head",
+  "LSleeveY": "arm",
+  "RParamGlowA": "head",
+  "RRibbonX4": "skirt",
+  "REyeball3": "head",
+  "LRibbonX4": "skirt",
+  "ribbonY3": "skirt",
+  "SideHairX1": "head",
+  "LateSideHairX3": "head",
+  "HipAngleX": "leg",
+  "GemHighlighty": "head",
+  "RArm": "arm",
+  "RSleeveY2": "arm",
+  "Emotion2": "head",
+  "Clothes1": "skirt",
+  "SideHairY2": "head",
+  "LaceRX": "skirt",
+  "LateHairY3": "head",
+  "LateHairX1": "head",
+  "LRibbonX1": "skirt",
+  "LArm": "arm",
+  "LaceY2": "skirt",
+  "Hat2phC": "head",
+  "CheeksWiggleXR": "head",
+  "RSleeveY3": "arm",
+  "REyeLashX2": "head",
+  "Hat_YA": "head",
+  "FrontHairY1": "head",
+  "ShortPonytailXBS": "tail",
+  "AngleX": "other",
+  "RHand": "arm",
+  "LRibbonX2": "skirt",
+  "Param54": "leg",
+  "SkirtY": "skirt",
+  "Hat_XA": "head",
+  "LeanInput": "other",
+  "LateSideHairX4": "head",
+  "ribbonY2": "skirt",
+  "ParamBrowRAngleSmoothing": "head",
+  "RHighLight3": "head",
+  "ChestX2": "chest",
+  "Param35": "arm",
+  "HipAngleYUP": "leg",
+  "SkirtX2": "skirt",
+  "CheeckPuff": "head",
+  "RBowX5": "skirt",
+  "RBowX7": "skirt",
+  "ribbonX4": "skirt",
+  "RRibbonX1": "skirt",
+  "LSleeveY2": "arm",
+  "RSleeveY1": "arm",
+  "ChestY4": "chest",
+  "ribbonX6": "skirt",
+  "SideHairX3": "head",
+  "LowX2": "head",
+  "BrowInnerUp": "head",
+  "LEyeball1": "head",
+  "CheeksWiggleXL": "head",
+  "SideHairY1": "head",
+  "ChestX3": "chest",
+  "ParamAngleY": "leg",
+  "Param49": "tail",
+  "ParamHipAngleZ": "leg",
+  "Hat2phB": "head",
+  "ShortPonytailXBS2": "tail",
+  "ParamBodyAngleY": "chest",
+  "ShortPonytailY": "tail",
+  "RParamGlowC": "head",
+  "LHighLight3": "head",
+  "ShineBIG": "head",
+  "ParamEyeBallX": "head",
+  "LSleeveY3": "arm",
+  "SideHairX4": "head",
+  "LaceY1": "skirt",
+  "LateSideHairY3": "head",
+  "RBowX3": "skirt",
+  "Param48": "tail",
+  "LJewelry2": "head",
+  "ParamBodyAngleX2": "chest",
+  "RSleeveX2": "arm",
+  "Emotion": "head",
+  "RControl": "arm",
+  "REar2": "head",
+  "RBowX2": "skirt",
+  "Param46": "tail",
+  "HipZ1": "leg",
+  "FrontHairY2": "head",
+  "Paramshuiyin7": "head",
+  "LateSideHairX2": "head",
+  "RFlip": "arm",
+  "LateHairZ": "head",
+  "ribbonX5": "skirt",
+  "LParamGlowA": "head",
+  "SkirtLayerY1": "skirt",
+  "LWrist": "arm",
+  "Param_Angle_Rotation84": "tail",
+  "ParamBrowRAngle": "head",
+  "SkirtLayerX6": "skirt",
+  "LateHairX3": "head",
+  "Param_Angle_Rotation88": "tail",
+  "RSleeveX1": "arm",
+  "RRibbonX2": "skirt",
+  "ShortPonytailYBS2": "tail",
+  "LEyeLashX1": "head",
+  "LateHairX2": "head",
+  "ribbonY1": "skirt",
+  "ShortPonytailYBS": "tail",
+  "ShoulderZ": "arm",
+  "REar3": "head",
+  "ribbonX1": "skirt",
+  "ribbonX7": "skirt",
+  "RBowX4": "skirt",
+  "GemReflection": "head",
+  "SkirtY3": "skirt",
+  "ParamBodyAngleZ": "chest",
+  "REyeLashX1": "head",
+  "LateSideHairY2": "head",
+  "LaceX3": "skirt",
+  "RSleeveX3": "arm",
+  "HipAngleYDOWN": "leg",
+  "ShoulderY": "arm",
+  "Param_Angle_Rotation86": "tail",
+  "HipAngleZ": "leg",
+  "ParamTongueWidth": "head",
+  "Param44": "arm",
+  "PupilX": "head",
+  "LEyes1": "head",
+  "LBowX3": "skirt",
+  "RHighLight2": "head",
+  "ShockR": "head",
+  "LaceY3": "skirt",
+  "ShortPonytailY2": "tail",
+  "LaceLX3": "skirt",
+  "ShockL": "head",
+  "RForearm": "arm",
+  "LEyeball2": "head",
+  "LJewelry3": "head",
+  "Mouthpucker": "head",
+  "ShortPonytailX2": "tail",
+  "CheeckPuffL": "head",
+  "Param45": "tail",
+  "ParamHipAngleZ2": "leg",
+  "ParamEyeLOpen": "head",
+  "LEar3": "head",
+  "LateSideHairY5": "head",
+  "AngleZ": "other",
+  "SideHairY4": "head",
+  "SkirtLayerY2": "skirt",
+  "LForearm": "arm",
+  "ParamAngleX": "leg",
+  "SkirtLayerX3": "skirt",
+  "Movement1": "tail",
+  "KiraB": "head",
+  "LateSideHairX1": "head",
+  "LHighLight2": "head",
+  "CheeksWiggleY": "head",
+  "SkirtY5": "skirt",
+  "RBowX6": "skirt",
+  "MouthX": "head",
+  "Hat_YC": "head",
+  "AngleXbs": "leg",
+  "SideHairY3": "head",
+  "LateHairY1": "head",
+  "SkirtSpecial": "skirt",
+  "LipPhysics2": "head",
+  "ParamMouthOpenY": "head",
+  "LEyeLashX2": "head",
+  "SkirtLayerX2": "skirt",
+  "GemHighlightx": "head",
+  "SideHairX2": "head",
+  "LateSideHairY4": "head",
+  "Param_Angle_Rotation85": "tail",
+  "SideHairRBS": "head",
+  "PositionZ": "other",
+  "CheeksWiggleX": "head",
+  "ParamBodyAngleX": "chest",
+  "SkirtYBS": "skirt",
+  "LEar1": "head",
+  "LEar2": "head",
+  "LateHairY4": "head",
+  "ShineX": "head",
+  "ParamBrowLY3": "head",
+  "ParamBodyAngleRX": "leg",
+  "Param25": "arm",
+  "ChestX1": "chest",
+  "ParamEyeROpen": "head",
+  "ParamBrowRY": "head",
+  "KiraC": "head",
+  "AngleYbs": "leg",
+  "ParamBodyAngleY2": "chest",
+  "LParamGlowB": "head",
+  "RFlip2": "arm",
+  "Param47": "tail",
+  "PupilY": "head",
+  "ShortPonytailX1": "tail",
+  "LRibbonX3": "skirt",
+  "LateHairY2": "head",
+  "LSleeveX2": "arm",
+  "JawOpen": "head",
+  "SkirtX3": "skirt",
+  "LateHairX4": "head",
+  "SkirtLayerY3": "skirt",
+  "LBowX4": "skirt",
+  "HipZ2": "leg",
+  "Clothes2": "head",
+  "REar1": "head",
+  "ribbonY6": "skirt",
+  "SideHairLBS": "head",
+  "ParamBrowRY3": "head",
+  "LHand": "arm",
+  "ChestY2": "chest",
+  "LaceRX3": "skirt",
+  "RJewelry1": "head",
+  "ribbonX3": "skirt",
+  "SkirtLayerY4": "skirt",
+  "Param_Angle_Rotation87": "tail",
+  "RBowX1": "skirt",
+  "Hat_XB": "head",
+  "Param33": "leg",
+  "SkirtY2": "skirt",
+  "FrontHairX1": "head",
+  "ribbonY4": "skirt",
+  "Param52": "tail",
+  "Param50": "leg",
+  "LipPhysics3": "head",
+  "ChestY1": "chest",
+  "RHighLight1": "head",
+  "SkirtLayerX1": "skirt",
+  "REyeball2": "head",
+  "SkirtY6": "skirt",
+  "PoutOffsetXR": "head",
+  "REyeball1": "head",
+  "LSleeveX3": "arm",
+  "LateSideHairY1": "head",
+  "LFlip": "arm",
+  "LBowX1": "skirt",
+  "LEyeball3": "head",
+  "KiraA": "head",
+  "Param53": "leg",
+  "LaceX1": "skirt",
+  "LaceLX1": "skirt",
+  "RJewelry2": "head",
+  "LHand2": "arm",
+  "LateSideHairX5": "head",
+  "Movement2": "chest",
+  "SkirtY9": "skirt",
+  "FrontHairX2": "head",
+  "RHand2": "arm",
+  "SkirtLayerX4": "skirt",
+  "REyeSquint": "head",
+  "ParamBrowLY2": "head",
+  "LEyeSquint": "head",
+  "LControl": "arm",
+  "SideHairLX2": "head",
+  "Shine": "head",
+  "Param42": "arm",
+  "ribbonY7": "skirt",
+  "SideHairLX3": "head",
+  "LHighLight1": "head",
+  "ParamMouthForm": "head",
+  "Hat2phD": "head",
+  "LateHairX5": "head"
+ },
+ "adjacency": {
+  "AngleX": [
+   "AngleXbs",
+   "LEar1",
+   "LEar2",
+   "LEar3",
+   "LateSideHairX1",
+   "LateSideHairX2",
+   "LateSideHairX3",
+   "LateSideHairX4",
+   "LateSideHairX5",
+   "LateSideHairY1",
+   "LateSideHairY2",
+   "LateSideHairY3",
+   "LateSideHairY4",
+   "LateSideHairY5",
+   "ParamAngleX",
+   "PoutOffsetXL",
+   "PoutOffsetXR",
+   "REar1",
+   "REar2",
+   "REar3",
+   "ShortPonytailX1",
+   "ShortPonytailX2",
+   "ShortPonytailXBS",
+   "ShortPonytailXBS2",
+   "SideHairRBS",
+   "SideHairRX1",
+   "SideHairRX2",
+   "SideHairRX3"
+  ],
+  "AngleY": [
+   "AngleYbs",
+   "LEar1",
+   "LEar2",
+   "LEar3",
+   "LParamGlowB",
+   "LateHairY1",
+   "LateHairY2",
+   "LateHairY3",
+   "LateHairY4",
+   "LateHairY5",
+   "LateSideHairX1",
+   "LateSideHairX2",
+   "LateSideHairX3",
+   "LateSideHairX4",
+   "LateSideHairX5",
+   "LateSideHairY1",
+   "LateSideHairY2",
+   "LateSideHairY3",
+   "LateSideHairY4",
+   "LateSideHairY5",
+   "ParamAngleY",
+   "REar1",
+   "REar2",
+   "REar3",
+   "RParamGlowB",
+   "RParamGlowC",
+   "ShortPonytailY",
+   "ShortPonytailY2",
+   "ShortPonytailYBS",
+   "ShortPonytailYBS2",
+   "SideHairRBS",
+   "SideHairRX1",
+   "SideHairRX2",
+   "SideHairRX3",
+   "SideHairY1",
+   "SideHairY2",
+   "SideHairY3",
+   "SideHairY4"
+  ],
+  "AngleZ": [
+   "LEar1",
+   "LEar2",
+   "LEar3",
+   "LateSideHairX1",
+   "LateSideHairX2",
+   "LateSideHairX3",
+   "LateSideHairX4",
+   "LateSideHairX5",
+   "LateSideHairY1",
+   "LateSideHairY2",
+   "LateSideHairY3",
+   "LateSideHairY4",
+   "LateSideHairY5",
+   "ParamAngleZ",
+   "REar1",
+   "REar2",
+   "REar3",
+   "ShortPonytailX1",
+   "ShortPonytailX2",
+   "ShortPonytailXBS",
+   "ShortPonytailXBS2",
+   "SideHairRBS",
+   "SideHairRX1",
+   "SideHairRX2",
+   "SideHairRX3"
+  ],
+  "BrowInnerUp": [
+   "ParamBrowLY2",
+   "ParamBrowRY2"
+  ],
+  "CheeckPuff": [
+   "CheeckPuff2",
+   "CheeckPuffL",
+   "CheeckPuffR",
+   "CheeksWiggleXL",
+   "CheeksWiggleXR"
+  ],
+  "Clothes1": [
+   "ShortPonytailY",
+   "ShortPonytailY2",
+   "ShortPonytailYBS",
+   "ShortPonytailYBS2",
+   "SkirtY",
+   "SkirtY2",
+   "SkirtY3",
+   "SkirtY4",
+   "SkirtY5",
+   "SkirtY6",
+   "SkirtY7",
+   "SkirtY8",
+   "SkirtY9",
+   "SkirtYBS"
+  ],
+  "Clothes2": [
+   "FrontHairY1",
+   "FrontHairY2",
+   "FrontHairY3",
+   "FrontHairY4",
+   "Hat_YA",
+   "Hat_YB",
+   "Hat_YC",
+   "LateHairY1",
+   "LateHairY2",
+   "LateHairY3",
+   "LateHairY4",
+   "LateHairY5",
+   "Param34",
+   "Param52",
+   "Param_Angle_Rotation84",
+   "Param_Angle_Rotation85",
+   "Param_Angle_Rotation86",
+   "Param_Angle_Rotation87",
+   "Param_Angle_Rotation88",
+   "Param_Angle_Rotation89",
+   "SideHairY1",
+   "SideHairY2",
+   "SideHairY3",
+   "SideHairY4"
+  ],
+  "Emotion2": [
+   "Emotion"
+  ],
+  "EyeSmile": [
+   "LEyeLashX1",
+   "LEyeLashX2",
+   "LEyes1",
+   "LEyes2",
+   "REyeLashX1",
+   "REyeLashX2",
+   "REyes1",
+   "REyes2"
+  ],
+  "HipAngleX": [
+   "LEGAngleZ2",
+   "Param33",
+   "SkirtLayerX1",
+   "SkirtLayerX2",
+   "SkirtLayerX3",
+   "SkirtLayerX4",
+   "SkirtLayerX5",
+   "SkirtLayerX6",
+   "SkirtSpecial",
+   "SkirtSpecial2",
+   "SkirtX1",
+   "SkirtX2",
+   "SkirtX3",
+   "SkirtX4"
+  ],
+  "HipAngleY": [
+   "SkirtLayerY1",
+   "SkirtLayerY2",
+   "SkirtLayerY3",
+   "SkirtLayerY4",
+   "SkirtLayerY5"
+  ],
+  "HipAngleZ": [
+   "HipZ1",
+   "ParamHipAngleZ",
+   "SkirtLayerX1",
+   "SkirtLayerX2",
+   "SkirtLayerX3",
+   "SkirtLayerX4",
+   "SkirtLayerX5",
+   "SkirtLayerX6"
+  ],
+  "JawOpen": [
+   "CheeksWiggleY"
+  ],
+  "LControl": [
+   "LEar1",
+   "LEar2",
+   "LEar3",
+   "RFlip",
+   "RFlip2"
+  ],
+  "LEyeSquint": [
+   "ParamBrowLY2"
+  ],
+  "LeanInput": [
+   "ChestY1",
+   "ChestY2",
+   "ChestY3",
+   "ChestY4",
+   "FrontHairY1",
+   "FrontHairY2",
+   "FrontHairY3",
+   "FrontHairY4",
+   "Hat_YA",
+   "Hat_YB",
+   "Hat_YC",
+   "HipAngleY",
+   "LaceLX1",
+   "LaceLX2",
+   "LaceLX3",
+   "LaceRX",
+   "LaceRX2",
+   "LaceRX3",
+   "LateHairY1",
+   "LateHairY2",
+   "LateHairY3",
+   "LateHairY4",
+   "LateHairY5",
+   "Param50",
+   "Param52",
+   "Param53",
+   "Param54",
+   "ParamBodyAngleY",
+   "ParamBodyAngleY2",
+   "ParamHipAngleZ",
+   "Param_Angle_Rotation84",
+   "Param_Angle_Rotation85",
+   "Param_Angle_Rotation86",
+   "Param_Angle_Rotation87",
+   "Param_Angle_Rotation88",
+   "Param_Angle_Rotation89",
+   "ShoulderY",
+   "SideHairY1",
+   "SideHairY2",
+   "SideHairY3",
+   "SideHairY4",
+   "SkirtY",
+   "SkirtY2",
+   "SkirtY3",
+   "SkirtY4",
+   "SkirtY5",
+   "SkirtY6",
+   "SkirtY7",
+   "SkirtY8",
+   "SkirtY9",
+   "SkirtYBS"
+  ],
+  "MouthX": [
+   "CheeksWiggleX"
+  ],
+  "Mouthpucker": [
+   "CheeksWiggleY"
+  ],
+  "Movement1": [
+   "Param35"
+  ],
+  "Movement2": [
+   "Param35"
+  ],
+  "Movement3": [
+   "Param35"
+  ],
+  "Param42": [
+   "Param45",
+   "Param46",
+   "Param47",
+   "Param48",
+   "Param49"
+  ],
+  "ParamAngleX": [
+   "FrontHairX1",
+   "FrontHairX2",
+   "FrontHairX3",
+   "FrontHairX4",
+   "Hat2phB",
+   "Hat2phC",
+   "Hat2phD",
+   "Hat2pha",
+   "Hat_XA",
+   "Hat_XB",
+   "Hat_XC",
+   "KiraA",
+   "KiraB",
+   "KiraC",
+   "KiraD",
+   "LBowX1",
+   "LBowX3",
+   "LBowX4",
+   "LFlip",
+   "LJewelry1",
+   "LJewelry2",
+   "LJewelry3",
+   "LateHairX1",
+   "LateHairX2",
+   "LateHairX3",
+   "LateHairX4",
+   "LateHairX5",
+   "LowX2",
+   "PupilX",
+   "RBowX1",
+   "RBowX2",
+   "RBowX3",
+   "RBowX4",
+   "RBowX5",
+   "RBowX6",
+   "RBowX7",
+   "RBowX8",
+   "RFlip",
+   "RJewelry1",
+   "RJewelry2",
+   "RJewelry3",
+   "SideHairX1",
+   "SideHairX2",
+   "SideHairX3",
+   "SideHairX4",
+   "ribbonX1",
+   "ribbonX2",
+   "ribbonX3",
+   "ribbonX4",
+   "ribbonX5",
+   "ribbonX6",
+   "ribbonX7"
+  ],
+  "ParamAngleY": [
+   "FrontHairY1",
+   "FrontHairY2",
+   "FrontHairY3",
+   "FrontHairY4",
+   "Hat2phB",
+   "Hat2phC",
+   "Hat2phD",
+   "Hat2pha",
+   "Hat_YA",
+   "Hat_YB",
+   "Hat_YC",
+   "KiraA",
+   "KiraB",
+   "KiraC",
+   "KiraD",
+   "LBowX1",
+   "LBowX3",
+   "LBowX4",
+   "LFlip2",
+   "LJewelry1",
+   "LJewelry2",
+   "LJewelry3",
+   "LowX2",
+   "RBowX1",
+   "RBowX2",
+   "RBowX3",
+   "RBowX4",
+   "RBowX5",
+   "RBowX6",
+   "RBowX7",
+   "RBowX8",
+   "RFlip2",
+   "RJewelry1",
+   "RJewelry2",
+   "RJewelry3",
+   "ribbonY1",
+   "ribbonY2",
+   "ribbonY3",
+   "ribbonY4",
+   "ribbonY5",
+   "ribbonY6",
+   "ribbonY7"
+  ],
+  "ParamAngleZ": [
+   "FrontHairX1",
+   "FrontHairX2",
+   "FrontHairX3",
+   "FrontHairX4",
+   "Hat2phB",
+   "Hat2phC",
+   "Hat2phD",
+   "Hat2pha",
+   "Hat_XA",
+   "Hat_XB",
+   "Hat_XC",
+   "KiraA",
+   "KiraB",
+   "KiraC",
+   "KiraD",
+   "LBowX1",
+   "LBowX3",
+   "LBowX4",
+   "LJewelry1",
+   "LJewelry2",
+   "LJewelry3",
+   "LateHairX1",
+   "LateHairX2",
+   "LateHairX3",
+   "LateHairX4",
+   "LateHairX5",
+   "LateHairZ",
+   "LowX2",
+   "RBowX1",
+   "RBowX2",
+   "RBowX3",
+   "RBowX4",
+   "RBowX5",
+   "RBowX6",
+   "RBowX7",
+   "RBowX8",
+   "RJewelry1",
+   "RJewelry2",
+   "RJewelry3",
+   "SideHairX1",
+   "SideHairX2",
+   "SideHairX3",
+   "SideHairX4",
+   "ribbonX1",
+   "ribbonX2",
+   "ribbonX3",
+   "ribbonX4",
+   "ribbonX5",
+   "ribbonX6",
+   "ribbonX7"
+  ],
+  "ParamBodyAngleRX": [
+   "SideHairLBS",
+   "SideHairLX1",
+   "SideHairLX2",
+   "SideHairLX3"
+  ],
+  "ParamBodyAngleX": [
+   "ChestX1",
+   "ChestX2",
+   "ChestX3",
+   "ChestXBS",
+   "GemHighlightx",
+   "GemReflection",
+   "HipAngleX2",
+   "HipAngleZ",
+   "HipZ2",
+   "LArm",
+   "LForearm",
+   "LRibbonX1",
+   "LRibbonX2",
+   "LRibbonX3",
+   "LRibbonX4",
+   "LSleeveX1",
+   "LSleeveX2",
+   "LSleeveX3",
+   "LWrist",
+   "LaceLX1",
+   "LaceLX2",
+   "LaceLX3",
+   "LaceRX",
+   "LaceRX2",
+   "LaceRX3",
+   "LaceX1",
+   "LaceX2",
+   "LaceX3",
+   "Param45",
+   "Param46",
+   "Param47",
+   "Param48",
+   "Param49",
+   "Param52",
+   "ParamBodyAngleX2",
+   "ParamHipAngleZ2",
+   "Param_Angle_Rotation84",
+   "Param_Angle_Rotation85",
+   "Param_Angle_Rotation86",
+   "Param_Angle_Rotation87",
+   "Param_Angle_Rotation88",
+   "Param_Angle_Rotation89",
+   "RArm",
+   "RForearm",
+   "RRibbonX1",
+   "RRibbonX2",
+   "RRibbonX3",
+   "RRibbonX4",
+   "RSleeveX1",
+   "RSleeveX2",
+   "RSleeveX3",
+   "RWrist",
+   "ShoulderZ"
+  ],
+  "ParamBodyAngleY": [
+   "GemHighlighty",
+   "GemReflection",
+   "LaceY1",
+   "LaceY2",
+   "LaceY3",
+   "Param45",
+   "Param46",
+   "Param47",
+   "Param48",
+   "Param49",
+   "RSleeveY1",
+   "RSleeveY2",
+   "RSleeveY3"
+  ],
+  "ParamBodyAngleZ": [
+   "ChestX1",
+   "ChestX2",
+   "ChestX3",
+   "ChestXBS",
+   "ChestY1",
+   "ChestY2",
+   "ChestY3",
+   "GemReflection",
+   "HipAngleZ",
+   "HipZ2",
+   "LArm",
+   "LForearm",
+   "LSleeveX1",
+   "LSleeveX2",
+   "LSleeveX3",
+   "LWrist",
+   "LaceLX1",
+   "LaceLX2",
+   "LaceLX3",
+   "LaceRX",
+   "LaceRX2",
+   "LaceRX3",
+   "LaceX1",
+   "LaceX2",
+   "LaceX3",
+   "Param25",
+   "Param44",
+   "Param45",
+   "Param46",
+   "Param47",
+   "Param48",
+   "Param49",
+   "Param52",
+   "ParamBodyAngleX2",
+   "ParamHipAngleZ2",
+   "Param_Angle_Rotation84",
+   "Param_Angle_Rotation85",
+   "Param_Angle_Rotation86",
+   "Param_Angle_Rotation87",
+   "Param_Angle_Rotation88",
+   "Param_Angle_Rotation89",
+   "RArm",
+   "RForearm",
+   "RSleeveX1",
+   "RSleeveX2",
+   "RSleeveX3",
+   "RWrist",
+   "ShoulderZ",
+   "SkirtSpecial",
+   "SkirtSpecial2",
+   "SkirtX1",
+   "SkirtX2",
+   "SkirtX3",
+   "SkirtX4"
+  ],
+  "ParamBreath": [
+   "ChestY1",
+   "ChestY2",
+   "ChestY3",
+   "ChestY4",
+   "FrontHairY1",
+   "FrontHairY2",
+   "FrontHairY3",
+   "FrontHairY4",
+   "HipAngleY",
+   "KiraA",
+   "KiraB",
+   "KiraC",
+   "KiraD",
+   "LArm",
+   "LBowX1",
+   "LBowX3",
+   "LBowX4",
+   "LEar1",
+   "LEar2",
+   "LEar3",
+   "LForearm",
+   "LSleeveX1",
+   "LSleeveX2",
+   "LSleeveX3",
+   "LSleeveY",
+   "LSleeveY2",
+   "LSleeveY3",
+   "LWrist",
+   "LateHairY1",
+   "LateHairY2",
+   "LateHairY3",
+   "LateHairY4",
+   "LateHairY5",
+   "LateSideHairX1",
+   "LateSideHairX2",
+   "LateSideHairX3",
+   "LateSideHairX4",
+   "LateSideHairX5",
+   "LateSideHairY1",
+   "LateSideHairY2",
+   "LateSideHairY3",
+   "LateSideHairY4",
+   "LateSideHairY5",
+   "LowX2",
+   "Param52",
+   "ParamBodyAngleY",
+   "Param_Angle_Rotation84",
+   "Param_Angle_Rotation85",
+   "Param_Angle_Rotation86",
+   "Param_Angle_Rotation87",
+   "Param_Angle_Rotation88",
+   "Param_Angle_Rotation89",
+   "RArm",
+   "RBowX1",
+   "RBowX2",
+   "RBowX3",
+   "RBowX4",
+   "RBowX5",
+   "RBowX6",
+   "RBowX7",
+   "RBowX8",
+   "REar1",
+   "REar2",
+   "REar3",
+   "RForearm",
+   "RSleeveX1",
+   "RSleeveX2",
+   "RSleeveX3",
+   "RSleeveY1",
+   "RSleeveY2",
+   "RSleeveY3",
+   "RWrist",
+   "Shine",
+   "ShineBIG",
+   "ShineX",
+   "ShortPonytailY",
+   "ShortPonytailY2",
+   "ShortPonytailYBS",
+   "ShortPonytailYBS2",
+   "SideHairLBS",
+   "SideHairLX1",
+   "SideHairLX2",
+   "SideHairLX3",
+   "SideHairRBS",
+   "SideHairRX1",
+   "SideHairRX2",
+   "SideHairRX3",
+   "SideHairY1",
+   "SideHairY2",
+   "SideHairY3",
+   "SideHairY4",
+   "SkirtY",
+   "SkirtY2",
+   "SkirtY3",
+   "SkirtY4",
+   "SkirtY5",
+   "SkirtY6",
+   "SkirtY7",
+   "SkirtY8",
+   "SkirtY9",
+   "SkirtYBS",
+   "ribbonY1",
+   "ribbonY2",
+   "ribbonY3",
+   "ribbonY4"
+  ],
+  "ParamBrowLAngle": [
+   "ShockL"
+  ],
+  "ParamBrowLAngleSmoothing": [
+   "ParamBrowLAngle"
+  ],
+  "ParamBrowLY": [
+   "Emotion2",
+   "ParamBrowLAngleSmoothing",
+   "ParamBrowLY2",
+   "ParamBrowLY3",
+   "Press",
+   "RControl",
+   "ShockL"
+  ],
+  "ParamBrowRAngle": [
+   "ShockR"
+  ],
+  "ParamBrowRAngleSmoothing": [
+   "ParamBrowRAngle"
+  ],
+  "ParamBrowRY": [
+   "Emotion2",
+   "LControl",
+   "ParamBrowRAngleSmoothing",
+   "ParamBrowRY2",
+   "ParamBrowRY3",
+   "Press",
+   "ShockR"
+  ],
+  "ParamEyeBallX": [
+   "LParamGlowB",
+   "RParamGlowB"
+  ],
+  "ParamEyeBallY": [
+   "LParamGlowB",
+   "PupilY",
+   "RParamGlowB",
+   "RParamGlowC"
+  ],
+  "ParamEyeLOpen": [
+   "LEyeLashX1",
+   "LEyeLashX2",
+   "LEyeball1",
+   "LEyeball2",
+   "LEyeball3",
+   "LEyes1",
+   "LEyes2",
+   "LHighLight1",
+   "LHighLight2",
+   "LHighLight3",
+   "LParamGlowA",
+   "REar1",
+   "REar2",
+   "REar3"
+  ],
+  "ParamEyeROpen": [
+   "LEar1",
+   "LEar2",
+   "LEar3",
+   "REyeLashX1",
+   "REyeLashX2",
+   "REyeball1",
+   "REyeball2",
+   "REyeball3",
+   "REyes1",
+   "REyes2",
+   "RHighLight1",
+   "RHighLight2",
+   "RHighLight3",
+   "RParamGlowA"
+  ],
+  "ParamMouthForm": [
+   "CheeksWiggleXL",
+   "CheeksWiggleXR",
+   "Emotion2",
+   "LipPhysics1",
+   "LipPhysics2",
+   "LipPhysics3",
+   "ParamBrowLAngleSmoothing",
+   "ParamBrowRAngleSmoothing",
+   "ParamTongueWidth"
+  ],
+  "ParamMouthOpenY": [
+   "CheeksWiggleY",
+   "LipPhysics1",
+   "LipPhysics2",
+   "LipPhysics3",
+   "ParamTongueUpDown",
+   "ParamTongueWidth"
+  ],
+  "Paramshuiyin7": [
+   "Press"
+  ],
+  "PositionX": [
+   "HipAngleX",
+   "HipAngleYDOWN",
+   "HipAngleYUP",
+   "LHand",
+   "LHand2",
+   "ParamBodyAngleRX",
+   "ParamBodyAngleX",
+   "ParamBodyAngleZ",
+   "ParamHipAngleZ",
+   "RHand",
+   "RHand2"
+  ],
+  "PositionY": [
+   "ChestY1",
+   "ChestY2",
+   "ChestY3",
+   "ChestY4",
+   "HipAngleX2",
+   "HipAngleY",
+   "HipAngleYDOWN",
+   "HipAngleYUP",
+   "HipAngleZ",
+   "LArm",
+   "LForearm",
+   "LHand",
+   "LHand2",
+   "LRibbonX1",
+   "LRibbonX2",
+   "LRibbonX3",
+   "LRibbonX4",
+   "LSleeveY",
+   "LSleeveY2",
+   "LSleeveY3",
+   "LWrist",
+   "LaceLX1",
+   "LaceLX2",
+   "LaceLX3",
+   "LaceRX",
+   "LaceRX2",
+   "LaceRX3",
+   "ParamBodyAngleY",
+   "ParamBodyAngleY2",
+   "ParamHipAngleZ",
+   "ParamHipAngleZ2",
+   "RArm",
+   "RForearm",
+   "RHand",
+   "RHand2",
+   "RRibbonX1",
+   "RRibbonX2",
+   "RRibbonX3",
+   "RRibbonX4",
+   "RWrist",
+   "ShoulderY",
+   "SkirtY",
+   "SkirtY2",
+   "SkirtY3",
+   "SkirtY4",
+   "SkirtY5",
+   "SkirtY6",
+   "SkirtY7",
+   "SkirtY8",
+   "SkirtY9",
+   "SkirtYBS"
+  ],
+  "PositionZ": [
+   "HipAngleX",
+   "HipAngleX2",
+   "LEGAngleZ2",
+   "LHand",
+   "LHand2",
+   "LRibbonX1",
+   "LRibbonX2",
+   "LRibbonX3",
+   "LRibbonX4",
+   "ParamBodyAngleRX",
+   "ParamBodyAngleY2",
+   "ParamBodyAngleZ",
+   "RHand",
+   "RHand2",
+   "RRibbonX1",
+   "RRibbonX2",
+   "RRibbonX3",
+   "RRibbonX4"
+  ],
+  "RControl": [
+   "LFlip",
+   "LFlip2",
+   "REar1",
+   "REar2",
+   "REar3"
+  ],
+  "REyeSquint": [
+   "ParamBrowRY2"
+  ],
+  "ShockL": [
+   "LHighLight1",
+   "LHighLight2",
+   "LHighLight3"
+  ],
+  "ShockR": [
+   "RHighLight1",
+   "RHighLight2",
+   "RHighLight3"
+  ]
+ },
+ "edge_detail": [
+  {
+   "from": "AngleX",
+   "to": "ParamAngleX",
+   "setting": "PhysicsSetting1",
+   "weight": 100,
+   "scale": 28
+  },
+  {
+   "from": "AngleY",
+   "to": "ParamAngleY",
+   "setting": "PhysicsSetting2",
+   "weight": 100,
+   "scale": 32
+  },
+  {
+   "from": "AngleZ",
+   "to": "ParamAngleZ",
+   "setting": "PhysicsSetting3",
+   "weight": 100,
+   "scale": 28
+  },
+  {
+   "from": "PositionX",
+   "to": "ParamBodyAngleX",
+   "setting": "PhysicsSetting4",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "PositionX",
+   "to": "ParamBodyAngleRX",
+   "setting": "PhysicsSetting5",
+   "weight": 47,
+   "scale": 30
+  },
+  {
+   "from": "PositionZ",
+   "to": "ParamBodyAngleRX",
+   "setting": "PhysicsSetting5",
+   "weight": 24,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param50",
+   "setting": "PhysicsSetting6",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param53",
+   "setting": "PhysicsSetting7",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "ParamBodyAngleY",
+   "setting": "PhysicsSetting8",
+   "weight": 30,
+   "scale": 35
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ParamBodyAngleY",
+   "setting": "PhysicsSetting8",
+   "weight": 2,
+   "scale": 35
+  },
+  {
+   "from": "LeanInput",
+   "to": "ParamBodyAngleY",
+   "setting": "PhysicsSetting8",
+   "weight": 68,
+   "scale": 35
+  },
+  {
+   "from": "PositionZ",
+   "to": "ParamBodyAngleZ",
+   "setting": "PhysicsSetting9",
+   "weight": 70,
+   "scale": 30
+  },
+  {
+   "from": "PositionX",
+   "to": "ParamBodyAngleZ",
+   "setting": "PhysicsSetting9",
+   "weight": 10,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "ShoulderY",
+   "setting": "PhysicsSetting10",
+   "weight": 64,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "ShoulderY",
+   "setting": "PhysicsSetting10",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ShoulderZ",
+   "setting": "PhysicsSetting11",
+   "weight": 85,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ShoulderZ",
+   "setting": "PhysicsSetting11",
+   "weight": 52,
+   "scale": 30
+  },
+  {
+   "from": "PositionX",
+   "to": "HipAngleX",
+   "setting": "PhysicsSetting12",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "PositionZ",
+   "to": "HipAngleX",
+   "setting": "PhysicsSetting12",
+   "weight": 26,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "HipAngleX2",
+   "setting": "PhysicsSetting13",
+   "weight": 49,
+   "scale": 28
+  },
+  {
+   "from": "PositionY",
+   "to": "HipAngleX2",
+   "setting": "PhysicsSetting13",
+   "weight": 10,
+   "scale": 28
+  },
+  {
+   "from": "PositionZ",
+   "to": "HipAngleX2",
+   "setting": "PhysicsSetting13",
+   "weight": 41,
+   "scale": 28
+  },
+  {
+   "from": "PositionY",
+   "to": "HipAngleY",
+   "setting": "PhysicsSetting14",
+   "weight": 98,
+   "scale": 35
+  },
+  {
+   "from": "LeanInput",
+   "to": "HipAngleY",
+   "setting": "PhysicsSetting14",
+   "weight": 0,
+   "scale": 35
+  },
+  {
+   "from": "ParamBreath",
+   "to": "HipAngleY",
+   "setting": "PhysicsSetting14",
+   "weight": 2,
+   "scale": 35
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "HipAngleZ",
+   "setting": "PhysicsSetting15",
+   "weight": 20,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "HipAngleZ",
+   "setting": "PhysicsSetting15",
+   "weight": 20,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "HipAngleZ",
+   "setting": "PhysicsSetting15",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ParamHipAngleZ2",
+   "setting": "PhysicsSetting16",
+   "weight": 20,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "ParamHipAngleZ2",
+   "setting": "PhysicsSetting16",
+   "weight": 20,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ParamHipAngleZ2",
+   "setting": "PhysicsSetting16",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "HipAngleX",
+   "to": "LEGAngleZ2",
+   "setting": "PhysicsSetting17",
+   "weight": 23,
+   "scale": 30
+  },
+  {
+   "from": "PositionZ",
+   "to": "LEGAngleZ2",
+   "setting": "PhysicsSetting17",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "PositionX",
+   "to": "ParamHipAngleZ",
+   "setting": "PhysicsSetting18",
+   "weight": 10,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "ParamHipAngleZ",
+   "setting": "PhysicsSetting18",
+   "weight": 15,
+   "scale": 30
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "ParamHipAngleZ",
+   "setting": "PhysicsSetting18",
+   "weight": 47,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "ParamHipAngleZ",
+   "setting": "PhysicsSetting18",
+   "weight": 4,
+   "scale": 30
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "HipZ1",
+   "setting": "PhysicsSetting19",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "HipZ2",
+   "setting": "PhysicsSetting20",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "HipZ2",
+   "setting": "PhysicsSetting20",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ParamBodyAngleX2",
+   "setting": "PhysicsSetting21",
+   "weight": 80,
+   "scale": 25
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ParamBodyAngleX2",
+   "setting": "PhysicsSetting21",
+   "weight": 20,
+   "scale": 25
+  },
+  {
+   "from": "PositionX",
+   "to": "HipAngleYDOWN",
+   "setting": "PhysicsSetting22",
+   "weight": 70,
+   "scale": 30
+  },
+  {
+   "from": "PositionX",
+   "to": "HipAngleYUP",
+   "setting": "PhysicsSetting22",
+   "weight": 70,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "HipAngleYDOWN",
+   "setting": "PhysicsSetting22",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "HipAngleYUP",
+   "setting": "PhysicsSetting22",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "PositionY",
+   "to": "ParamBodyAngleY2",
+   "setting": "PhysicsSetting23",
+   "weight": 45,
+   "scale": 30
+  },
+  {
+   "from": "PositionZ",
+   "to": "ParamBodyAngleY2",
+   "setting": "PhysicsSetting23",
+   "weight": 0,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "ParamBodyAngleY2",
+   "setting": "PhysicsSetting23",
+   "weight": 11,
+   "scale": 30
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyeball1",
+   "setting": "PhysicsSetting24",
+   "weight": 100,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyeball2",
+   "setting": "PhysicsSetting24",
+   "weight": 100,
+   "scale": 0.4
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyeball1",
+   "setting": "PhysicsSetting25",
+   "weight": 100,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyeball2",
+   "setting": "PhysicsSetting25",
+   "weight": 100,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeBallY",
+   "to": "PupilY",
+   "setting": "PhysicsSetting26",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "PupilX",
+   "setting": "PhysicsSetting27",
+   "weight": 100,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyes1",
+   "setting": "PhysicsSetting28",
+   "weight": 50,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyes2",
+   "setting": "PhysicsSetting28",
+   "weight": 50,
+   "scale": 0.8
+  },
+  {
+   "from": "EyeSmile",
+   "to": "REyes1",
+   "setting": "PhysicsSetting28",
+   "weight": 21,
+   "scale": 0.8
+  },
+  {
+   "from": "EyeSmile",
+   "to": "REyes2",
+   "setting": "PhysicsSetting28",
+   "weight": 21,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyes1",
+   "setting": "PhysicsSetting29",
+   "weight": 50,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyes2",
+   "setting": "PhysicsSetting29",
+   "weight": 50,
+   "scale": 0.8
+  },
+  {
+   "from": "EyeSmile",
+   "to": "LEyes1",
+   "setting": "PhysicsSetting29",
+   "weight": 21,
+   "scale": 0.8
+  },
+  {
+   "from": "EyeSmile",
+   "to": "LEyes2",
+   "setting": "PhysicsSetting29",
+   "weight": 21,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyeLashX1",
+   "setting": "PhysicsSetting30",
+   "weight": 90,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyeLashX2",
+   "setting": "PhysicsSetting30",
+   "weight": 90,
+   "scale": 1
+  },
+  {
+   "from": "EyeSmile",
+   "to": "REyeLashX1",
+   "setting": "PhysicsSetting30",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "EyeSmile",
+   "to": "REyeLashX2",
+   "setting": "PhysicsSetting30",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyeLashX1",
+   "setting": "PhysicsSetting31",
+   "weight": 90,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyeLashX2",
+   "setting": "PhysicsSetting31",
+   "weight": 90,
+   "scale": 1
+  },
+  {
+   "from": "EyeSmile",
+   "to": "LEyeLashX1",
+   "setting": "PhysicsSetting31",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "EyeSmile",
+   "to": "LEyeLashX2",
+   "setting": "PhysicsSetting31",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LEyeball3",
+   "setting": "PhysicsSetting32",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "REyeball3",
+   "setting": "PhysicsSetting33",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "ParamBrowLY3",
+   "setting": "PhysicsSetting34",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "ParamBrowRY3",
+   "setting": "PhysicsSetting35",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "ParamBrowRY2",
+   "setting": "PhysicsSetting36",
+   "weight": 68,
+   "scale": 1
+  },
+  {
+   "from": "BrowInnerUp",
+   "to": "ParamBrowRY2",
+   "setting": "PhysicsSetting36",
+   "weight": 13,
+   "scale": 1
+  },
+  {
+   "from": "REyeSquint",
+   "to": "ParamBrowRY2",
+   "setting": "PhysicsSetting36",
+   "weight": 19,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "ParamBrowLY2",
+   "setting": "PhysicsSetting37",
+   "weight": 68,
+   "scale": 1
+  },
+  {
+   "from": "BrowInnerUp",
+   "to": "ParamBrowLY2",
+   "setting": "PhysicsSetting37",
+   "weight": 13,
+   "scale": 1
+  },
+  {
+   "from": "LEyeSquint",
+   "to": "ParamBrowLY2",
+   "setting": "PhysicsSetting37",
+   "weight": 19,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "ParamBrowRAngleSmoothing",
+   "setting": "PhysicsSetting38",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "ParamBrowRAngleSmoothing",
+   "setting": "PhysicsSetting38",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRAngleSmoothing",
+   "to": "ParamBrowRAngle",
+   "setting": "PhysicsSetting39",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "ParamBrowLAngleSmoothing",
+   "setting": "PhysicsSetting40",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "ParamBrowLAngleSmoothing",
+   "setting": "PhysicsSetting40",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLAngleSmoothing",
+   "to": "ParamBrowLAngle",
+   "setting": "PhysicsSetting41",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "ShockR",
+   "setting": "PhysicsSetting42",
+   "weight": 53,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRAngle",
+   "to": "ShockR",
+   "setting": "PhysicsSetting42",
+   "weight": 47,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "ShockL",
+   "setting": "PhysicsSetting43",
+   "weight": 53,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLAngle",
+   "to": "ShockL",
+   "setting": "PhysicsSetting43",
+   "weight": 47,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LHighLight1",
+   "setting": "PhysicsSetting44",
+   "weight": 100,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LHighLight2",
+   "setting": "PhysicsSetting44",
+   "weight": 100,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LHighLight3",
+   "setting": "PhysicsSetting44",
+   "weight": 100,
+   "scale": 0.8
+  },
+  {
+   "from": "ShockL",
+   "to": "LHighLight1",
+   "setting": "PhysicsSetting44",
+   "weight": 0,
+   "scale": 0.8
+  },
+  {
+   "from": "ShockL",
+   "to": "LHighLight2",
+   "setting": "PhysicsSetting44",
+   "weight": 0,
+   "scale": 0.8
+  },
+  {
+   "from": "ShockL",
+   "to": "LHighLight3",
+   "setting": "PhysicsSetting44",
+   "weight": 0,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "RHighLight1",
+   "setting": "PhysicsSetting45",
+   "weight": 87,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "RHighLight2",
+   "setting": "PhysicsSetting45",
+   "weight": 87,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "RHighLight3",
+   "setting": "PhysicsSetting45",
+   "weight": 87,
+   "scale": 0.8
+  },
+  {
+   "from": "ShockR",
+   "to": "RHighLight1",
+   "setting": "PhysicsSetting45",
+   "weight": 0,
+   "scale": 0.8
+  },
+  {
+   "from": "ShockR",
+   "to": "RHighLight2",
+   "setting": "PhysicsSetting45",
+   "weight": 0,
+   "scale": 0.8
+  },
+  {
+   "from": "ShockR",
+   "to": "RHighLight3",
+   "setting": "PhysicsSetting45",
+   "weight": 0,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "Press",
+   "setting": "PhysicsSetting46",
+   "weight": 33,
+   "scale": 3
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "Press",
+   "setting": "PhysicsSetting46",
+   "weight": 33,
+   "scale": 3
+  },
+  {
+   "from": "Paramshuiyin7",
+   "to": "Press",
+   "setting": "PhysicsSetting46",
+   "weight": 33,
+   "scale": 3
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "CheeksWiggleXL",
+   "setting": "PhysicsSetting47",
+   "weight": 63,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "CheeksWiggleXR",
+   "setting": "PhysicsSetting47",
+   "weight": 63,
+   "scale": 1.2
+  },
+  {
+   "from": "CheeckPuff",
+   "to": "CheeksWiggleXL",
+   "setting": "PhysicsSetting47",
+   "weight": 37,
+   "scale": 1.2
+  },
+  {
+   "from": "CheeckPuff",
+   "to": "CheeksWiggleXR",
+   "setting": "PhysicsSetting47",
+   "weight": 37,
+   "scale": 1.2
+  },
+  {
+   "from": "JawOpen",
+   "to": "CheeksWiggleY",
+   "setting": "PhysicsSetting48",
+   "weight": 20,
+   "scale": 0.8
+  },
+  {
+   "from": "Mouthpucker",
+   "to": "CheeksWiggleY",
+   "setting": "PhysicsSetting48",
+   "weight": 19,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamMouthOpenY",
+   "to": "CheeksWiggleY",
+   "setting": "PhysicsSetting48",
+   "weight": 56,
+   "scale": 0.8
+  },
+  {
+   "from": "MouthX",
+   "to": "CheeksWiggleX",
+   "setting": "PhysicsSetting49",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "FrontHairX1",
+   "setting": "PhysicsSetting50",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "FrontHairX2",
+   "setting": "PhysicsSetting50",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "FrontHairX3",
+   "setting": "PhysicsSetting50",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "FrontHairX4",
+   "setting": "PhysicsSetting50",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "FrontHairX1",
+   "setting": "PhysicsSetting50",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "FrontHairX2",
+   "setting": "PhysicsSetting50",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "FrontHairX3",
+   "setting": "PhysicsSetting50",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "FrontHairX4",
+   "setting": "PhysicsSetting50",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "FrontHairY1",
+   "setting": "PhysicsSetting51",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "FrontHairY2",
+   "setting": "PhysicsSetting51",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "FrontHairY3",
+   "setting": "PhysicsSetting51",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "FrontHairY4",
+   "setting": "PhysicsSetting51",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "FrontHairY1",
+   "setting": "PhysicsSetting51",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "FrontHairY2",
+   "setting": "PhysicsSetting51",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "FrontHairY3",
+   "setting": "PhysicsSetting51",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "FrontHairY4",
+   "setting": "PhysicsSetting51",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "FrontHairY1",
+   "setting": "PhysicsSetting51",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "FrontHairY2",
+   "setting": "PhysicsSetting51",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "FrontHairY3",
+   "setting": "PhysicsSetting51",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "FrontHairY4",
+   "setting": "PhysicsSetting51",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "FrontHairY1",
+   "setting": "PhysicsSetting51",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "FrontHairY2",
+   "setting": "PhysicsSetting51",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "FrontHairY3",
+   "setting": "PhysicsSetting51",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "FrontHairY4",
+   "setting": "PhysicsSetting51",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairRX1",
+   "setting": "PhysicsSetting52",
+   "weight": 10,
+   "scale": 8.509
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairRX2",
+   "setting": "PhysicsSetting52",
+   "weight": 10,
+   "scale": 8.954
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairRX3",
+   "setting": "PhysicsSetting52",
+   "weight": 10,
+   "scale": 8.279
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairRBS",
+   "setting": "PhysicsSetting52",
+   "weight": 10,
+   "scale": 6.918
+  },
+  {
+   "from": "AngleX",
+   "to": "SideHairRX1",
+   "setting": "PhysicsSetting52",
+   "weight": 24,
+   "scale": 8.509
+  },
+  {
+   "from": "AngleX",
+   "to": "SideHairRX2",
+   "setting": "PhysicsSetting52",
+   "weight": 24,
+   "scale": 8.954
+  },
+  {
+   "from": "AngleX",
+   "to": "SideHairRX3",
+   "setting": "PhysicsSetting52",
+   "weight": 24,
+   "scale": 8.279
+  },
+  {
+   "from": "AngleX",
+   "to": "SideHairRBS",
+   "setting": "PhysicsSetting52",
+   "weight": 24,
+   "scale": 6.918
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairRX1",
+   "setting": "PhysicsSetting52",
+   "weight": 20,
+   "scale": 8.509
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairRX2",
+   "setting": "PhysicsSetting52",
+   "weight": 20,
+   "scale": 8.954
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairRX3",
+   "setting": "PhysicsSetting52",
+   "weight": 20,
+   "scale": 8.279
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairRBS",
+   "setting": "PhysicsSetting52",
+   "weight": 20,
+   "scale": 6.918
+  },
+  {
+   "from": "AngleZ",
+   "to": "SideHairRX1",
+   "setting": "PhysicsSetting52",
+   "weight": 29,
+   "scale": 8.509
+  },
+  {
+   "from": "AngleZ",
+   "to": "SideHairRX2",
+   "setting": "PhysicsSetting52",
+   "weight": 29,
+   "scale": 8.954
+  },
+  {
+   "from": "AngleZ",
+   "to": "SideHairRX3",
+   "setting": "PhysicsSetting52",
+   "weight": 29,
+   "scale": 8.279
+  },
+  {
+   "from": "AngleZ",
+   "to": "SideHairRBS",
+   "setting": "PhysicsSetting52",
+   "weight": 29,
+   "scale": 6.918
+  },
+  {
+   "from": "ParamBodyAngleRX",
+   "to": "SideHairLX1",
+   "setting": "PhysicsSetting53",
+   "weight": 30,
+   "scale": 3.465
+  },
+  {
+   "from": "ParamBodyAngleRX",
+   "to": "SideHairLX2",
+   "setting": "PhysicsSetting53",
+   "weight": 30,
+   "scale": 2.201
+  },
+  {
+   "from": "ParamBodyAngleRX",
+   "to": "SideHairLX3",
+   "setting": "PhysicsSetting53",
+   "weight": 30,
+   "scale": 1.88
+  },
+  {
+   "from": "ParamBodyAngleRX",
+   "to": "SideHairLBS",
+   "setting": "PhysicsSetting53",
+   "weight": 30,
+   "scale": 2.201
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairLX1",
+   "setting": "PhysicsSetting53",
+   "weight": 10,
+   "scale": 3.465
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairLX2",
+   "setting": "PhysicsSetting53",
+   "weight": 10,
+   "scale": 2.201
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairLX3",
+   "setting": "PhysicsSetting53",
+   "weight": 10,
+   "scale": 1.88
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairLBS",
+   "setting": "PhysicsSetting53",
+   "weight": 10,
+   "scale": 2.201
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "SideHairX1",
+   "setting": "PhysicsSetting54",
+   "weight": 100,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "SideHairX2",
+   "setting": "PhysicsSetting54",
+   "weight": 100,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "SideHairX3",
+   "setting": "PhysicsSetting54",
+   "weight": 100,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "SideHairX4",
+   "setting": "PhysicsSetting54",
+   "weight": 100,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "SideHairX1",
+   "setting": "PhysicsSetting54",
+   "weight": 60,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "SideHairX2",
+   "setting": "PhysicsSetting54",
+   "weight": 60,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "SideHairX3",
+   "setting": "PhysicsSetting54",
+   "weight": 60,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "SideHairX4",
+   "setting": "PhysicsSetting54",
+   "weight": 60,
+   "scale": 0.7
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairY1",
+   "setting": "PhysicsSetting55",
+   "weight": 40,
+   "scale": 0.9
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairY2",
+   "setting": "PhysicsSetting55",
+   "weight": 40,
+   "scale": 0.9
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairY3",
+   "setting": "PhysicsSetting55",
+   "weight": 40,
+   "scale": 0.9
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SideHairY4",
+   "setting": "PhysicsSetting55",
+   "weight": 40,
+   "scale": 0.9
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairY1",
+   "setting": "PhysicsSetting55",
+   "weight": 55,
+   "scale": 0.9
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairY2",
+   "setting": "PhysicsSetting55",
+   "weight": 55,
+   "scale": 0.9
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairY3",
+   "setting": "PhysicsSetting55",
+   "weight": 55,
+   "scale": 0.9
+  },
+  {
+   "from": "AngleY",
+   "to": "SideHairY4",
+   "setting": "PhysicsSetting55",
+   "weight": 55,
+   "scale": 0.9
+  },
+  {
+   "from": "Clothes2",
+   "to": "SideHairY1",
+   "setting": "PhysicsSetting55",
+   "weight": 15,
+   "scale": 0.9
+  },
+  {
+   "from": "Clothes2",
+   "to": "SideHairY2",
+   "setting": "PhysicsSetting55",
+   "weight": 15,
+   "scale": 0.9
+  },
+  {
+   "from": "Clothes2",
+   "to": "SideHairY3",
+   "setting": "PhysicsSetting55",
+   "weight": 15,
+   "scale": 0.9
+  },
+  {
+   "from": "Clothes2",
+   "to": "SideHairY4",
+   "setting": "PhysicsSetting55",
+   "weight": 15,
+   "scale": 0.9
+  },
+  {
+   "from": "LeanInput",
+   "to": "SideHairY1",
+   "setting": "PhysicsSetting55",
+   "weight": 30,
+   "scale": 0.9
+  },
+  {
+   "from": "LeanInput",
+   "to": "SideHairY2",
+   "setting": "PhysicsSetting55",
+   "weight": 30,
+   "scale": 0.9
+  },
+  {
+   "from": "LeanInput",
+   "to": "SideHairY3",
+   "setting": "PhysicsSetting55",
+   "weight": 30,
+   "scale": 0.9
+  },
+  {
+   "from": "LeanInput",
+   "to": "SideHairY4",
+   "setting": "PhysicsSetting55",
+   "weight": 30,
+   "scale": 0.9
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairY1",
+   "setting": "PhysicsSetting56",
+   "weight": 6,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairY2",
+   "setting": "PhysicsSetting56",
+   "weight": 6,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairY3",
+   "setting": "PhysicsSetting56",
+   "weight": 6,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairY4",
+   "setting": "PhysicsSetting56",
+   "weight": 6,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairY5",
+   "setting": "PhysicsSetting56",
+   "weight": 6,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairY1",
+   "setting": "PhysicsSetting56",
+   "weight": 53,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairY2",
+   "setting": "PhysicsSetting56",
+   "weight": 53,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairY3",
+   "setting": "PhysicsSetting56",
+   "weight": 53,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairY4",
+   "setting": "PhysicsSetting56",
+   "weight": 53,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairY5",
+   "setting": "PhysicsSetting56",
+   "weight": 53,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairY1",
+   "setting": "PhysicsSetting56",
+   "weight": 41,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairY2",
+   "setting": "PhysicsSetting56",
+   "weight": 41,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairY3",
+   "setting": "PhysicsSetting56",
+   "weight": 41,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairY4",
+   "setting": "PhysicsSetting56",
+   "weight": 41,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairY5",
+   "setting": "PhysicsSetting56",
+   "weight": 41,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairY1",
+   "setting": "PhysicsSetting56",
+   "weight": 51,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairY2",
+   "setting": "PhysicsSetting56",
+   "weight": 51,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairY3",
+   "setting": "PhysicsSetting56",
+   "weight": 51,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairY4",
+   "setting": "PhysicsSetting56",
+   "weight": 51,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairY5",
+   "setting": "PhysicsSetting56",
+   "weight": 51,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairX1",
+   "setting": "PhysicsSetting57",
+   "weight": 10,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairX2",
+   "setting": "PhysicsSetting57",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairX3",
+   "setting": "PhysicsSetting57",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairX4",
+   "setting": "PhysicsSetting57",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateSideHairX5",
+   "setting": "PhysicsSetting57",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairX1",
+   "setting": "PhysicsSetting57",
+   "weight": 50,
+   "scale": 1.2
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairX2",
+   "setting": "PhysicsSetting57",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairX3",
+   "setting": "PhysicsSetting57",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairX4",
+   "setting": "PhysicsSetting57",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LateSideHairX5",
+   "setting": "PhysicsSetting57",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairX1",
+   "setting": "PhysicsSetting57",
+   "weight": 30,
+   "scale": 1.2
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairX2",
+   "setting": "PhysicsSetting57",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairX3",
+   "setting": "PhysicsSetting57",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairX4",
+   "setting": "PhysicsSetting57",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateSideHairX5",
+   "setting": "PhysicsSetting57",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairX1",
+   "setting": "PhysicsSetting57",
+   "weight": 26,
+   "scale": 1.2
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairX2",
+   "setting": "PhysicsSetting57",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairX3",
+   "setting": "PhysicsSetting57",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairX4",
+   "setting": "PhysicsSetting57",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LateSideHairX5",
+   "setting": "PhysicsSetting57",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LateHairZ",
+   "setting": "PhysicsSetting58",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LateHairX1",
+   "setting": "PhysicsSetting59",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LateHairX2",
+   "setting": "PhysicsSetting59",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LateHairX3",
+   "setting": "PhysicsSetting59",
+   "weight": 80,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LateHairX4",
+   "setting": "PhysicsSetting59",
+   "weight": 80,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LateHairX5",
+   "setting": "PhysicsSetting59",
+   "weight": 80,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LateHairX1",
+   "setting": "PhysicsSetting59",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LateHairX2",
+   "setting": "PhysicsSetting59",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LateHairX3",
+   "setting": "PhysicsSetting59",
+   "weight": 40,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LateHairX4",
+   "setting": "PhysicsSetting59",
+   "weight": 40,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LateHairX5",
+   "setting": "PhysicsSetting59",
+   "weight": 40,
+   "scale": 0.8
+  },
+  {
+   "from": "AngleX",
+   "to": "ShortPonytailX1",
+   "setting": "PhysicsSetting60",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "ShortPonytailX2",
+   "setting": "PhysicsSetting60",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "ShortPonytailXBS",
+   "setting": "PhysicsSetting60",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "ShortPonytailXBS2",
+   "setting": "PhysicsSetting60",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "ShortPonytailX1",
+   "setting": "PhysicsSetting60",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "ShortPonytailX2",
+   "setting": "PhysicsSetting60",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "ShortPonytailXBS",
+   "setting": "PhysicsSetting60",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "ShortPonytailXBS2",
+   "setting": "PhysicsSetting60",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateHairY1",
+   "setting": "PhysicsSetting61",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateHairY2",
+   "setting": "PhysicsSetting61",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateHairY3",
+   "setting": "PhysicsSetting61",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateHairY4",
+   "setting": "PhysicsSetting61",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LateHairY5",
+   "setting": "PhysicsSetting61",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateHairY1",
+   "setting": "PhysicsSetting61",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateHairY2",
+   "setting": "PhysicsSetting61",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateHairY3",
+   "setting": "PhysicsSetting61",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateHairY4",
+   "setting": "PhysicsSetting61",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LateHairY5",
+   "setting": "PhysicsSetting61",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "LateHairY1",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "LateHairY2",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "LateHairY3",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "LateHairY4",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "LateHairY5",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LateHairY1",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LateHairY2",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LateHairY3",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LateHairY4",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LateHairY5",
+   "setting": "PhysicsSetting61",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ShortPonytailY",
+   "setting": "PhysicsSetting62",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ShortPonytailY2",
+   "setting": "PhysicsSetting62",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ShortPonytailYBS",
+   "setting": "PhysicsSetting62",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ShortPonytailYBS2",
+   "setting": "PhysicsSetting62",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "ShortPonytailY",
+   "setting": "PhysicsSetting62",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "ShortPonytailY2",
+   "setting": "PhysicsSetting62",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "ShortPonytailYBS",
+   "setting": "PhysicsSetting62",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "ShortPonytailYBS2",
+   "setting": "PhysicsSetting62",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "ShortPonytailY",
+   "setting": "PhysicsSetting62",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "ShortPonytailY2",
+   "setting": "PhysicsSetting62",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "ShortPonytailYBS",
+   "setting": "PhysicsSetting62",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "ShortPonytailYBS2",
+   "setting": "PhysicsSetting62",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Shine",
+   "setting": "PhysicsSetting63",
+   "weight": 38,
+   "scale": 1.712
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ShineX",
+   "setting": "PhysicsSetting63",
+   "weight": 38,
+   "scale": 47.049
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ShineBIG",
+   "setting": "PhysicsSetting63",
+   "weight": 38,
+   "scale": 46.024
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ChestX1",
+   "setting": "PhysicsSetting64",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ChestX2",
+   "setting": "PhysicsSetting64",
+   "weight": 80,
+   "scale": 0.9
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ChestX3",
+   "setting": "PhysicsSetting64",
+   "weight": 80,
+   "scale": 0.5
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "ChestXBS",
+   "setting": "PhysicsSetting64",
+   "weight": 80,
+   "scale": 0.5
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestX1",
+   "setting": "PhysicsSetting64",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestX2",
+   "setting": "PhysicsSetting64",
+   "weight": 20,
+   "scale": 0.9
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestX3",
+   "setting": "PhysicsSetting64",
+   "weight": 20,
+   "scale": 0.5
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestXBS",
+   "setting": "PhysicsSetting64",
+   "weight": 20,
+   "scale": 0.5
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ChestY1",
+   "setting": "PhysicsSetting65",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ChestY2",
+   "setting": "PhysicsSetting65",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ChestY3",
+   "setting": "PhysicsSetting65",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "ChestY1",
+   "setting": "PhysicsSetting65",
+   "weight": 92,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "ChestY2",
+   "setting": "PhysicsSetting65",
+   "weight": 92,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "ChestY3",
+   "setting": "PhysicsSetting65",
+   "weight": 92,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestY1",
+   "setting": "PhysicsSetting65",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestY2",
+   "setting": "PhysicsSetting65",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "ChestY3",
+   "setting": "PhysicsSetting65",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "ChestY1",
+   "setting": "PhysicsSetting65",
+   "weight": 8,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "ChestY2",
+   "setting": "PhysicsSetting65",
+   "weight": 8,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "ChestY3",
+   "setting": "PhysicsSetting65",
+   "weight": 8,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ChestY4",
+   "setting": "PhysicsSetting66",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "ChestY4",
+   "setting": "PhysicsSetting66",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "ChestY4",
+   "setting": "PhysicsSetting66",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtX1",
+   "setting": "PhysicsSetting67",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtX2",
+   "setting": "PhysicsSetting67",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtX3",
+   "setting": "PhysicsSetting67",
+   "weight": 50,
+   "scale": 0.8
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtX4",
+   "setting": "PhysicsSetting67",
+   "weight": 50,
+   "scale": 0.8
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtSpecial",
+   "setting": "PhysicsSetting67",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtSpecial2",
+   "setting": "PhysicsSetting67",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "SkirtX1",
+   "setting": "PhysicsSetting67",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "SkirtX2",
+   "setting": "PhysicsSetting67",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "SkirtX3",
+   "setting": "PhysicsSetting67",
+   "weight": 25,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "SkirtX4",
+   "setting": "PhysicsSetting67",
+   "weight": 25,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "SkirtSpecial",
+   "setting": "PhysicsSetting67",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "SkirtSpecial2",
+   "setting": "PhysicsSetting67",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY",
+   "setting": "PhysicsSetting68",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY2",
+   "setting": "PhysicsSetting68",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY3",
+   "setting": "PhysicsSetting68",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtYBS",
+   "setting": "PhysicsSetting68",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY4",
+   "setting": "PhysicsSetting68",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY5",
+   "setting": "PhysicsSetting68",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY",
+   "setting": "PhysicsSetting68",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY2",
+   "setting": "PhysicsSetting68",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY3",
+   "setting": "PhysicsSetting68",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtYBS",
+   "setting": "PhysicsSetting68",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY4",
+   "setting": "PhysicsSetting68",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY5",
+   "setting": "PhysicsSetting68",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY2",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY3",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtYBS",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY4",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY5",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY2",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY3",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtYBS",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY4",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY5",
+   "setting": "PhysicsSetting68",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY6",
+   "setting": "PhysicsSetting69",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY7",
+   "setting": "PhysicsSetting69",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY9",
+   "setting": "PhysicsSetting69",
+   "weight": 30,
+   "scale": 0.6
+  },
+  {
+   "from": "PositionY",
+   "to": "SkirtY8",
+   "setting": "PhysicsSetting69",
+   "weight": 30,
+   "scale": 0.5
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY6",
+   "setting": "PhysicsSetting69",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY7",
+   "setting": "PhysicsSetting69",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY9",
+   "setting": "PhysicsSetting69",
+   "weight": 3,
+   "scale": 0.6
+  },
+  {
+   "from": "ParamBreath",
+   "to": "SkirtY8",
+   "setting": "PhysicsSetting69",
+   "weight": 3,
+   "scale": 0.5
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY6",
+   "setting": "PhysicsSetting69",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY7",
+   "setting": "PhysicsSetting69",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY9",
+   "setting": "PhysicsSetting69",
+   "weight": 20,
+   "scale": 0.6
+  },
+  {
+   "from": "LeanInput",
+   "to": "SkirtY8",
+   "setting": "PhysicsSetting69",
+   "weight": 20,
+   "scale": 0.5
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY6",
+   "setting": "PhysicsSetting69",
+   "weight": 21,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY7",
+   "setting": "PhysicsSetting69",
+   "weight": 21,
+   "scale": 1
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY9",
+   "setting": "PhysicsSetting69",
+   "weight": 21,
+   "scale": 0.6
+  },
+  {
+   "from": "Clothes1",
+   "to": "SkirtY8",
+   "setting": "PhysicsSetting69",
+   "weight": 21,
+   "scale": 0.5
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "SkirtLayerX1",
+   "setting": "PhysicsSetting70",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "SkirtLayerX2",
+   "setting": "PhysicsSetting70",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "SkirtLayerX3",
+   "setting": "PhysicsSetting70",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "SkirtLayerX4",
+   "setting": "PhysicsSetting70",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "SkirtLayerX5",
+   "setting": "PhysicsSetting70",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleZ",
+   "to": "SkirtLayerX6",
+   "setting": "PhysicsSetting70",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtLayerX1",
+   "setting": "PhysicsSetting70",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtLayerX2",
+   "setting": "PhysicsSetting70",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtLayerX3",
+   "setting": "PhysicsSetting70",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtLayerX4",
+   "setting": "PhysicsSetting70",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtLayerX5",
+   "setting": "PhysicsSetting70",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "SkirtLayerX6",
+   "setting": "PhysicsSetting70",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleY",
+   "to": "SkirtLayerY1",
+   "setting": "PhysicsSetting71",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleY",
+   "to": "SkirtLayerY2",
+   "setting": "PhysicsSetting71",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleY",
+   "to": "SkirtLayerY3",
+   "setting": "PhysicsSetting71",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleY",
+   "to": "SkirtLayerY4",
+   "setting": "PhysicsSetting71",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleY",
+   "to": "SkirtLayerY5",
+   "setting": "PhysicsSetting71",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LArm",
+   "setting": "PhysicsSetting72",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LForearm",
+   "setting": "PhysicsSetting72",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LWrist",
+   "setting": "PhysicsSetting72",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LArm",
+   "setting": "PhysicsSetting72",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LForearm",
+   "setting": "PhysicsSetting72",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LWrist",
+   "setting": "PhysicsSetting72",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LArm",
+   "setting": "PhysicsSetting72",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LForearm",
+   "setting": "PhysicsSetting72",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LWrist",
+   "setting": "PhysicsSetting72",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LArm",
+   "setting": "PhysicsSetting72",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LForearm",
+   "setting": "PhysicsSetting72",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LWrist",
+   "setting": "PhysicsSetting72",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RArm",
+   "setting": "PhysicsSetting73",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RForearm",
+   "setting": "PhysicsSetting73",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RWrist",
+   "setting": "PhysicsSetting73",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RArm",
+   "setting": "PhysicsSetting73",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RForearm",
+   "setting": "PhysicsSetting73",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RWrist",
+   "setting": "PhysicsSetting73",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RArm",
+   "setting": "PhysicsSetting73",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RForearm",
+   "setting": "PhysicsSetting73",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RWrist",
+   "setting": "PhysicsSetting73",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "RArm",
+   "setting": "PhysicsSetting73",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "RForearm",
+   "setting": "PhysicsSetting73",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "RWrist",
+   "setting": "PhysicsSetting73",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "PositionX",
+   "to": "LHand",
+   "setting": "PhysicsSetting74",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionX",
+   "to": "LHand2",
+   "setting": "PhysicsSetting74",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LHand",
+   "setting": "PhysicsSetting74",
+   "weight": 37,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LHand2",
+   "setting": "PhysicsSetting74",
+   "weight": 37,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "LHand",
+   "setting": "PhysicsSetting74",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "LHand2",
+   "setting": "PhysicsSetting74",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "PositionX",
+   "to": "RHand",
+   "setting": "PhysicsSetting75",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionX",
+   "to": "RHand2",
+   "setting": "PhysicsSetting75",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RHand",
+   "setting": "PhysicsSetting75",
+   "weight": 37,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RHand2",
+   "setting": "PhysicsSetting75",
+   "weight": 37,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "RHand",
+   "setting": "PhysicsSetting75",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "RHand2",
+   "setting": "PhysicsSetting75",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LSleeveX1",
+   "setting": "PhysicsSetting76",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LSleeveX2",
+   "setting": "PhysicsSetting76",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LSleeveX3",
+   "setting": "PhysicsSetting76",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LSleeveX1",
+   "setting": "PhysicsSetting76",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LSleeveX2",
+   "setting": "PhysicsSetting76",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LSleeveX3",
+   "setting": "PhysicsSetting76",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LSleeveX1",
+   "setting": "PhysicsSetting76",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LSleeveX2",
+   "setting": "PhysicsSetting76",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LSleeveX3",
+   "setting": "PhysicsSetting76",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LSleeveY",
+   "setting": "PhysicsSetting77",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LSleeveY2",
+   "setting": "PhysicsSetting77",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LSleeveY3",
+   "setting": "PhysicsSetting77",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LSleeveY",
+   "setting": "PhysicsSetting77",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LSleeveY2",
+   "setting": "PhysicsSetting77",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LSleeveY3",
+   "setting": "PhysicsSetting77",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RSleeveX1",
+   "setting": "PhysicsSetting78",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RSleeveX2",
+   "setting": "PhysicsSetting78",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RSleeveX3",
+   "setting": "PhysicsSetting78",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RSleeveX1",
+   "setting": "PhysicsSetting78",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RSleeveX2",
+   "setting": "PhysicsSetting78",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RSleeveX3",
+   "setting": "PhysicsSetting78",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "RSleeveX1",
+   "setting": "PhysicsSetting78",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "RSleeveX2",
+   "setting": "PhysicsSetting78",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "RSleeveX3",
+   "setting": "PhysicsSetting78",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RSleeveY1",
+   "setting": "PhysicsSetting79",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RSleeveY2",
+   "setting": "PhysicsSetting79",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RSleeveY3",
+   "setting": "PhysicsSetting79",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "RSleeveY1",
+   "setting": "PhysicsSetting79",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "RSleeveY2",
+   "setting": "PhysicsSetting79",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "RSleeveY3",
+   "setting": "PhysicsSetting79",
+   "weight": 73,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RRibbonX1",
+   "setting": "PhysicsSetting80",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RRibbonX2",
+   "setting": "PhysicsSetting80",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RRibbonX3",
+   "setting": "PhysicsSetting80",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "RRibbonX4",
+   "setting": "PhysicsSetting80",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RRibbonX1",
+   "setting": "PhysicsSetting80",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RRibbonX2",
+   "setting": "PhysicsSetting80",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RRibbonX3",
+   "setting": "PhysicsSetting80",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "RRibbonX4",
+   "setting": "PhysicsSetting80",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "RRibbonX1",
+   "setting": "PhysicsSetting80",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "RRibbonX2",
+   "setting": "PhysicsSetting80",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "RRibbonX3",
+   "setting": "PhysicsSetting80",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "RRibbonX4",
+   "setting": "PhysicsSetting80",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LRibbonX1",
+   "setting": "PhysicsSetting81",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LRibbonX2",
+   "setting": "PhysicsSetting81",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LRibbonX3",
+   "setting": "PhysicsSetting81",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LRibbonX4",
+   "setting": "PhysicsSetting81",
+   "weight": 34,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LRibbonX1",
+   "setting": "PhysicsSetting81",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LRibbonX2",
+   "setting": "PhysicsSetting81",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LRibbonX3",
+   "setting": "PhysicsSetting81",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LRibbonX4",
+   "setting": "PhysicsSetting81",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "LRibbonX1",
+   "setting": "PhysicsSetting81",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "LRibbonX2",
+   "setting": "PhysicsSetting81",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "LRibbonX3",
+   "setting": "PhysicsSetting81",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "PositionZ",
+   "to": "LRibbonX4",
+   "setting": "PhysicsSetting81",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "LControl",
+   "setting": "PhysicsSetting82",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "LControl",
+   "to": "LEar1",
+   "setting": "PhysicsSetting83",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "LControl",
+   "to": "LEar2",
+   "setting": "PhysicsSetting83",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "LControl",
+   "to": "LEar3",
+   "setting": "PhysicsSetting83",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LEar1",
+   "setting": "PhysicsSetting83",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LEar2",
+   "setting": "PhysicsSetting83",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "LEar3",
+   "setting": "PhysicsSetting83",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LEar1",
+   "setting": "PhysicsSetting83",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LEar2",
+   "setting": "PhysicsSetting83",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LEar3",
+   "setting": "PhysicsSetting83",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LEar1",
+   "setting": "PhysicsSetting83",
+   "weight": 27,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LEar2",
+   "setting": "PhysicsSetting83",
+   "weight": 27,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "LEar3",
+   "setting": "PhysicsSetting83",
+   "weight": 27,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LEar1",
+   "setting": "PhysicsSetting83",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LEar2",
+   "setting": "PhysicsSetting83",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LEar3",
+   "setting": "PhysicsSetting83",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "LEar1",
+   "setting": "PhysicsSetting83",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "LEar2",
+   "setting": "PhysicsSetting83",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "LEar3",
+   "setting": "PhysicsSetting83",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "RControl",
+   "setting": "PhysicsSetting84",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "RControl",
+   "to": "REar1",
+   "setting": "PhysicsSetting85",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "RControl",
+   "to": "REar2",
+   "setting": "PhysicsSetting85",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "RControl",
+   "to": "REar3",
+   "setting": "PhysicsSetting85",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "REar1",
+   "setting": "PhysicsSetting85",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "REar2",
+   "setting": "PhysicsSetting85",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "REar3",
+   "setting": "PhysicsSetting85",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "REar1",
+   "setting": "PhysicsSetting85",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "REar2",
+   "setting": "PhysicsSetting85",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "REar3",
+   "setting": "PhysicsSetting85",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "REar1",
+   "setting": "PhysicsSetting85",
+   "weight": 27,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "REar2",
+   "setting": "PhysicsSetting85",
+   "weight": 27,
+   "scale": 1
+  },
+  {
+   "from": "AngleZ",
+   "to": "REar3",
+   "setting": "PhysicsSetting85",
+   "weight": 27,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "REar1",
+   "setting": "PhysicsSetting85",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "REar2",
+   "setting": "PhysicsSetting85",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "REar3",
+   "setting": "PhysicsSetting85",
+   "weight": 3,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "REar1",
+   "setting": "PhysicsSetting85",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "REar2",
+   "setting": "PhysicsSetting85",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "REar3",
+   "setting": "PhysicsSetting85",
+   "weight": 35,
+   "scale": 1
+  },
+  {
+   "from": "LControl",
+   "to": "RFlip",
+   "setting": "PhysicsSetting86",
+   "weight": 0,
+   "scale": 2
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RFlip",
+   "setting": "PhysicsSetting86",
+   "weight": 50,
+   "scale": 2
+  },
+  {
+   "from": "RControl",
+   "to": "LFlip",
+   "setting": "PhysicsSetting87",
+   "weight": 0,
+   "scale": 2
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LFlip",
+   "setting": "PhysicsSetting87",
+   "weight": 50,
+   "scale": 2
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RFlip2",
+   "setting": "PhysicsSetting88",
+   "weight": 50,
+   "scale": 2
+  },
+  {
+   "from": "LControl",
+   "to": "RFlip2",
+   "setting": "PhysicsSetting88",
+   "weight": 50,
+   "scale": 2
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LFlip2",
+   "setting": "PhysicsSetting89",
+   "weight": 50,
+   "scale": 2
+  },
+  {
+   "from": "RControl",
+   "to": "LFlip2",
+   "setting": "PhysicsSetting89",
+   "weight": 50,
+   "scale": 2
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "LipPhysics1",
+   "setting": "PhysicsSetting90",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "LipPhysics2",
+   "setting": "PhysicsSetting90",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "LipPhysics3",
+   "setting": "PhysicsSetting90",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthOpenY",
+   "to": "LipPhysics1",
+   "setting": "PhysicsSetting90",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthOpenY",
+   "to": "LipPhysics2",
+   "setting": "PhysicsSetting90",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthOpenY",
+   "to": "LipPhysics3",
+   "setting": "PhysicsSetting90",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "CheeckPuff",
+   "to": "CheeckPuffR",
+   "setting": "PhysicsSetting91",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "CheeckPuff",
+   "to": "CheeckPuffL",
+   "setting": "PhysicsSetting91",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "CheeckPuff",
+   "to": "CheeckPuff2",
+   "setting": "PhysicsSetting92",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceRX",
+   "setting": "PhysicsSetting93",
+   "weight": 65,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceRX2",
+   "setting": "PhysicsSetting93",
+   "weight": 65,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceRX3",
+   "setting": "PhysicsSetting93",
+   "weight": 65,
+   "scale": 1.2
+  },
+  {
+   "from": "PositionY",
+   "to": "LaceRX",
+   "setting": "PhysicsSetting93",
+   "weight": 25,
+   "scale": 1.2
+  },
+  {
+   "from": "PositionY",
+   "to": "LaceRX2",
+   "setting": "PhysicsSetting93",
+   "weight": 25,
+   "scale": 1.2
+  },
+  {
+   "from": "PositionY",
+   "to": "LaceRX3",
+   "setting": "PhysicsSetting93",
+   "weight": 25,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceRX",
+   "setting": "PhysicsSetting93",
+   "weight": 50,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceRX2",
+   "setting": "PhysicsSetting93",
+   "weight": 50,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceRX3",
+   "setting": "PhysicsSetting93",
+   "weight": 50,
+   "scale": 1.2
+  },
+  {
+   "from": "LeanInput",
+   "to": "LaceRX",
+   "setting": "PhysicsSetting93",
+   "weight": 10,
+   "scale": 1.2
+  },
+  {
+   "from": "LeanInput",
+   "to": "LaceRX2",
+   "setting": "PhysicsSetting93",
+   "weight": 10,
+   "scale": 1.2
+  },
+  {
+   "from": "LeanInput",
+   "to": "LaceRX3",
+   "setting": "PhysicsSetting93",
+   "weight": 10,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceLX1",
+   "setting": "PhysicsSetting94",
+   "weight": 65,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceLX2",
+   "setting": "PhysicsSetting94",
+   "weight": 65,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceLX3",
+   "setting": "PhysicsSetting94",
+   "weight": 65,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LaceLX1",
+   "setting": "PhysicsSetting94",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LaceLX2",
+   "setting": "PhysicsSetting94",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "PositionY",
+   "to": "LaceLX3",
+   "setting": "PhysicsSetting94",
+   "weight": 25,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceLX1",
+   "setting": "PhysicsSetting94",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceLX2",
+   "setting": "PhysicsSetting94",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceLX3",
+   "setting": "PhysicsSetting94",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LaceLX1",
+   "setting": "PhysicsSetting94",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LaceLX2",
+   "setting": "PhysicsSetting94",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "LaceLX3",
+   "setting": "PhysicsSetting94",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX1",
+   "setting": "PhysicsSetting95",
+   "weight": 5,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX2",
+   "setting": "PhysicsSetting95",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX3",
+   "setting": "PhysicsSetting95",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX4",
+   "setting": "PhysicsSetting95",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX1",
+   "setting": "PhysicsSetting95",
+   "weight": 52,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX2",
+   "setting": "PhysicsSetting95",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX3",
+   "setting": "PhysicsSetting95",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX4",
+   "setting": "PhysicsSetting95",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX1",
+   "setting": "PhysicsSetting95",
+   "weight": 48,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX2",
+   "setting": "PhysicsSetting95",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX3",
+   "setting": "PhysicsSetting95",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX4",
+   "setting": "PhysicsSetting95",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX1",
+   "setting": "PhysicsSetting95",
+   "weight": 40,
+   "scale": 1.2
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX2",
+   "setting": "PhysicsSetting95",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX3",
+   "setting": "PhysicsSetting95",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX4",
+   "setting": "PhysicsSetting95",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX8",
+   "setting": "PhysicsSetting96",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX5",
+   "setting": "PhysicsSetting96",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX6",
+   "setting": "PhysicsSetting96",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "RBowX7",
+   "setting": "PhysicsSetting96",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX8",
+   "setting": "PhysicsSetting96",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX5",
+   "setting": "PhysicsSetting96",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX6",
+   "setting": "PhysicsSetting96",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RBowX7",
+   "setting": "PhysicsSetting96",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX8",
+   "setting": "PhysicsSetting96",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX5",
+   "setting": "PhysicsSetting96",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX6",
+   "setting": "PhysicsSetting96",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RBowX7",
+   "setting": "PhysicsSetting96",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX8",
+   "setting": "PhysicsSetting96",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX5",
+   "setting": "PhysicsSetting96",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX6",
+   "setting": "PhysicsSetting96",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RBowX7",
+   "setting": "PhysicsSetting96",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LBowX1",
+   "setting": "PhysicsSetting97",
+   "weight": 5,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LowX2",
+   "setting": "PhysicsSetting97",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LBowX3",
+   "setting": "PhysicsSetting97",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "LBowX4",
+   "setting": "PhysicsSetting97",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LBowX1",
+   "setting": "PhysicsSetting97",
+   "weight": 52,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LowX2",
+   "setting": "PhysicsSetting97",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LBowX3",
+   "setting": "PhysicsSetting97",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LBowX4",
+   "setting": "PhysicsSetting97",
+   "weight": 52,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LBowX1",
+   "setting": "PhysicsSetting97",
+   "weight": 48,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LowX2",
+   "setting": "PhysicsSetting97",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LBowX3",
+   "setting": "PhysicsSetting97",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LBowX4",
+   "setting": "PhysicsSetting97",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LBowX1",
+   "setting": "PhysicsSetting97",
+   "weight": 40,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LowX2",
+   "setting": "PhysicsSetting97",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LBowX3",
+   "setting": "PhysicsSetting97",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LBowX4",
+   "setting": "PhysicsSetting97",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "AngleX",
+   "to": "AngleXbs",
+   "setting": "PhysicsSetting98",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "AngleX",
+   "to": "PoutOffsetXL",
+   "setting": "PhysicsSetting98",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "AngleX",
+   "to": "PoutOffsetXR",
+   "setting": "PhysicsSetting98",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "AngleY",
+   "to": "AngleYbs",
+   "setting": "PhysicsSetting99",
+   "weight": 100,
+   "scale": 30
+  },
+  {
+   "from": "ParamBrowRY",
+   "to": "Emotion2",
+   "setting": "PhysicsSetting100",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "ParamBrowLY",
+   "to": "Emotion2",
+   "setting": "PhysicsSetting100",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "Emotion2",
+   "setting": "PhysicsSetting100",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "Emotion2",
+   "to": "Emotion",
+   "setting": "PhysicsSetting101",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeROpen",
+   "to": "RParamGlowA",
+   "setting": "PhysicsSetting102",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeLOpen",
+   "to": "LParamGlowA",
+   "setting": "PhysicsSetting103",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "RParamGlowB",
+   "setting": "PhysicsSetting104",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "LParamGlowB",
+   "setting": "PhysicsSetting104",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeBallX",
+   "to": "RParamGlowB",
+   "setting": "PhysicsSetting104",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeBallX",
+   "to": "LParamGlowB",
+   "setting": "PhysicsSetting104",
+   "weight": 0,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeBallY",
+   "to": "RParamGlowB",
+   "setting": "PhysicsSetting104",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamEyeBallY",
+   "to": "LParamGlowB",
+   "setting": "PhysicsSetting104",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "AngleY",
+   "to": "RParamGlowC",
+   "setting": "PhysicsSetting105",
+   "weight": 57,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamEyeBallY",
+   "to": "RParamGlowC",
+   "setting": "PhysicsSetting105",
+   "weight": 38,
+   "scale": 0.8
+  },
+  {
+   "from": "ParamMouthOpenY",
+   "to": "ParamTongueUpDown",
+   "setting": "PhysicsSetting106",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthOpenY",
+   "to": "ParamTongueWidth",
+   "setting": "PhysicsSetting107",
+   "weight": 68,
+   "scale": 1
+  },
+  {
+   "from": "ParamMouthForm",
+   "to": "ParamTongueWidth",
+   "setting": "PhysicsSetting107",
+   "weight": 32,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "KiraA",
+   "setting": "PhysicsSetting108",
+   "weight": 30,
+   "scale": 3
+  },
+  {
+   "from": "ParamBreath",
+   "to": "KiraB",
+   "setting": "PhysicsSetting108",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "KiraA",
+   "setting": "PhysicsSetting108",
+   "weight": 19,
+   "scale": 3
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "KiraB",
+   "setting": "PhysicsSetting108",
+   "weight": 19,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "KiraA",
+   "setting": "PhysicsSetting108",
+   "weight": 20,
+   "scale": 3
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "KiraB",
+   "setting": "PhysicsSetting108",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "KiraA",
+   "setting": "PhysicsSetting108",
+   "weight": 26,
+   "scale": 3
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "KiraB",
+   "setting": "PhysicsSetting108",
+   "weight": 26,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "KiraC",
+   "setting": "PhysicsSetting109",
+   "weight": 35,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamBreath",
+   "to": "KiraD",
+   "setting": "PhysicsSetting109",
+   "weight": 35,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "KiraC",
+   "setting": "PhysicsSetting109",
+   "weight": 19,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "KiraD",
+   "setting": "PhysicsSetting109",
+   "weight": 19,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "KiraC",
+   "setting": "PhysicsSetting109",
+   "weight": 20,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "KiraD",
+   "setting": "PhysicsSetting109",
+   "weight": 20,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "KiraC",
+   "setting": "PhysicsSetting109",
+   "weight": 26,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "KiraD",
+   "setting": "PhysicsSetting109",
+   "weight": 26,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LJewelry1",
+   "setting": "PhysicsSetting110",
+   "weight": 62,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LJewelry2",
+   "setting": "PhysicsSetting110",
+   "weight": 62,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "LJewelry3",
+   "setting": "PhysicsSetting110",
+   "weight": 62,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LJewelry1",
+   "setting": "PhysicsSetting110",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LJewelry2",
+   "setting": "PhysicsSetting110",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "LJewelry3",
+   "setting": "PhysicsSetting110",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LJewelry1",
+   "setting": "PhysicsSetting110",
+   "weight": 56,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LJewelry2",
+   "setting": "PhysicsSetting110",
+   "weight": 56,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "LJewelry3",
+   "setting": "PhysicsSetting110",
+   "weight": 56,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RJewelry1",
+   "setting": "PhysicsSetting111",
+   "weight": 62,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RJewelry2",
+   "setting": "PhysicsSetting111",
+   "weight": 62,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "RJewelry3",
+   "setting": "PhysicsSetting111",
+   "weight": 62,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RJewelry1",
+   "setting": "PhysicsSetting111",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RJewelry2",
+   "setting": "PhysicsSetting111",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "RJewelry3",
+   "setting": "PhysicsSetting111",
+   "weight": 22,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RJewelry1",
+   "setting": "PhysicsSetting111",
+   "weight": 56,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RJewelry2",
+   "setting": "PhysicsSetting111",
+   "weight": 56,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "RJewelry3",
+   "setting": "PhysicsSetting111",
+   "weight": 56,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "GemReflection",
+   "setting": "PhysicsSetting112",
+   "weight": 45,
+   "scale": 2
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "GemReflection",
+   "setting": "PhysicsSetting112",
+   "weight": 45,
+   "scale": 2
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "GemReflection",
+   "setting": "PhysicsSetting112",
+   "weight": 10,
+   "scale": 2
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "GemHighlightx",
+   "setting": "PhysicsSetting113",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "GemHighlighty",
+   "setting": "PhysicsSetting114",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX1",
+   "setting": "PhysicsSetting115",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX2",
+   "setting": "PhysicsSetting115",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX3",
+   "setting": "PhysicsSetting115",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX4",
+   "setting": "PhysicsSetting115",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX1",
+   "setting": "PhysicsSetting115",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX2",
+   "setting": "PhysicsSetting115",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX3",
+   "setting": "PhysicsSetting115",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX4",
+   "setting": "PhysicsSetting115",
+   "weight": 60,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY1",
+   "setting": "PhysicsSetting116",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY2",
+   "setting": "PhysicsSetting116",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY3",
+   "setting": "PhysicsSetting116",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY4",
+   "setting": "PhysicsSetting116",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ribbonY1",
+   "setting": "PhysicsSetting116",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ribbonY2",
+   "setting": "PhysicsSetting116",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ribbonY3",
+   "setting": "PhysicsSetting116",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "ribbonY4",
+   "setting": "PhysicsSetting116",
+   "weight": 5,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat_XA",
+   "setting": "PhysicsSetting117",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat_XB",
+   "setting": "PhysicsSetting117",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat_XC",
+   "setting": "PhysicsSetting117",
+   "weight": 84,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat_XA",
+   "setting": "PhysicsSetting117",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat_XB",
+   "setting": "PhysicsSetting117",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat_XC",
+   "setting": "PhysicsSetting117",
+   "weight": 31,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat_YA",
+   "setting": "PhysicsSetting118",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat_YB",
+   "setting": "PhysicsSetting118",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat_YC",
+   "setting": "PhysicsSetting118",
+   "weight": 70,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "Hat_YA",
+   "setting": "PhysicsSetting118",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "Hat_YB",
+   "setting": "PhysicsSetting118",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "Hat_YC",
+   "setting": "PhysicsSetting118",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "Hat_YA",
+   "setting": "PhysicsSetting118",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "Hat_YB",
+   "setting": "PhysicsSetting118",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "Hat_YC",
+   "setting": "PhysicsSetting118",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX5",
+   "setting": "PhysicsSetting119",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX7",
+   "setting": "PhysicsSetting119",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "ribbonX6",
+   "setting": "PhysicsSetting119",
+   "weight": 48,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX5",
+   "setting": "PhysicsSetting119",
+   "weight": 18,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX7",
+   "setting": "PhysicsSetting119",
+   "weight": 18,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "ribbonX6",
+   "setting": "PhysicsSetting119",
+   "weight": 18,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY5",
+   "setting": "PhysicsSetting120",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY6",
+   "setting": "PhysicsSetting120",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "ribbonY7",
+   "setting": "PhysicsSetting120",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat2pha",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat2phB",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat2phC",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleX",
+   "to": "Hat2phD",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat2pha",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat2phB",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat2phC",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleY",
+   "to": "Hat2phD",
+   "setting": "PhysicsSetting121",
+   "weight": 45,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat2pha",
+   "setting": "PhysicsSetting121",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat2phB",
+   "setting": "PhysicsSetting121",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat2phC",
+   "setting": "PhysicsSetting121",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamAngleZ",
+   "to": "Hat2phD",
+   "setting": "PhysicsSetting121",
+   "weight": 80,
+   "scale": 1.5
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceX1",
+   "setting": "PhysicsSetting122",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceX2",
+   "setting": "PhysicsSetting122",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "LaceX3",
+   "setting": "PhysicsSetting122",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceX1",
+   "setting": "PhysicsSetting122",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceX2",
+   "setting": "PhysicsSetting122",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "LaceX3",
+   "setting": "PhysicsSetting122",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "LaceY1",
+   "setting": "PhysicsSetting123",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "LaceY2",
+   "setting": "PhysicsSetting123",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "LaceY3",
+   "setting": "PhysicsSetting123",
+   "weight": 80,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param25",
+   "setting": "PhysicsSetting124",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param54",
+   "setting": "PhysicsSetting125",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "HipAngleX",
+   "to": "Param33",
+   "setting": "PhysicsSetting126",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param34",
+   "setting": "PhysicsSetting127",
+   "weight": 100,
+   "scale": 500
+  },
+  {
+   "from": "Movement1",
+   "to": "Param35",
+   "setting": "PhysicsSetting128",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "Movement2",
+   "to": "Param35",
+   "setting": "PhysicsSetting128",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "Movement3",
+   "to": "Param35",
+   "setting": "PhysicsSetting128",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param44",
+   "setting": "PhysicsSetting129",
+   "weight": 100,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param_Angle_Rotation84",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 15
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param_Angle_Rotation85",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 20
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param_Angle_Rotation86",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 30
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param_Angle_Rotation87",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 30
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param_Angle_Rotation88",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 30
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param52",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 1
+  },
+  {
+   "from": "ParamBreath",
+   "to": "Param_Angle_Rotation89",
+   "setting": "PhysicsSetting130",
+   "weight": 15,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param_Angle_Rotation84",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 15
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param_Angle_Rotation85",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 20
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param_Angle_Rotation86",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param_Angle_Rotation87",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param_Angle_Rotation88",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param52",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param_Angle_Rotation89",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param_Angle_Rotation84",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 15
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param_Angle_Rotation85",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 20
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param_Angle_Rotation86",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param_Angle_Rotation87",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param_Angle_Rotation88",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param52",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param_Angle_Rotation89",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param_Angle_Rotation84",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 15
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param_Angle_Rotation85",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 20
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param_Angle_Rotation86",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param_Angle_Rotation87",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param_Angle_Rotation88",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param52",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 1
+  },
+  {
+   "from": "LeanInput",
+   "to": "Param_Angle_Rotation89",
+   "setting": "PhysicsSetting130",
+   "weight": 40,
+   "scale": 30
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param_Angle_Rotation84",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 15
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param_Angle_Rotation85",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 20
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param_Angle_Rotation86",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param_Angle_Rotation87",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param_Angle_Rotation88",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param52",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 1
+  },
+  {
+   "from": "Clothes2",
+   "to": "Param_Angle_Rotation89",
+   "setting": "PhysicsSetting130",
+   "weight": 30,
+   "scale": 30
+  },
+  {
+   "from": "Param42",
+   "to": "Param45",
+   "setting": "PhysicsSetting131",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "Param42",
+   "to": "Param46",
+   "setting": "PhysicsSetting131",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "Param42",
+   "to": "Param47",
+   "setting": "PhysicsSetting131",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "Param42",
+   "to": "Param48",
+   "setting": "PhysicsSetting131",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "Param42",
+   "to": "Param49",
+   "setting": "PhysicsSetting131",
+   "weight": 50,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param45",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param46",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param47",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param48",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleX",
+   "to": "Param49",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "Param45",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "Param46",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "Param47",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "Param48",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleY",
+   "to": "Param49",
+   "setting": "PhysicsSetting131",
+   "weight": 20,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param45",
+   "setting": "PhysicsSetting131",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param46",
+   "setting": "PhysicsSetting131",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param47",
+   "setting": "PhysicsSetting131",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param48",
+   "setting": "PhysicsSetting131",
+   "weight": 10,
+   "scale": 1
+  },
+  {
+   "from": "ParamBodyAngleZ",
+   "to": "Param49",
+   "setting": "PhysicsSetting131",
+   "weight": 10,
+   "scale": 1
+  }
+ ]
+}

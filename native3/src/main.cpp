@@ -838,6 +838,28 @@ struct ProbeRig {
 static ProbeRig gProbe;
 static bool probeMode() { return gProbe.on; }
 
+// 二十二：探针每一代可以把**自己这一帧**导成 PPM（P6）。
+// 为什么不继续用 grim 截图：她是一层透明浮层，桌面上排着我的终端，滚动一行字
+// 外部截图就跟着变，比「她动没动」还吵；而且截图坐标系和窗口坐标系还差一个
+// 顶栏高度。直接从 GL 读回来，像素 = 窗口坐标，一个都差不了。
+static int  gDrawW = 0, gDrawH = 0;      // 这一帧的 framebuffer 尺寸
+static std::string gPendingDump;         // 这一帧要不要导出来（等合成回窗口再读）
+static void dumpFrameRGBA(const std::string& path) {
+    if (gDrawW <= 0 || gDrawH <= 0) return;
+    std::vector<unsigned char> px(static_cast<size_t>(gDrawW) * gDrawH * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, gDrawW, gDrawH, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) return;
+    // 头一行自带尺寸；后面是 top-down 的 RGBA。**带 alpha** ——
+    // 有 alpha 就不用再拍一张 hide 的图来求剪影，外面拿 alpha>8 就是她的形状。
+    std::fprintf(f, "MIYUFRAME %d %d\n", gDrawW, gDrawH);
+    for (int y = gDrawH - 1; y >= 0; --y)              // GL 首行在底部
+        std::fwrite(&px[static_cast<size_t>(y) * gDrawW * 4], 1,
+                    static_cast<size_t>(gDrawW) * 4, f);
+    std::fclose(f);
+}
+
 // 每帧把「上一代那个参数」还回默认值。理由：AngleX / AngleZ / PositionX/Y/Z /
 // ParamEyeBallX/Y 这几个本来就不吃 LoadParameters 的归零（NOTES 16.2），
 // 不显式还原就会把上一个参数的后果带进下一个参数的截图里。
@@ -962,6 +984,297 @@ static void probeTick(Csm::CubismModel* model, double now) {
             std::fclose(d);
             if (std::rename(tmp.c_str(), gProbe.donePath.c_str()) != 0)
                 std::remove(tmp.c_str());
+            if (const char* dp = std::getenv("MIYU_DUMP_FRAME")) {
+                char pbuf[512];
+                std::snprintf(pbuf, sizeof pbuf, "%s/frame-%d.raw", dp, gProbe.gen);
+                // 不能在这儿读：这一帧还在离屏 FBO 里（SSAA/SMAA），窗口 buffer 是空的。
+                // 记下来，等到 swap 之前、合成回窗口之后再读（见主循环里的 gPendingDump）。
+                gPendingDump = pbuf;
+            }
+        }
+    }
+}
+
+// ── 二十二：部位格子图（用模型自带的 part 分区，不再猜包围盒）──────────────
+//
+// 他说的「去学学自带的那些文件」指的是这个：模型里每个 drawable 都挂着一个
+// **part**（大肥鱼.cdi3.json 的 Parts：头 / 前发 / 后发 / 胸 / 短裙 / 长裙 /
+// 手臂 / 手 / 腿 / 尾巴 / 腰部衣服 …）。part 名字就是作者画的解剖分区 ——
+// 比「在她 bbox 里切 7 个矩形」准得多，也不受右边那条大尾巴把 bbox 撑宽的影响。
+//
+// 做法：每帧（限流）把每个 drawable 的**顶点**按渲染用的同一个投影换算成
+// 「窗口归一化坐标」（u = x/窗口宽、v = y/窗口高），光栅化进 40×80 的格子，
+// 后画的盖先画的（等于她脸上最上层的那个部位）。平台层点下去只查这张格子。
+//
+// 顶点在哪：model->Update() 之后 GetDrawableVertexPositions() 就是最终形状
+// （physics 已经算进去了），所以放在 Update 之后、DrawModel 旁边跑。
+struct PartZoneRig {
+    bool ready = false;
+    std::vector<unsigned char> lut;      // drawable 索引 → 部位编号
+    std::vector<unsigned char> grid;     // 40×80
+    std::vector<unsigned char> last;     // 上一张（判断要不要重写文件）
+    double lastBuild = -1e9;
+    double lastDump = -1e9;
+    int    built = 0;
+    int    clips = 0;
+    std::vector<unsigned char> cellOk;   // 这个格子里有没有她（来自 alpha 读回）
+    bool   cellOkReady = false;
+
+};
+static PartZoneRig gZones;
+
+// 模型 part 的中文名 → 我们这七个部位。名字是作者写的，按它分最不会错。
+static unsigned char zoneOfPartName(const char* nm) {
+    if (!nm || !*nm) return 0;
+    const std::string n(nm);
+    auto has = [&n](const char* k) { return n.find(k) != std::string::npos; };
+    if (has("尾巴") || has("狗尾草")) return 6;                       // tail
+    if (has("腿") || has("脚") || has("膝")) return 5;                // leg
+    if (has("裙") || has("蝴蝶结") || has("缎带")) return 4;           // skirt
+    if (has("手臂") || has("大臂") || has("小臂") || has("手腕") ||
+        has("袖子") || has("举手") || has("竖食指") || has("手")) return 3;  // arm
+    if (has("胸") || has("上身") || has("领子") || has("肩膀") ||
+        has("腰")) return 2;                                          // chest（腰并进胸）
+    if (has("头") || has("脑") || has("发") || has("脸") || has("五官") ||
+        has("眼") || has("眉") || has("嘴") || has("鼻") || has("耳") ||
+        has("脖") || has("牙") || has("呆毛") || has("眼镜") || has("表情") ||
+        has("汗") || has("泪") || has("口内")) return 1;              // head
+    return 0;   // 「组 N」「文件夹」「图层…」这些是特效/过渡，不算部位
+}
+
+// 读 cdi3.json 的 Parts：把 "Part88" 这种 id 翻成中文名，再翻成部位编号。
+static std::map<std::string, std::string> loadPartNames() {
+    std::map<std::string, std::string> out;
+    const std::string dir(kModelDir);
+    const std::string p = dir + "大肥鱼.cdi3.json";
+    std::ifstream f(p);
+    if (!f) { log_("[zones] 读不到 %s（退回文件里的格子图）", p.c_str()); return out; }
+    std::string js((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    const size_t at = js.find("\"Parts\"");
+    if (at == std::string::npos) return out;
+    size_t i = at;
+    std::string lastId;
+    while (i < js.size()) {
+        const size_t idPos = js.find("\"Id\"", i);
+        const size_t nmPos = js.find("\"Name\"", i);
+        if (nmPos == std::string::npos) break;
+        if (idPos != std::string::npos && idPos < nmPos) {
+            size_t q = js.find('"', js.find(':', idPos) + 1);
+            if (q == std::string::npos) break;
+            const size_t e = js.find('"', q + 1);
+            if (e == std::string::npos) break;
+            lastId = js.substr(q + 1, e - q - 1);
+            i = e + 1;
+            continue;
+        }
+        size_t q = js.find('"', js.find(':', nmPos) + 1);
+        if (q == std::string::npos) break;
+        const size_t e = js.find('"', q + 1);
+        if (e == std::string::npos) break;
+        if (!lastId.empty()) out[lastId] = js.substr(q + 1, e - q - 1);
+        lastId.clear();
+        i = e + 1;
+        if (js.find("\"Parts\"", i) != std::string::npos &&
+            js.find("\"Parts\"", i) < js.find("\"Id\"", i)) break;   // 出了 Parts 段
+    }
+    return out;
+}
+
+static void zoneInit(Csm::CubismModel* model) {
+    const std::map<std::string, std::string> names = loadPartNames();
+    const Csm::csmInt32 nd = model->GetDrawableCount();
+    gZones.lut.assign(static_cast<size_t>(nd) < 1 ? 1 : static_cast<size_t>(nd), 0);
+    int mapped = 0, parts = 0;
+    std::map<unsigned char, int> per;
+    for (Csm::csmInt32 d = 0; d < nd; ++d) {
+        const Csm::csmInt32 pi = model->GetDrawableParentPartIndex(static_cast<Csm::csmUint32>(d));
+        if (pi < 0) continue;
+        ++parts;
+        const Csm::CubismIdHandle id = model->GetPartId(static_cast<Csm::csmUint32>(pi));
+        const char* pid = (id && id->GetString().GetRawString()) ? id->GetString().GetRawString() : "";
+        const auto it = names.find(pid);
+        const unsigned char z = zoneOfPartName(it == names.end() ? "" : it->second.c_str());
+        gZones.lut[static_cast<size_t>(d)] = z;
+        if (z) { ++mapped; ++per[z]; }
+    }
+    gZones.ready = true;
+    std::string s2;
+    for (const auto& kv : per) {
+        char b[64];
+        std::snprintf(b, sizeof b, "%s:%d ", partpoke::kZoneNames[kv.first], kv.second);
+        s2 += b;
+    }
+    log_("[zones] drawable %d 个，挂了 part 的 %d 个，认得出部位的 %d 个（%s）",
+         static_cast<int>(nd), parts, mapped, s2.c_str());
+}
+
+// 把一件 drawable 的一个三角形光栅化进格子（窗口归一化坐标，v 向下）。
+static void zoneTri(std::vector<unsigned char>& g, float ax, float ay, float bx, float by,
+                    float cx, float cy, unsigned char lab) {
+    const int GW = partpoke::gGridW, GH = partpoke::gGridH;
+    float x0 = std::min(std::min(ax, bx), cx), x1 = std::max(std::max(ax, bx), cx);
+    float y0 = std::min(std::min(ay, by), cy), y1 = std::max(std::max(ay, by), cy);
+    int gx0 = static_cast<int>(x0 * GW) - 1, gx1 = static_cast<int>(x1 * GW) + 1;
+    int gy0 = static_cast<int>(y0 * GH) - 1, gy1 = static_cast<int>(y1 * GH) + 1;
+    if (gx0 < 0) gx0 = 0;
+    if (gy0 < 0) gy0 = 0;
+    if (gx1 > GW - 1) gx1 = GW - 1;
+    if (gy1 > GH - 1) gy1 = GH - 1;
+    const float d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (std::fabs(d) < 1e-9f) return;
+    for (int gy = gy0; gy <= gy1; ++gy) {
+        const float py = (gy + 0.5f) / GH;
+        for (int gx = gx0; gx <= gx1; ++gx) {
+            const float px = (gx + 0.5f) / GW;
+            const float l1 = ((by - cy) * (px - cx) + (cx - bx) * (py - cy)) / d;
+            const float l2 = ((cy - ay) * (px - cx) + (ax - cx) * (py - cy)) / d;
+            const float l3 = 1.0f - l1 - l2;
+            if (l1 < -0.02f || l2 < -0.02f || l3 < -0.02f) continue;
+            g[static_cast<size_t>(gy) * GW + gx] = lab;
+        }
+    }
+}
+
+// 用「她本人的 alpha」算出「哪些格子是她身上的」：每 10 帧（像素读回来的时候）
+// 更新一次，5×5 采样、过四分之一不透明才算数。透明地方画的东西（眼镜、帽子、
+// 素材盒里那些看不见的图层）几何上存在，但肉眼什么都没有，点上去不该有反应。
+//   · 不在这里直接改格子：格子 20Hz 重刷，改完下一刷就没了（踩过）。
+//   · 只算一张 cellOk 表，partZoneTick 光栅化完 AND 一下。
+static void partZoneClip(const unsigned char* rgba, int w, int h, int th) {
+    const int GW = partpoke::gGridW, GH = partpoke::gGridH;
+    gZones.cellOk.assign(static_cast<size_t>(GW) * GH, 0);
+    int ok = 0;
+    const int N = 5;
+    for (int gy = 0; gy < GH; ++gy) {
+        for (int gx = 0; gx < GW; ++gx) {
+            int hits = 0;
+            for (int sy = 0; sy < N; ++sy) {
+                for (int sx = 0; sx < N; ++sx) {
+                    const int px = static_cast<int>((gx + (sx + 0.5f) / N) * w / GW);
+                    const int py = static_cast<int>((gy + (sy + 0.5f) / N) * h / GH);
+                    if (px < 0 || px >= w || py < 0 || py >= h) continue;
+                    const int ry = h - 1 - py;             // 读回来首行在底部
+                    if (rgba[(static_cast<size_t>(ry) * w + px) * 4 + 3] > th) ++hits;
+                }
+            }
+            if (hits * 4 >= N * N) {
+                gZones.cellOk[static_cast<size_t>(gy) * GW + gx] = 1;
+                ++ok;
+            }
+        }
+    }
+    gZones.cellOkReady = true;
+    if (gZones.clips < 3) {
+        ++gZones.clips;
+        log_("[zones] 按 alpha 算格子白名单：%d 格在她身上（%dx%d alpha，阈值 %d）",
+             ok, w, h, th);
+    }
+}
+
+// 每帧（限流 ~20Hz）：顶点 → 格子。k/W/H 和渲染用的是同一套投影。
+static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double now) {
+    if (!gZones.ready) { zoneInit(model); if (!gZones.ready) return; }
+    if (now - gZones.lastBuild < 0.05) return;
+    gZones.lastBuild = now;
+    const int GW = partpoke::gGridW, GH = partpoke::gGridH;
+    gZones.grid.assign(static_cast<size_t>(GW) * GH, 0);
+    const Csm::csmInt32 nd = model->GetDrawableCount();
+    // 顺序：drawable 下标顺序就是 SDK 的绘制顺序（Cubism 的 drawable 本来就按
+    // render order 排好，渲染器按 0..n-1 画）。后画的盖先画的 = 取最上层那块皮。
+    for (Csm::csmInt32 d = 0; d < nd && static_cast<size_t>(d) < gZones.lut.size(); ++d) {
+        const unsigned char lab = gZones.lut[static_cast<size_t>(d)];
+        if (lab == 0) continue;
+        if (!model->GetDrawableDynamicFlagIsVisible(d)) continue;
+        if (model->GetDrawableOpacity(d) < 0.02f) continue;
+        const Csm::csmInt32 nv = model->GetDrawableVertexCount(d);
+        const auto* vp = model->GetDrawableVertexPositions(d);
+        if (!vp || nv < 3) continue;
+        const Csm::csmUint16* idx = model->GetDrawableVertexIndices(d);
+        const Csm::csmInt32 ni = model->GetDrawableVertexIndexCount(d);
+        if (!idx || ni < 3) continue;
+        // 画布坐标（y 向上）→ 窗口归一化（y 向下）
+        auto nx = [&](int i) { return 0.5f + vp[idx[i]].X * k / static_cast<float>(W); };
+        auto ny = [&](int i) { return 0.5f - vp[idx[i]].Y * k / static_cast<float>(H); };
+        for (Csm::csmInt32 t = 0; t + 2 < ni; t += 3) {
+            const int a = idx[t], b2 = idx[t + 1], c2 = idx[t + 2];
+            if (a >= nv || b2 >= nv || c2 >= nv) continue;
+            zoneTri(gZones.grid, nx(t), ny(t), nx(t + 1), ny(t + 1), nx(t + 2), ny(t + 2), lab);
+        }
+    }
+    // 只留她身上的格子（alpha 白名单）
+    if (gZones.cellOkReady && gZones.cellOk.size() == gZones.grid.size()) {
+        for (size_t i = 0; i < gZones.grid.size(); ++i)
+            if (!gZones.cellOk[i]) gZones.grid[i] = 0;
+        // 剪影里、但没有任何部位 drawable 盖到的格子（皮肤、缝隙、作者的「组 N」素材）
+        // → 从最近的已标格借标签，最多借两圈。不补的话点在她身上却判成「空白」，
+        // 走整套反应（实测 17% 的剪影是这样）。借到剪影外也没关系：wl_surface 的
+        // input region 本来就是按 alpha 建的，剪影外的点根本到不了这里。
+        std::vector<size_t> q;
+        std::vector<signed char> depth(gZones.grid.size(), -1);
+        for (size_t i = 0; i < gZones.grid.size(); ++i)
+            if (gZones.grid[i]) { q.push_back(i); depth[i] = 0; }
+        for (size_t h2 = 0; h2 < q.size(); ++h2) {
+            const size_t i = q[h2];
+            if (depth[i] >= 2) continue;
+            const int gy = static_cast<int>(i / GW), gx = static_cast<int>(i % GW);
+            const int nb[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            for (int k = 0; k < 4; ++k) {
+                const int ny = gy + nb[k][0], nx = gx + nb[k][1];
+                if (ny < 0 || ny >= GH || nx < 0 || nx >= GW) continue;
+                const size_t j = static_cast<size_t>(ny) * GW + nx;
+                if (gZones.grid[j] || depth[j] >= 0) continue;
+                gZones.grid[j] = gZones.grid[i];
+                depth[j] = static_cast<signed char>(depth[i] + 1);
+                q.push_back(j);
+            }
+        }
+    }
+    // 交给平台层（同一个 inline 对象）
+    partpoke::gZoneCells = gZones.grid;
+    partpoke::gZoneWinW = W;
+    partpoke::gZoneWinH = H;
+    ++partpoke::gZoneStamp;
+    ++gZones.built;
+    if (gZones.built == 20) {   // 二十帧后打一次各部位的实际范围，验「格子贴不贴身体」
+        float bb[8][4];
+        for (int i = 0; i < 8; ++i) { bb[i][0] = 2; bb[i][1] = 2; bb[i][2] = -2; bb[i][3] = -2; }
+        for (int gy = 0; gy < GH; ++gy)
+            for (int gx = 0; gx < GW; ++gx) {
+                const unsigned char c = gZones.grid[static_cast<size_t>(gy) * GW + gx];
+                if (!c) continue;
+                const float u = (gx + 0.5f) / GW, v = (gy + 0.5f) / GH;
+                if (u < bb[c][0]) bb[c][0] = u;
+                if (v < bb[c][1]) bb[c][1] = v;
+                if (u > bb[c][2]) bb[c][2] = u;
+                if (v > bb[c][3]) bb[c][3] = v;
+            }
+        for (int i = 1; i < 7; ++i)
+            if (bb[i][2] > bb[i][0])
+                log_("[zones] %s: u %.3f..%.3f  v %.3f..%.3f", partpoke::kZoneNames[i],
+                     bb[i][0], bb[i][2], bb[i][1], bb[i][3]);
+    }
+    if (gZones.built == 1 || now - gZones.lastDump > 8.0) {
+        gZones.lastDump = now;
+        if (gZones.last != gZones.grid) {
+            gZones.last = gZones.grid;
+            FILE* fz = std::fopen("state/part-zones.tsv", "wb");
+            if (fz) {
+                std::fprintf(fz, "#grid\t%d\t%d\n", GW, GH);
+                std::fprintf(fz, "# 部位格子图（身体自己按 drawable→part 光栅化出来的，"
+                                 "窗口归一化：u=lx/窗口宽、v=ly/窗口高）\n");
+                for (int gy = 0; gy < GH; ++gy) {
+                    int run = 0;
+                    for (int gx = 1; gx <= GW; ++gx) {
+                        const unsigned char a = gZones.grid[static_cast<size_t>(gy) * GW + run];
+                        if (gx == GW || gZones.grid[static_cast<size_t>(gy) * GW + gx] != a) {
+                            if (a) std::fprintf(fz, "Z\t%d\t%d\t%d\t%d\t%s\n", gy, gy + 1, run, gx,
+                                                partpoke::kZoneNames[a]);
+                            run = gx;
+                        }
+                    }
+                }
+                std::fclose(fz);
+            }
         }
     }
 }
@@ -994,27 +1307,14 @@ struct PartPokeRig {
 };
 static PartPokeRig gPartPoke;
 
-// 「弹一下」的曲线：k ∈ {0 → 1 → −0.2 → 0}
-static float pokeCurve(double u) {
-    // 2026-11-10 02:1x：他说「点一下就没了，来不及看」。原来 0.16 就到峰、0.42 就往下走，
-    // 峰值只停一瞬间。改成**冲起来先保持一段**（0.12→0.55 都是满幅），再回弹、再归零。
-    static const double kT[4] = {0.00, 0.16, 0.42, 1.00};
-    static const float  kV[4] = {0.0f, 1.0f, -0.2f, 0.0f};
-    if (u <= kT[0]) return kV[0];
-    if (u >= kT[3]) return kV[3];
-    for (int i = 0; i < 3; ++i) {
-        if (u <= kT[i + 1]) {
-            const double f = (u - kT[i]) / (kT[i + 1] - kT[i]);
-            return static_cast<float>(kV[i] + (kV[i + 1] - kV[i]) * f);
-        }
-    }
-    return 0.0f;
-}
-
 static void partPokeStart(Csm::CubismModel* model, const std::string& part, double now) {
+    // 二十二：这里拿到的已经是**根输入**（PositionX / ParamBreath / AngleX…），
+    // 不是 ChestX1/SkirtY3 那些物理算出来的输出。拨根 → 物理自己把这块带起来。
     const std::vector<partpoke::PartParam> ps = partpoke::top(part, 4);
     gPartPoke.n = 0;
     std::string names;
+    // 每点一次换个方向（+1 / −1 交替）：连点同一个地方不会老是往一边塌。
+    const float dir = (partpoke::gGen & 1) ? -1.0f : 1.0f;
     for (const partpoke::PartParam& p : ps) {
         const Csm::csmInt32 idx = model->GetParameterIndex(
             Csm::CubismFramework::GetIdManager()->GetId(p.name.c_str()));
@@ -1054,18 +1354,27 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
             const auto it = rng.find(p.name);
             float lo = -1e9f, hi = 1e9f;
             if (it != rng.end()) { lo = it->second.first; hi = it->second.second; }
-            float pk = p.peak, dp = p.dip;
-            if (pk < lo) pk = lo; if (pk > hi) pk = hi;
-            if (dp < lo) dp = lo; if (dp > hi) dp = hi;
-            c.peak = pk;
-            c.dip = dp;
+            // p.amp 是**偏移量**（表和探针量出来的「看得见但不变形」），不是目标值。
+            // 顶到参数真实范围就缩回来 —— 越界会把网格拉翻（NOTES 二十一踩过）。
+            float amp = p.amp * dir;
+            if (c.base + amp > hi) amp = hi - c.base;
+            if (c.base + amp < lo) amp = lo - c.base;
+            // 单极参数（ParamBreath 是 0..1、默认 0）负方向一压就变成 0 —— 点了没反应。
+            // 撞到边界就把方向翻过来，别把冲量吃掉。
+            if (std::fabs(amp) < std::fabs(p.amp) * 0.5f) {
+                amp = -p.amp * dir;
+                if (c.base + amp > hi) amp = hi - c.base;
+                if (c.base + amp < lo) amp = lo - c.base;
+            }
+            c.peak = amp;
+            c.dip = -amp * 0.35f;
         }
-        // 冲量：按这块参数自身的摆幅给一个初速度，弹簧接着把它拉回来
+        // 冲量：欠阻尼弹簧从 0 起步，峰值 ≈ v/ω（ω = √150 ≈ 12.25），
+        // 所以直接把初速度给成 amp×ω 就能弹到 amp 那么大，不用另写曲线。
         c.x = 0.0f;
-        c.v = (p.peak - c.base) * 8.0f;
-        char buf[96];
-        std::snprintf(buf, sizeof buf, "%s(%.1f->%.1f/%.1f) ", p.name.c_str(),
-                      c.base, c.peak, c.dip);
+        c.v = c.peak * 12.25f;
+        char buf[128];
+        std::snprintf(buf, sizeof buf, "%s(%+.2f) ", p.name.c_str(), c.peak);
         names += buf;
     }
     if (gPartPoke.n == 0) {
@@ -1076,7 +1385,7 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
     gPartPoke.on   = true;
     gPartPoke.t0   = now;
     gPartPoke.part = part;
-    log_("[part] 点中部位 %s -> %d 个参数：%s", part.c_str(), gPartPoke.n, names.c_str());
+    log_("[part] 点中部位 %s -> %d 个根输入：%s", part.c_str(), gPartPoke.n, names.c_str());
 }
 
 static void partPokeTick(Csm::CubismModel* model, double now) {
@@ -2778,8 +3087,42 @@ int main() {
         // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
         probeTick(model, now);
         partPokeTick(model, now);
+        // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
+        // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
+        // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。
+        if (const char* pk = std::getenv("MIYU_POKE")) {
+            static double tPoke = -1.0;
+            static int    dumped = 0, sincePoke = -1;
+            static bool   fired = false;
+            if (tPoke < 0.0) tPoke = now + 2.0;
+            if (!fired && now >= tPoke) {
+                const std::string part(pk);
+                if (partpoke::hasParams(part)) {
+                    std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());
+                    ++partpoke::gGen;
+                    log_("[poke-eval] 点 %s（gen=%d）", part.c_str(), partpoke::gGen);
+                } else {
+                    log_("[poke-eval] 部位 %s 没有可拨的根", part.c_str());
+                }
+                fired = true;
+                sincePoke = 0;
+            }
+            if (fired && dumped < 40 && ++sincePoke % 8 == 0) {
+                if (const char* dp = std::getenv("MIYU_POKE_DIR")) {
+                    char pbuf[512];
+                    std::snprintf(pbuf, sizeof pbuf, "%s/poke-%03d.raw", dp, dumped);
+                    // 和探针一样：这一帧还在离屏 FBO 里，等合成回窗口再读
+                    gPendingDump = pbuf;
+                }
+                ++dumped;
+            }
+        }
         const double tB = platTime();
+        gDrawW = W;
+        gDrawH = H;
         model->Update();
+        // 二十二：部位格子图（模型自带 part 分区 → 40×80 格子，给平台层点的时候查）
+        partZoneTick(model, k, W, H, now);
         const double tC = platTime();
         renderer->SetMvpMatrix(&proj);
         renderer->DrawModel();
@@ -2865,6 +3208,10 @@ int main() {
         //   · MIYU_NO_INPUT_REGION=1 时整块跳过（整窗可点，用来对照排查）
         //   · **拖动期间整块跳过**：她一个像素都没变，重算纯浪费（一次读回 1000x1800
         //     再逐像素扫，是这层最贵的一步）；松手那一帧立刻补算一次。
+        if (!gPendingDump.empty()) {          // 二十二：探针要的那一帧（窗口内容已合成好）
+            dumpFrameRGBA(gPendingDump);
+            gPendingDump.clear();
+        }
         static const bool kNoRegion = std::getenv("MIYU_NO_INPUT_REGION") != nullptr;
         static int lastRW = -1, lastRH = -1;
         static unsigned long frameNo = 0;
@@ -2900,6 +3247,8 @@ int main() {
                     glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pix.data());
                 }
                 platSetInputRegionFromAlpha(pix.data(), aw, ah, 8);
+                // 二十二：同一份 alpha 顺手把部位格子裁到她的剪影里
+                partZoneClip(pix.data(), aw, ah, 32);
                 if (W != lastRW || H != lastRH || justReleased || justShown)
                     log_("[main] 输入区重算（第 %lu 帧，framebuffer %dx%d%s，拖动期间跳过 %lu 帧）",
                          frameNo, W, H, justReleased ? "，刚松手" : (justShown ? "，刚取消隐藏" : ""),

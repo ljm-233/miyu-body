@@ -336,21 +336,28 @@ static void tapFire(int lx, int ly) {
     // 二十一：先问「点的是哪个部位」。命中且有活参数就只动那一块，整套反应不播。
     // 表格来自 state/param-parts.tsv（tools/param-probe.py 生成），这里是**唯一**
     // 的判定点：u/v 用的是和她本人 bbox 同一套归一化，和探针截图时的坐标一致。
-    if (web::settings().tapPart && haveBox && phw > 0 && phh > 0) {
-        const float u = float(lx - (pcx - phw)) / float(2 * phw);
-        const float v = float(ly - (pcy - phh)) / float(2 * phh);
-        if (u >= -0.02f && u <= 1.02f && v >= -0.02f && v <= 1.02f) {
+    // 2026-11-10：坐标改成**窗口归一化**（u = lx/窗口宽、v = ly/窗口高），不再用
+    // 「她本人 bbox」—— bbox 被右边那条大尾巴撑宽，横向全偏，点胸口会判成手臂。
+    // 现在只查渲染层按 drawable→part 光栅化出来的格子图（partpoke::gZoneCells），
+    // 她是按剪影分的，尾巴再也影响不到横向。
+    if (web::settings().tapPart) {
+        int lw = 0, lh = 0;
+        platGetLogicalSize(&lw, &lh);
+        if (lw > 0 && lh > 0) {
+            const float u = float(lx) / float(lw);
+            const float v = float(ly) / float(lh);
             const std::string part = partpoke::classify(u, v);
             if (!part.empty() && partpoke::hasParams(part)) {
                 std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());
                 ++partpoke::gGen;
                 gTapCoolUntil = now + TAP_COOL_S;
-                LOG("[tap] 第 %d 次点击 local=(%d,%d) → 部位 %s（u=%.2f v=%.2f，只动这一块）",
+                LOG("[tap] 第 %d 次点击 local=(%d,%d) → 部位 %s（u=%.3f v=%.3f，只动这一块）",
                     gTapN, lx, ly, part.c_str(), u, v);
                 return;
             }
-            LOG("[tap] 部位 %s（u=%.2f v=%.2f）没有活参数，退回整套反应",
-                part.empty() ? "(空白)" : part.c_str(), u, v);
+            LOG("[tap] 第 %d 次点击 local=(%d,%d)（u=%.3f v=%.3f）%s，退回整套反应",
+                gTapN, lx, ly, u, v,
+                part.empty() ? "落在空白（她身上没有部位）" : ("部位 " + part + " 没有可拨的根").c_str());
         }
     }
 
