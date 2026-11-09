@@ -983,7 +983,7 @@ static void probeTick(Csm::CubismModel* model, double now) {
 struct PartPokeRig {
     bool   on = false;
     int    lastGen = 0;
-    double t0 = 0.0, dur = 0.62;
+    double t0 = 0.0, dur = 1.30;   // 拉长到 1.3s，峰值停留 0.55s 左右看得清
     std::string part;
     struct Ch { Csm::csmInt32 idx; float base, peak, dip; };
     Ch     ch[4];
@@ -993,11 +993,13 @@ static PartPokeRig gPartPoke;
 
 // 「弹一下」的曲线：k ∈ {0 → 1 → −0.2 → 0}
 static float pokeCurve(double u) {
-    static const double kT[4] = {0.00, 0.16, 0.42, 1.00};
-    static const float  kV[4] = {0.0f, 1.0f, -0.2f, 0.0f};
+    // 2026-11-10 02:1x：他说「点一下就没了，来不及看」。原来 0.16 就到峰、0.42 就往下走，
+    // 峰值只停一瞬间。改成**冲起来先保持一段**（0.12→0.55 都是满幅），再回弹、再归零。
+    static const double kT[5] = {0.00, 0.12, 0.55, 0.75, 1.00};
+    static const float  kV[5] = {0.0f, 1.00f, 1.00f, -0.2f, 0.0f};
     if (u <= kT[0]) return kV[0];
     if (u >= kT[3]) return kV[3];
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         if (u <= kT[i + 1]) {
             const double f = (u - kT[i]) / (kT[i + 1] - kT[i]);
             return static_cast<float>(kV[i] + (kV[i + 1] - kV[i]) * f);
