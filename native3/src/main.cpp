@@ -245,8 +245,11 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     // 2026-11-09 21:5x：AngleX/AngleZ **也不会被 LoadParameters 归零**，用 Add 会累加，
     // 实测 ax 一直顶在 30.00（还带得她整个人歪）。所以这里也必须 Set：
     // 值 = 待机那本帧算出来的 + 视线偏移，两件事合成一次写。
-    if (gLook.iAx >= 0) model->SetParameterValue(gLook.iAx, gIdle.lastAx + gLook.cx, 1.0f);
-    if (gLook.iAy >= 0) model->SetParameterValue(gLook.iAy, gLook.cy, 1.0f);
+    // 2026-11-09 22:0x：**身体不再跟鼠标**。这个模型的 AngleX 是整个人左右平移，
+    // 拿它当「转头」在物理上就不成立（实测 -20/0/+20 三张，连腿和尾巴都跟着挪）。
+    // 所以只让眼珠跟人——眼珠是真能转的；身体只保留待机自己的呼吸摇摆。
+    if (gLook.iAx >= 0) model->SetParameterValue(gLook.iAx, gIdle.lastAx, 1.0f);
+    if (gLook.iAy >= 0) model->SetParameterValue(gLook.iAy, 0.0f, 1.0f);
     // 眼珠必须用 **Set**，不能用 Add —— 实测出来的，跟"默认 0 就用 Add"的经验相反：
     // ParamEyeBallX/Y（本模型索引 76/77）**不会被 LoadParameters 归零**，Add 一帧一帧累加，
     // 约 4 帧就顶到 -1/+1（日志里 eyeX 一直钉在 -1.00，平滑值才 -0.33）。
