@@ -22,7 +22,8 @@
 #include <GL/glew.h>
 
 #include "platform.h"
-#include "ctl.h"   // 本地控制口：外面推「她在说什么/什么心情」，见第十一节
+#include "ctl.h"    // 本地控制口：外面推「她在说什么/什么心情」，见第十一节
+#include "plan.h"   // 动作计划播放器：外面推一份时间线，她照着演，见第十二节
 
 #include "CubismFramework.hpp"
 #include "Model/CubismMoc.hpp"
@@ -126,6 +127,18 @@ static float idleRnd() { return static_cast<float>(rand()) / static_cast<float>(
 
 static void idleTick(Csm::CubismModel* model, double now) {
     if (!gIdle.ready) idleInit(model);
+
+    // 2026-11-09 晚：计划在播时这套待机**只让出身体三个参数**（AngleX/AngleZ/PositionX），
+    // 呼吸（ParamBreath）照旧 —— 不然她演动作的两秒里是屏住气的，一眼看出是程序。
+    // 姿态目标也不推进：不推进就不会在计划结束时从一个旧目标跳回正弦当前值。
+    const bool planOn = plan::active();
+    if (planOn) {
+        const float brOnly = 0.5f + 0.5f * sinf(static_cast<float>(now * 2.0 * 3.14159265358979 / 4.2));
+        gIdle.lastBr = brOnly;
+        if (gIdle.iBreath >= 0) model->SetParameterValue(gIdle.iBreath, brOnly, 1.0f);
+        return;
+    }
+
     if (now - gIdle.segT0 >= gIdle.segLen) {
         gIdle.segT0 = now;
         gIdle.segLen = 3.0 + 5.0 * idleRnd();          // 3~8 秒换一个姿态
@@ -276,6 +289,85 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
              in ? "跟" : "回正", nx, ny, gLook.cx, gLook.cy, gLook.ex, gLook.ey,
              preAx, gLook.iAx >= 0 ? model->GetParameterValue(gLook.iAx) : -999.0f,
              gLook.iEx >= 0 ? model->GetParameterValue(gLook.iEx) : -999.0f);
+    }
+}
+
+// ── 动作计划：外面推一份时间线，她照着演（2026-11-09 晚）──────────
+// plan.h 只管「解析 + 排序 + 插值 + 时钟」，一行 Cubism 都不认识；写参数在这儿。
+//
+// 三条规矩（和第九/十一节同一个道理）：
+//   · **全程 Set，绝不 Add**：AngleX/AngleZ/ParamEyeBall 这几个不会被 LoadParameters
+//     归零，Add 一帧一帧累加，几帧就顶死在上下限。
+//   · **计划是这一帧最后的写入者**：它排在 lookTick 之后、眨眼/physics 之前 ——
+//     视线、待机正弦、SDK 的 IDLE motion 都先写完，再由计划盖过去，不然又是两套抢一个参数。
+//   · 参数不在白名单里 → plan.cpp 就丢掉了，这里根本拿不到，所以不用再判一次。
+//
+// 起播那 0.2s 做一次交叉淡入：把接管瞬间模型里的值记成 snap[]，再按 w 线性混到
+// 计划的目标值上。中途换计划也是同一段代码 —— 所以「播一半推新的」是平滑接过去的，
+// 不会从 ±12 一下跳到 0。
+struct PlanRig {
+    Csm::csmInt32 idx[plan::kMaxParams];
+    float snap[plan::kMaxParams];
+    bool ready = false;
+    double blendT0 = -1e9;
+    bool hasSnap = false;
+};
+static PlanRig gPlanRig;
+
+static void planInit(Csm::CubismModel* model) {
+    Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+    for (int i = 0; i < plan::kMaxParams; ++i) {
+        gPlanRig.idx[i] = model->GetParameterIndex(m->GetId(plan::kNames[i]));
+        gPlanRig.snap[i] = 0.0f;
+    }
+    gPlanRig.ready = true;
+    log_("[main] 计划参数索引：");
+    for (int i = 0; i < plan::kMaxParams; ++i)
+        log_("[main]   %-16s %d%s", plan::kNames[i], gPlanRig.idx[i],
+             gPlanRig.idx[i] < 0 ? "（模型里没有，跳过）" : "");
+}
+
+// 收到一份新计划时调：清掉上一次的淡入快照，下一帧重抓。
+static void planTakeover(double now) {
+    gPlanRig.blendT0 = now;
+    gPlanRig.hasSnap = false;
+}
+
+static void planTick(Csm::CubismModel* model, double now) {
+    if (!plan::active()) return;
+    if (!gPlanRig.ready) planInit(model);
+
+    plan::Sample sm;
+    if (!plan::sample(now, sm)) return;      // 播完（plan 内部已经 stop），交回待机
+
+    // 接管那一帧的现场：模型里现在是多少（待机/视线刚写完的值）
+    if (!gPlanRig.hasSnap) {
+        gPlanRig.hasSnap = true;
+        for (int i = 0; i < plan::kMaxParams; ++i)
+            gPlanRig.snap[i] = gPlanRig.idx[i] >= 0 ? model->GetParameterValue(gPlanRig.idx[i]) : 0.0f;
+    }
+    const double bt = now - gPlanRig.blendT0;
+    const float w = bt >= 0.2 ? 1.0f : static_cast<float>(bt < 0.0 ? 0.0 : bt / 0.2);
+
+    for (int k = 0; k < sm.n; ++k) {
+        const int slot = plan::slotOf(sm.name[k]);
+        if (slot < 0 || gPlanRig.idx[slot] < 0) continue;
+        float v = sm.value[k];
+        if (w < 1.0f) v = gPlanRig.snap[slot] + (v - gPlanRig.snap[slot]) * w;
+        model->SetParameterValue(gPlanRig.idx[slot], v, 1.0f);
+    }
+
+    static double lastLog = -1e9;
+    if (now - lastLog > 1.0) {
+        lastLog = now;
+        char buf[160];
+        int off = 0;
+        for (int k = 0; k < sm.n && k < 3; ++k)
+            off += std::snprintf(buf + off, sizeof(buf) - static_cast<size_t>(off), "%s%s=%.2f",
+                                 k ? " " : "", sm.name[k], sm.value[k]);
+        log_("[plan] %s t=%.2f/%.2fs 写 %d 个参数（w=%.2f）| %s",
+             plan::title()[0] ? plan::title() : "(无题)", now - plan::startTime(), plan::total(),
+             sm.n, w, buf);
     }
 }
 
@@ -605,22 +697,43 @@ int main() {
         ctl::poll(now);
         std::string exprReq;
         if (ctl::takeExpr(exprReq)) exprPlay(exprReq);
+        std::string planReq;
+        if (ctl::takePlan(planReq)) {
+            if (planReq.empty()) {
+                plan::stop();                       // "plan":null
+            } else {
+                plan::start(planReq, now);
+                if (plan::active()) planTakeover(now);   // 起播/换播：记下淡入起点
+            }
+        }
 
         if (motionManager) motionManager->UpdateMotion(model, dt);
-        else if (kUseSine) idleTick(model, now);   // 只有 MIYU_IDLE_SINE=1 才走手写正弦
+        // 手写正弦待机：计划在播时整段让位（别两套一起写 AngleX/AngleZ）
+        else if (kUseSine) idleTick(model, now);   // 计划在播时它自己只写呼吸（见 idleTick）
         if (gExprMgr) gExprMgr->UpdateMotion(model, dt);   // 表情在动作之后、眨眼之前
         // 嘴：在表情之后写（表情要是不小心也写了 ParamMouthOpenY，说话优先），
         // 眨眼之前（眨眼只碰眼睛，顺序其实无所谓，就近放）。一律 Set —— 这个参数
         // 不会被 LoadParameters 归零，Add 会一帧一帧累加顶死，和 ParamEyeBall 一个毛病。
+        // 计划要是也驱动嘴（白名单里有 ParamMouthOpenY），静默时别用 0.02 去盖它；
+        // 正在说话则照旧 —— 说话优先于计划（和第十一节的规矩一致）。
+        const bool planDrivesMouth = plan::active() && plan::drives("ParamMouthOpenY");
         if (mouthI >= 0) {
             const float mv = ctl::mouth(now);
-            model->SetParameterValue(mouthI, mv < 0.0f ? 0.02f : mv, 1.0f);   // 不说时只有一点呼吸
+            if (mv >= 0.0f || !planDrivesMouth)
+                model->SetParameterValue(mouthI, mv < 0.0f ? 0.02f : mv, 1.0f);   // 不说时只有一点呼吸
         }
         // 视线：夹在待机微动之后（叠在它上面，不覆盖）、眨眼之前。
         // 用逻辑尺寸归一化 —— platPointer 给的是 surface-local 逻辑 px，不是物理 px。
         int lw = 0, lh = 0;
         platGetLogicalSize(&lw, &lh);
         lookTick(model, dt, now, lw, lh);
+        // 计划：最后一个写参数的（盖过待机/IDLE motion/视线），之后才是眨眼和 physics
+        planTick(model, now);
+        // 计划要是也写了嘴，正在说话时把嘴抢回来说话那一边（顺序上计划在后面，所以补这一下）
+        if (mouthI >= 0 && planDrivesMouth) {
+            const float mv = ctl::mouth(now);
+            if (mv >= 0.0f) model->SetParameterValue(mouthI, mv, 1.0f);
+        }
         if (eyeBlink) {
             eyeBlink->UpdateParameters(model, dt);
             if (eyeLi >= 0) {

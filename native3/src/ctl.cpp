@@ -56,6 +56,10 @@ bool gTalking = false;
 std::string gExprReq;
 bool gExprPending = false;
 
+// 动作计划请求（2026-11-09 晚）：原文 + 是否有新的一份 + 是否是「停」
+std::string gPlanReq;
+bool gPlanPending = false;
+
 int gMood = -1;
 
 void log_(const char* fmt, ...) {
@@ -130,6 +134,46 @@ std::string trim(const std::string& s) {
     return s.substr(b, e - b + 1);
 }
 
+// ── 计划体切出来（2026-11-09 晚）─────────────────────────
+// 这一层只负责「找到 `"plan":` 后面那一段对象文本」，从 `{` 数括号数到配对的 `}`，
+// 字符串里的 `{` `}` 和转义要跳过 —— 计划的 frames 是嵌套数组，切错一个字节就整份废掉。
+// 真正的字段解析归 plan.cpp（它带一个正经的 JSON 扫描器）；ctl 只搬文本，
+// 因为它不认识 Cubism，也不该替播放器决定「哪些字段有用」。
+//
+// 返回值：0 = 没有这个键；1 = 切到对象（out 有内容）；2 = 值是 null（= 停止）。
+int takeObjText(const std::string& s, const char* key, std::string& out) {
+    const std::string pat = std::string("\"") + key + "\"";
+    size_t p = s.find(pat);
+    if (p == std::string::npos) return 0;
+    p = s.find(':', p + pat.size());
+    if (p == std::string::npos) return 0;
+    ++p;
+    while (p < s.size() && (s[p] == ' ' || s[p] == '\t')) ++p;
+    if (p >= s.size()) return 0;
+    if (s.compare(p, 4, "null") == 0) return 2;
+    if (s[p] != '{') {
+        log_("[ctl] 警告：%s 的值不是对象（%.20s…），忽略", key, s.c_str() + p);
+        return 0;
+    }
+    int depth = 0;
+    bool inStr = false;
+    for (size_t q = p; q < s.size(); ++q) {
+        const char c = s[q];
+        if (inStr) {
+            if (c == '\\') { ++q; continue; }     // \" \\ 之类整对跳过
+            if (c == '"') inStr = false;
+            continue;
+        }
+        if (c == '"') { inStr = true; continue; }
+        if (c == '{') ++depth;
+        else if (c == '}') {
+            if (--depth == 0) { out = s.substr(p, q - p + 1); return 1; }
+        }
+    }
+    log_("[ctl] 警告：%s 的括号没闭上，忽略", key);
+    return 0;
+}
+
 // ── 一行命令 ────────────────────────────────────────────
 void handleLine(const std::string& raw, double now) {
     const std::string line = trim(raw);
@@ -202,11 +246,26 @@ void handleLine(const std::string& raw, double now) {
         }
     }
 
+    // plan / trajectory（2026-11-09 晚）：整份动作计划，或者单个 action。
+    // 这里只把对象文本切出来交给 main → plan::start()，字段解析不在这儿做。
+    {
+        std::string body;
+        int r = takeObjText(line, "plan", body);
+        if (r == 0) r = takeObjText(line, "trajectory", body);
+        if (r != 0) {
+            any = true;
+            gPlanReq = (r == 2) ? std::string() : body;
+            gPlanPending = true;
+            if (r == 2) log_("[ctl] plan=null -> 停止当前计划");
+            else log_("[ctl] plan 收到 %zu 字节，交给播放器", body.size());
+        }
+    }
+
     if (!any) {
         // 认不出的形状只警告一次（同一条不刷屏）
         if (std::strncmp(gWarned, line.c_str(), sizeof(gWarned) - 1) != 0) {
             std::snprintf(gWarned, sizeof(gWarned), "%s", line.c_str());
-            log_("[ctl] 警告：没有一个认识的字段（say/mood/expr/dur），忽略：%.120s", line.c_str());
+            log_("[ctl] 警告：没有一个认识的字段（say/mood/expr/dur/plan/trajectory），忽略：%.120s", line.c_str());
         }
     }
 }
@@ -281,8 +340,8 @@ void poll(double now) {
         if (n > 0) {
             gBuf.append(tmp, static_cast<size_t>(n));
             if (gBuf.find('\n') != std::string::npos) break;   // 成行了，去处理
-            if (gBuf.size() > 4096) {                          // 超长：当畸形，丢掉
-                log_("[ctl] 警告：一行超过 4KB，丢弃");
+            if (gBuf.size() > 128 * 1024) {                    // 超长：当畸形，丢掉
+                log_("[ctl] 警告：一行超过 128KB，丢弃");
                 closeConn();
                 return;
             }
@@ -338,6 +397,14 @@ bool takeExpr(std::string& out) {
     gExprPending = false;
     out = gExprReq;
     gExprReq.clear();
+    return true;
+}
+
+bool takePlan(std::string& out) {
+    if (!gPlanPending) return false;
+    gPlanPending = false;
+    out.swap(gPlanReq);
+    gPlanReq.clear();
     return true;
 }
 

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "title": "点头",
+  "view": "full",
+  "actions": [
+    {
+      "kind": "trajectory",
+      "duration": 1.6,
+      "frames": [
+        {"time": 0.0, "values": {"AngleX": 0, "PositionY": 0}},
+        {"time": 0.30, "values": {"AngleX": -1.5, "PositionY": -8.0}},
+        {"time": 0.55, "values": {"AngleX": 0, "PositionY": 0}},
+        {"time": 0.85, "values": {"AngleX": -1.5, "PositionY": -8.0}},
+        {"time": 1.10, "values": {"AngleX": 0, "PositionY": 0}},
+        {"time": 1.60, "values": {"AngleX": 0, "PositionY": 0}}
+      ]
+    }
+  ]
+}

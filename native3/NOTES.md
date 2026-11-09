@@ -765,3 +765,132 @@ tools/body-say.sh --dur 3.5 "慢慢说"          # 指定时长
 - `mood` 只存不打驱动：现在到 `[ctl] mood=N` 为止，表情映射还没接
 - 一次只服务一条连接；外面连着发两条要各自 connect（脚本已经是这样）
 - 没有认证：socket 权限 `0600`，同用户能写 = 能让她说话。这是本地口子的本意，别把 `$XDG_RUNTIME_DIR` 挪到共享目录
+
+---
+
+## 十二、动作计划：外面推一份时间线，她照着演（2026-11-09 21:5x）
+
+一句话：**能演**。往同一个 socket 塞一行 `{"plan":{...}}`，她就按时间线动；播完自己交回待机。原来只能「说一句话 / 换个表情」的开关式控制，现在是「有节奏的动作」。
+
+### 12.1 接线（新增的两个文件管什么）
+
+| 文件 | 干什么 |
+| --- | --- |
+| `src/plan.h` / `src/plan.cpp` | JSON 扫描器 + 计划模型 + 时钟 + 插值。**不认识 Cubism 类型**，只吐「参数名 + 数值」 |
+| `src/ctl.cpp` | 多认两个字段 `plan` / `trajectory`：只把那段对象的**原文**切出来（数括号，跳字符串）；字段解析不在这儿 |
+| `src/main.cpp` | `planTick()`：拿 `plan::sample()` 的名字/数值 → `SetParameterValue`；索引缓存；起播 0.2s 交叉淡入 |
+| `tools/body-plan.sh` | 客户端：读文件 → 压成一行 → 包成 `{"plan":…}` → 发 socket |
+| `plans/*.json` | 三个预置：招呼 2.4s / 害羞 2.6s / 点头 1.6s |
+
+两个 target（`miyu` / `miyu-wayland`）都编进了 `plan.cpp`，X11 备胎上一样能用。
+
+### 12.2 命令格式（一行 JSON，字段全可选）
+
+```json
+{"plan":{"version":1,"title":"打招呼","view":"full",
+  "actions":[{"kind":"trajectory","duration":2.4,"frames":[
+    {"time":0.0,"values":{"AngleX":0,"AngleZ":0,"ParamEyeBallX":0}},
+    {"time":0.6,"values":{"AngleX":12,"AngleZ":-4,"ParamEyeBallX":0.4}},
+    {"time":2.4,"values":{"AngleX":0,"AngleZ":0,"ParamEyeBallX":0}}]}]}}
+```
+
+- `"plan"`：整份计划（`actions[]`），也可以是单条 action（直接带 `frames`）
+- `"trajectory"`：单条 action
+- `"plan":null`：**立刻停下**，交回待机（`tools/body-plan.sh --stop`）
+- 可以和 `say` / `mood` / `expr` 同一条推，互不干扰
+- 行缓冲上限从 4KB 提到 **128KB**（计划一行本来就长）；`plan.cpp` 另有 512KB 上限
+
+解析分两层，别混：
+1. **ctl 只切文本**：找 `"plan":` → 从 `{` 数括号到配对的 `}`，字符串里的 `{}` 和 `\"` 跳过。括号没闭上就警告丢弃
+2. **plan.cpp 正经解析**：递归下降（对象/数组/字符串/数字/true/false/null），带转义和深度上限 24。**不用正则** —— frames 是嵌套数组，正则一撇就散
+
+### 12.3 参数白名单（名单外跳过，同一个名字只警告一次）
+
+```
+AngleX  AngleY  AngleZ  PositionX  PositionY  PositionZ
+ParamEyeBallX  ParamEyeBallY  ParamBodyAngleZ  ParamMouthOpenY  LeanInput
+```
+
+- 名字就是模型里**真实**的参数 id。`ParamAngleX/ParamAngleY/ParamAngleZ` 是**空壳**（第十节），写了不报错也什么都不动 —— 所以白名单里收的是 `AngleX` 这一套
+- 值不是数字（`"大"`、`null`）→ 跳过这一帧的这个参数，打一行警告
+- 实测有效的：`AngleX`（整体左右平移）/`AngleZ`（整体倾斜）/`PositionY`（上下平移，幅度最明显）/`ParamEyeBallX/Y`（眼珠）。`LeanInput` 在这个模型上是空壳（11.6 记过），留着只是因为它在前倾表情里出现过
+
+### 12.4 时间轴与插值
+
+- 一份计划里多条 action **按数组顺序排**：`action[1]` 从 0 开始，`action[2]` 从 `dur1` 开始 …… 总时长 = 各 `duration` 累加
+- 每条 action 内：每个参数**单独一条通道**（只认写了它的那些帧），`t` 落在两帧之间就线性插值；在两帧之外保持首/末帧的值（不外推、不掉回 0）
+- `duration` 缺失或 ≤0 → 用「最后一帧的 time」当长度；还是 0 → 整条 action 丢掉（整份都空 → 整份丢掉，正在播的那个继续）
+- 关键帧 time 超过 duration → 把 duration 拉到那个 time（并打一行日志），不静默截断
+- frames 时间乱序 → **按时间排好再播**，打一行警告（不崩、不丢帧）
+- 插值**只做线性**，没叠 smoothstep：计划里的时间点已经是人给的节奏，先让它可预测；想要更软就在 JSON 里把关键帧排密
+
+### 12.5 和待机/视线的让位关系（这层最容易打架）
+
+写参数的顺序（`main.cpp` 主循环）：
+
+```
+LoadParameters
+→ ctl::poll（收 say/mood/expr/plan）
+→ 动作 / 待机（idleTick 或 IDLE motion）
+→ 表情 → 视线 lookTick
+→ **planTick（计划，最后一个写参数的）**
+→ 嘴（说话优先，计划写了嘴时静默不再写 0.02）
+→ 眨眼 → physics → Update
+```
+
+- **待机正弦让位**：计划在播时 `idleTick` 只写 `ParamBreath`（呼吸不能停，不然演两秒像憋气），`AngleX/AngleZ/PositionX` 三个参数和目标推进整段不碰
+- **视线让位**：`lookTick` 照旧跑（它还负责 `ParamEyeBall` 的回正），但计划排在它后面，所以计划里的 `AngleX`/`ParamEyeBall` 压得住它
+- **一律 Set，绝不 Add**：`AngleX/AngleZ/PositionY/ParamEyeBall*` 这几个不会被 `LoadParameters` 归零，Add 会一帧一帧累加顶死（第九、十一节踩过两次）
+- 实测证据：计划播到 t=1.0s 时日志里 `[look] … Add前 angleX=-5.97` —— 那是**上一帧计划写进去、这一帧还没被视线盖掉**的值，说明写入真的进了模型
+- 起播/换播 0.2s **交叉淡入**：把接管那一刻模型里的值记成快照，按 `w = t/0.2` 混到计划目标值上。所以「播一半推新的计划」是从当前位置平滑过去，不是从 ±12 一下跳到 0
+
+### 12.6 播完怎么回去
+
+`t > 总时长` → `plan::sample()` 返回 false 并自己 `stop()`，日志 `[plan] 播完：…，交回待机`。下一帧开始 `idleTick` 重新接管 `AngleX/AngleZ/PositionX`、视线重新写眼珠 —— 姿态从计划末帧回到待机（预置计划末帧都收在 0，落差小，不需要额外的淡出）。
+
+### 12.7 验证（2026-11-09 21:5x，实测；HDMI-A-3，`grim -o HDMI-A-3`）
+
+她身上的 ROI 取 `x 740..1110, y 255..940`（371×686；由「计划期间的运动并集」定出来）。所有帧用同一节奏抓（grim 单张 ~110ms + 睡 60ms ≈ 165ms 一张，6 张跨 ~0.9s）。
+
+**A. 计划真的在驱动她**（对照组很关键：同一形状、所有值都是 0 的「全零计划」，她也只呼吸）
+
+| 组 | 逐帧 mean\|Δ\| | 逐帧 >40 差异 | 首尾累计 mean\|Δ\| | 首尾 >40 |
+| --- | --- | --- | --- | --- |
+| 全零计划（对照） | 1.76–3.64 | 1.1–2.5% | 7.43 | 5.40% |
+| 「打招呼」 | 2.85–4.65 | 1.8–3.3% | **10.70** | **8.34%** |
+
+大位移探针（`AngleX -12 / PositionY -20 / EyeBall 0.9`）：mean\|Δ\| **16.09**，>40 **12.81%** —— 参数确实一路写到模型上，只是预置计划故意做得轻。
+
+**B. 播完回位**（「打招呼」结束等 2.5s 再抓两帧）：mean\|Δ\| **2.94**，>8 **6.05%**，>40 **2.16%** —— 落在对照/待机区间（1.76–3.64），没有残留姿态。日志同时出现 `[idle] 算 ax=…` 继续刷。
+
+**C. 畸形输入**（进程 `active`，PID 没变，一直在跑）
+
+```
+[ctl] 警告：不是一行 JSON，忽略：this is not json
+[ctl] 警告：plan 的括号没闭上，忽略
+[plan] actions[1] frames 时间乱序 —— 已按时间重新排序播放（计划本身最好排好）
+[plan] actions[1] duration 缺失或为 0，按最后一帧 time=0.000s 当长度
+[plan] actions[1] 长度算不出来（duration 和所有 time 都是 0），跳过
+[plan] 计划里没有一个能播的 action，忽略（原来在播的继续）
+[plan] 参数「AngleZZZ」不在白名单里，跳过（只警告这一次）
+[plan] 参数「ParamFoo」不在白名单里，跳过（只警告这一次）
+[plan] 参数「HeadTilt」不在白名单里，跳过（只警告这一次）
+```
+
+**D. 播一半换计划**：`招呼` 播到 0.9s 时推 `害羞` → 日志 `开始播放：「害羞」` + `t=0.08/2.60s 写 5 个参数（w=0.40）`（交叉淡入中），后续帧 mean\|Δ\| 4.6–9.0 —— 平滑接管，不崩、不闪回 0。
+
+### 12.8 客户端
+
+```sh
+tools/body-plan.sh plans/招呼.json     # 演一段
+tools/body-plan.sh --stop              # 立刻停，回待机
+```
+
+脚本读文件 → `json.load` 做语法检查（写法错当场报，不推半截）→ `json.dumps(separators=(",",":"))` 压成一行 → 包 `{"plan":…}` → 发 socket。
+
+### 12.9 还没做的（别以为是 bug）
+
+- 相邻两条 action 之间没有过渡：`action[2]` 从自己的 0 帧起播，如果它的 0 帧和 `action[1]` 的末帧差得远，接缝会跳。要在 JSON 里对齐首末帧
+- 计划只管「身体动作参数」，不能选表情/换 PNG（表情仍走 `expr`，两者可以同一条推）
+- 播完是硬切回待机（预置计划末帧都在 0，看不出来；自己写计划时把末帧收回中立位）
+- 一次只有一份计划在播：新的直接顶掉旧的（这是设计，靠 0.2s 交叉淡入掩盖接缝）

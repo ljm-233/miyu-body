@@ -25,6 +25,12 @@ float mouth(double now);
 // out 为 "" 或 "默认" → 淡出回默认表情。
 bool takeExpr(std::string& out);
 
+// 有新的动作计划就取出来（取走后清空）。返回 true 表示有新请求：
+//   · out = 计划体原文（从 `{` 到配对的 `}`，含外层 "plan"/"trajectory" 包装）
+//   · out = ""  → 停止当前计划（客户端推的 `"plan":null`）
+// 这里只做「找出这段对象文本」这一件事，真正的解析在 plan.cpp（它有正经的 JSON 扫描器）。
+bool takePlan(std::string& out);
+
 // 最近一次 mood（0..100），没设过是 -1。
 int mood();
 

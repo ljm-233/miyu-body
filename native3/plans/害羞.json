@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "title": "害羞",
+  "view": "full",
+  "actions": [
+    {
+      "kind": "trajectory",
+      "duration": 2.6,
+      "frames": [
+        {"time": 0.0, "values": {"AngleX": 0, "AngleZ": 0, "PositionY": 0, "ParamEyeBallX": 0, "ParamEyeBallY": 0}},
+        {"time": 0.5, "values": {"AngleX": 3.0, "AngleZ": 6.0, "PositionY": 4.0, "ParamEyeBallX": 0.60, "ParamEyeBallY": -0.50}},
+        {"time": 1.8, "values": {"AngleX": 3.5, "AngleZ": 6.5, "PositionY": 4.5, "ParamEyeBallX": 0.70, "ParamEyeBallY": -0.60}},
+        {"time": 2.6, "values": {"AngleX": 0, "AngleZ": 0, "PositionY": 0, "ParamEyeBallX": 0, "ParamEyeBallY": 0}}
+      ]
+    }
+  ]
+}

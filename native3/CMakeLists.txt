@@ -17,7 +17,7 @@ set_target_properties(Live2DCubismCore PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/Core/include)
 
 # ── 目标 1：miyu —— X11(XWayland) + GLFW。备胎，行为已和 native2 对齐。
-add_executable(miyu src/main.cpp src/ctl.cpp src/platform_x11.cpp)
+add_executable(miyu src/main.cpp src/ctl.cpp src/plan.cpp src/platform_x11.cpp)
 target_include_directories(miyu PRIVATE
   ${GLFW_INCLUDE_DIRS} ${GL_INCLUDE_DIRS}
   Framework/src Core/include stb .)
@@ -40,6 +40,7 @@ target_link_libraries(miyu PRIVATE
 add_executable(miyu-wayland
   src/main.cpp
   src/ctl.cpp
+  src/plan.cpp
   src/platform_wayland.cpp
   src/layer-shell-protocol.c
   src/xdg-shell-protocol.c

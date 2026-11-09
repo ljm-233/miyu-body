@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "title": "打招呼",
+  "view": "full",
+  "actions": [
+    {
+      "kind": "trajectory",
+      "duration": 2.4,
+      "frames": [
+        {"time": 0.0, "values": {"AngleX": 0, "AngleZ": 0, "PositionY": 0, "ParamEyeBallX": 0, "ParamEyeBallY": 0}},
+        {"time": 0.5, "values": {"AngleX": -5.0, "AngleZ": 1.6, "PositionY": -5.0, "ParamEyeBallX": -0.35, "ParamEyeBallY": 0.50}},
+        {"time": 1.6, "values": {"AngleX": -6.0, "AngleZ": 2.0, "PositionY": -6.0, "ParamEyeBallX": -0.40, "ParamEyeBallY": 0.55}},
+        {"time": 2.4, "values": {"AngleX": 0, "AngleZ": 0, "PositionY": 0, "ParamEyeBallX": 0, "ParamEyeBallY": 0}}
+      ]
+    }
+  ]
+}
