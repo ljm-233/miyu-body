@@ -190,7 +190,7 @@ const char* kHtml = R"HTML(<!doctype html>
   // 顺序 = 使用频率：常用 → 外观 → 行为 → 性能 → 声音
   var SCHEMA = [
     {g:'常用', items:[
-      {k:'hide', t:'bool', label:'显示',
+      {k:'hide', t:'bool', label:'显示', invert:true,
        d:'关掉后她整个不见，进程还在，点哪儿都直接穿到桌面'},
       {k:'scale', t:'range', min:0.4, max:1.6, step:0.05, label:'大小',
        d:'整体放大缩小，位置不动'},
@@ -273,7 +273,7 @@ const char* kHtml = R"HTML(<!doctype html>
       lab.appendChild(cb); lab.appendChild(sl);
       c.appendChild(lab);
       cb.addEventListener('change', function(){
-        var o = {}; o[it.k] = cb.checked;
+        var o = {}; o[it.k] = it.invert ? !cb.checked : cb.checked;
         v.textContent = cb.checked ? '开' : '关';
         post(o).then(function(d){
           if (d && d.ok) hint('已应用：' + it.k, true); else hint('没生效', false);
@@ -330,7 +330,8 @@ const char* kHtml = R"HTML(<!doctype html>
         if (e.type === 'range') {
           e.el.value = val; e.out.textContent = Number(val).toFixed(2);
         } else if (e.type === 'bool') {
-          e.el.checked = !!val; e.out.textContent = val ? '开' : '关';
+          var shown = it.invert ? !val : !!val;
+          e.el.checked = shown; e.out.textContent = shown ? '开' : '关';
         } else {
           e.el.value = String(val); e.out.textContent = e.show(e.num ? parseInt(val, 10) : val);
         }
