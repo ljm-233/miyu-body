@@ -233,8 +233,8 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     const float preAx = gLook.iAx >= 0 ? model->GetParameterValue(gLook.iAx) : -999.0f;
 
     const float a = (dt * 6.0f > 1.0f) ? 1.0f : dt * 6.0f;
-    gLook.cx += (nx * 14.0f - gLook.cx) * a;   // 10 太轻，实测头只偏 1.7 度看不出来
-    gLook.cy += (ny * 10.0f - gLook.cy) * a;
+    gLook.cx += (nx * 3.0f - gLook.cx) * a;   // 同样原因：只给一点点身体偏移，转头靠眼珠   // 10 太轻，实测头只偏 1.7 度看不出来
+    gLook.cy += (ny * 3.0f - gLook.cy) * a;
     gLook.ex += (nx * 1.0f - gLook.ex) * a;
     gLook.ey += (ny * 1.0f - gLook.ey) * a;
 
