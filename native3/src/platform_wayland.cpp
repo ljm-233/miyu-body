@@ -446,10 +446,33 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
     wl_surface_commit(W.surf);
     wl_display_flush(W.dpy);
 
+    // 第一次算完把「条数 / 面积 / 包围盒」写进日志，用来对账：
+    //   · 条数为 0 → 整张都是透明的（画没出来，或读错了 buffer）
+    //   · 包围盒上下颠倒 → 翻转写反了
+    //   · 包围盒超出 500x900 → 忘了除以 scale
+    static bool detailed = false;
+    if (!detailed) {
+        detailed = true;
+        struct alpha_rect* rs = (struct alpha_rect*)malloc(total * sizeof(*rs));
+        if (rs) {
+            const size_t n = alpha_region_scan(buf, lw, lh, stride, th, rs, total);
+            int32_t bx0 = 1 << 30, by0 = 1 << 30, bx1 = -1, by1 = -1;
+            for (size_t i = 0; i < n; i++) {
+                if (rs[i].x < bx0) bx0 = rs[i].x;
+                if (rs[i].y < by0) by0 = rs[i].y;
+                if (rs[i].x + rs[i].w > bx1) bx1 = rs[i].x + rs[i].w;
+                if (rs[i].y + rs[i].h > by1) by1 = rs[i].y + rs[i].h;
+            }
+            LOG("input region: 物理 %dx%d -> 逻辑 %dx%d | %zu 条矩形 | 覆盖 %zu px (%.1f%%) | bbox=[%d,%d .. %d,%d] | threshold=%u",
+                w, h, lw, lh, n, alpha_region_area(rs, n),
+                (double)alpha_region_area(rs, n) * 100.0 / ((double)lw * (double)lh),
+                bx0, by0, bx1, by1, th);
+            free(rs);
+        }
+    }
+
     static int logged = 0;
-    if (logged < 8 || (logged % 120) == 0) {
-        LOG("input region: 物理 %dx%d -> 逻辑 %dx%d, %zu 条矩形 (threshold=%u)",
-            w, h, lw, lh, total, th);
-        logged++;
+    if (logged < 6 || (logged % 200) == 0) {
+        LOG("input region 更新 #%d：%zu 条矩形", ++logged, total);
     }
 }

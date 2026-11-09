@@ -74,3 +74,29 @@ void alpha_region_apply(struct wl_surface*, struct wl_compositor*, const uint8_t
 - 圆角/阴影：同一条规则里 `geometry-corner-radius 14` + `clip-to-geometry true` + `shadow { off }`。
 - 改完生效用 `niri msg action load-config-file`（**不是 `reload-config`，那个子命令不存在**）。
 - 做不到：逐像素点击穿透、`_NET_WM_WINDOW_OPACITY`。
+
+## 五、集成时又撞出来的两条（2026-11-09 20:0x，Wayland 版真正跑起来那天）
+
+1. **EGL context 必须是 COMPATIBILITY，不能 CORE**。
+   Cubism 的 GLES2 渲染器用客户端顶点数组 + `glDrawElements(..., GL_UNSIGNED_SHORT, 栈上数组)`
+   （`CubismRenderer_OpenGLES2.cpp:1157`），core profile 下全部 `GL_INVALID_OPERATION`。
+   症状极隐蔽：460 个 drawable、包围盒正常、零 GL 报错，但 framebuffer 里 alpha 全 0，
+   于是 input region 生成 0 条、截图只有壁纸。改兼容画像立刻出人。
+2. **layer-shell 的 margin 是相对单个 output 的逻辑坐标，不是全屏坐标**。
+   代码里那句 `platSetPosition(1900,150)` 在 1706 宽的 eDP-1 上是屏外，
+   窗口被丢到看不见的地方。现在 `apply_margin()` 用 `wl_output.mode/scale` 粗估逻辑屏尺寸把位置夹回屏内。
+
+另外补一个链接期坑：`alpha_region.h` 没有 `extern "C"` 守卫，被 C++ include 时符号被 name-mangle，
+和 `.c` 里的对不上，链接报 undefined reference。
+
+## 六、跑起来的样子（验收数据）
+
+`native3/` 两个 target：`build/miyu`（X11/GLFW，备胎）与 `build/miyu-wayland`（Wayland/EGL，正路），
+`./run.sh --wayland` 起后者。验收：
+
+- 日志：`GL=4.6 (Compatibility Profile)`、Cubism 起来、5 张贴图、物理 1000x1800、
+  `input region: 逻辑 500x900 | 841 条矩形 | 覆盖 128502 px (28.6%) | bbox=[108,107..446,837]`
+- 像素：头发 (1461,325)=`(55,142,232)` 是蓝的，不是黑剪影；窗口空白处与「关掉窗口」的对照图**逐字节相同**，真透明
+- region 对账：截图变化区换算成 surface-local 是 `[104,144..438,874]`，region 报 `[108,107..446,837]`
+  加上顶部 bar 37 逻辑 px 的 exclusive zone → `[108,144..446,874]`，误差 ≤8 px
+- 开关：`MIYU_NO_INPUT_REGION=1` 时 region 行 0 条，她照样在

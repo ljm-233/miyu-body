@@ -92,6 +92,11 @@ int main() {
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
     glewExperimental = GL_TRUE;
     const GLenum ge = glewInit();
+    // ge 的含义：
+    //   X11 版 → 0 (GLEW_OK)
+    //   Wayland 版 → 4 (GLEW_ERROR_NO_GLX_DISPLAY)，**这是预期，不是错**。
+    //     EGL 下没有 GLX display，但 GLEW 退回 glXGetProcAddress，那一步不需要 display，
+    //     指针全都解析到了（实测 44 个常用入口 0 个空指针），照常画。
     log_("[main] GL=%s | %s | glew=%d", glGetString(GL_VERSION), glGetString(GL_RENDERER), ge);
     platSetPosition(1900, 150);
 

@@ -123,6 +123,8 @@ Cubism 官方 GLES2 渲染器那边要 `glGenerateMipmap` 那条老路径和兼�
 
 ## 四、下一步：Wayland 实现要填什么
 
+> 2026-11-09 晚已落地，实际填法见第六节（这一节留着当设计意图，别当待办）。
+
 新文件 `src/platform_wayland.cpp`，实现同一组 9 个函数，然后把 CMake 里的
 `platform_x11.cpp` 换成它（或者按 `MIYU_BACKEND=wayland` 二选一）。`main.cpp` **一行不用改**。
 
@@ -187,3 +189,112 @@ native3 二进制： Is floating: yes  Workspace-view position: 686.67, 252  Win
 - 窗口外的部分就是桌面（`shot-native3-full.png` 可以看全屏）。
 
 没有留窗口：验证完 `pkill -x miyu`，`ps` 里 0 个 `build/miyu`。
+
+---
+
+## 六、Wayland target 集成完成（2026-11-09 晚）
+
+**X11 版是备胎，Wayland 版是正路。**
+X11(XWayland)+GLFW 那条路撞的是硬边界：`_NET_WM_WINDOW_OPACITY` niri 不认、
+X Shape 输入区 xwayland-satellite 零实现 —— 逐像素点击穿透在 X11 上永远做不到。
+Wayland 版透明真生效、`wl_surface.set_input_region` 真管用，所以以后默认走它，
+X11 目标只留着做对照（它还能编、还能跑，别删）。
+
+### 6.1 两个 target 怎么编
+
+```bash
+cd /home/link/.dsh/miyu/body/native3
+cmake -S . -B build && make -C build -j4
+#   build/miyu          ← X11(XWayland)+GLFW，备胎
+#   build/miyu-wayland  ← Wayland layer-shell + EGL 桌面 GL，正路
+./run.sh              # 起 X11 版
+./run.sh --wayland    # 起 Wayland 版（别 unset WAYLAND_DISPLAY）
+```
+
+`miyu-wayland` 的源：`main.cpp platform_wayland.cpp layer-shell-protocol.c
+xdg-shell-protocol.c alpha_region.c`；链 `wayland-client wayland-egl egl GL GLEW dl m`。
+**main.cpp 一份代码编两个后端**，靠 `platform.h` 那 10 个自由函数分流，渲染部分零分叉。
+
+三条不能省：
+
+1. **GLEW 还得链**。`main.cpp` 和 Cubism 的 GL 渲染器都 `#include <GL/glew.h>`，`gl*` 是宏，
+   展开成 libGLEW 里的 `__glew*` 变量。EGL 下 `glewInit()` 返回 **4 = GLEW_ERROR_NO_GLX_DISPLAY**，
+   但指针**全都解析到了**（实测 44 个常用入口 0 个空指针：GLEW 退回 `glXGetProcAddress`，
+   那一步不需要有 GLX display）。所以返回值忽略掉就行，日志里那个 `glew=4` 不是错。
+2. **xdg-shell 协议代码必须一起链** —— layer-shell 的 `get_popup` 引用 `xdg_popup_interface`。
+3. `alpha_region.c` 交给 C 编译器（`set(CMAKE_C_STANDARD 11)`），别塞进 g++。
+
+### 6.2 今晚踩的两个真坑
+
+**① EGL context 必须 COMPATIBILITY，不能 CORE。**
+`platform_wayland.cpp` 原来是 3.3 core（probe 里够用，因为 probe 只用 VAO+VBO）。
+Cubism 的 GLES2 渲染器用的是**客户端顶点数组**那套老 API
+（`CubismRenderer_OpenGLES2.cpp:1157`：`glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_SHORT, 栈上数组)`），
+core profile 下这就是 `GL_INVALID_OPERATION`。症状极有辨识度：
+**460 个可见 drawable、包围盒正常、一条 GL 报错都没打，但 framebuffer 全是 alpha=0**
+—— region 算出 0 条矩形、截图只有壁纸。改成 `EGL_CONTEXT_OPENGL_COMPATIBILITY_PROFILE_BIT`
+立刻出人。X11 那边是同一个原因（platform_x11.cpp 坑③）。
+
+**② layer-shell 的 margin 是相对单个 output 的逻辑坐标，不是全屏坐标。**
+`main.cpp` 里那句 `platSetPosition(1900,150)` 是 X11 那套屏幕坐标；在 1706 宽的 eDP-1 上
+就是屏外，niri 把整块放到看不见的地方（截图只有壁纸，而且看不出哪里错了）。
+现在 `apply_margin()` 用 `wl_output.mode / scale` 粗估逻辑屏尺寸把位置夹回屏内
+（日志会打 `位置夹回屏内：(1900,150) -> margin (780,0)`）。粗估偏保守（scale 被 niri 向上取整成 2），
+只用来防跑出屏外，不做精确布局。
+
+另外：`alpha_region.h` 补了 `extern "C"` 守卫。它是 C 头，被 C++ 的 `platform_wayland.cpp`
+include 时不给 C 链接，调用点会被 name-mangle，和 `alpha_region.c` 里的符号对不上（链接期才炸）。
+
+### 6.3 platSetInputRegionFromAlpha 的坐标换算（整块集成唯一的算术）
+
+`main.cpp` 每 10 帧（或 framebuffer 尺寸变化时）做：
+
+```cpp
+glPixelStorei(GL_PACK_ALIGNMENT, 1);
+glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pix.data());  // W,H = 物理像素
+platSetInputRegionFromAlpha(pix.data(), W, H, 8);
+```
+
+（必须在 `platSwapBuffers()` **之前**读 —— 读的是刚画完的这张 back buffer。
+环境变量 `MIYU_NO_INPUT_REGION=1` 整块跳过，用来对照排查。）
+
+换算全在 `platSetInputRegionFromAlpha()` 里，**因为它知道 scale，main 不知道**：
+
+| 维度 | glReadPixels 给的是 | wl_region 要的是 | 做法 |
+| --- | --- | --- | --- |
+| 尺寸 | 物理像素 1000x1800 | surface-local 逻辑 500x900 | 除以 `buffer scale`（本机 2） |
+| 原点 | 左下 | 左上 | 上下翻转：逻辑第 ly 行取物理第 `h-1-(ly*s+dy)` 行 |
+| 采样 | 逐像素 | 逐像素 | 每个逻辑像素取它那 s×s 块里 alpha 的**最大值**（最近邻会把头发丝、手指削掉，削掉就是点不到） |
+
+不除 scale 的后果：区域大一倍，她旁边大半张空白也吃点击，"穿透"退化成"整窗可点"；
+不翻转的后果：可点区域上下镜像 —— 头的位置能吃点击、脚的位置吃不到。
+两件事都不会报错，只能靠对账发现（见 6.4 的 bbox）。
+
+### 6.4 验证记录（2026-11-09 19:3x）
+
+```
+[plat-wl] 选中 eDP-1，逻辑屏约 1280x800 (mode 2560x1600 / scale 2)
+[plat-wl] configure 500x900
+[plat-wl] GL_VERSION=4.6 (Compatibility Profile) Mesa 26.2.6-arch1.1
+[plat-wl] 逻辑尺寸 500x900 -> 物理尺寸 1000x1800 (scale=2)
+[main] GL=4.6 (Compatibility Profile) ... | glew=4          ← 4 是预期，见 6.1
+[main] Cubism 框架起来了 / Moc=大肥鱼.moc3 贴图数=5 / 部件 715 个
+[tex] 1024x2048 id=1 / 1024x2048 id=2 / 512x512 id=3 / 2048x2048 id=4 / 1024x1024 id=5
+[plat-wl] input region: 物理 1000x1800 -> 逻辑 500x900 | 841 条矩形 | 覆盖 128502 px (28.6%) | bbox=[108,107 .. 446,837] | threshold=8
+```
+
+**三条对账，都用数字，不看"截图还挺好看"**：
+
+1. **她身上不是黑剪影**：物理点 `(1461,325)`（头发）＝ `(55,142,232)`，B 远大于 R；
+   同一坐标在"没窗口"的对照图里是 `(175,179,204)`（壁纸）→ 真的画了东西，而且是蓝的。
+2. **窗口空白处＝壁纸**：`(1180,100) (1180,1300) (1900,1200) (1880,60)` 四个点，
+   有窗口/无窗口**逐字节相同** → 透明生效，不是黑底。
+3. **region 和画面对得上**（这条同时验了 scale 除法和 Y 翻转）：
+   截图里变化的像素 → surface-local 逻辑 `[104,144 .. 438,874]`；
+   region 报的 `[108,107 .. 446,837]`，加上顶部 bar 的 37 逻辑 px exclusive zone（layer surface
+   margin top=0 落在 bar 下面）→ `[108,144 .. 446,874]`，跟画面差 ≤8 px（2x2 块取 alpha 最大值 + 3 px 抽样步长）。
+
+`MIYU_NO_INPUT_REGION=1` 再跑一次：日志里 `input region` 相关行 **0 条**（开关有效），
+她照样在（头发像素同为 `(55,142,232)`）。
+
+收尾：`pkill -x miyu-wayland; pkill -x miyu`，`ps` 里两种进程各 0 个，屏幕不留窗口。
