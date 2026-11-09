@@ -1742,7 +1742,7 @@ int main() {
             const double tF = platTime();
             tPhys += tB - tA; tUpd += tC - tB; tDraw += tD - tC; tPost += tF - tE0;
             ++nFrames;
-            if (now - lastProf > 5.0) {
+            if (getenv("MIYU_PROF") && now - lastProf > 5.0) {
                 lastProf = now;
                 const double n = nFrames > 0 ? nFrames : 1;
                 log_("[prof] 每帧 物理%.2f 更新%.2f 绘制%.2f 后处理%.2f ms | %d 帧/5s",
@@ -1848,7 +1848,7 @@ int main() {
             static double tSwap = 0, tEv = 0; static int nSw = 0;
             static double lastSw = 0;
             tSwap += tH - tG; tEv += tI - tH; ++nSw;
-            if (now - lastSw > 5.0) {
+            if (getenv("MIYU_PROF") && now - lastSw > 5.0) {
                 lastSw = now;
                 const double n = nSw > 0 ? nSw : 1;
                 log_("[prof2] 每帧 swap%.2f 事件%.2f ms | %d 帧/5s", tSwap/n*1000, tEv/n*1000, nSw);
@@ -1856,7 +1856,7 @@ int main() {
             }
             static double tLoopSum = 0; static int nLoop = 0; static double lastLoop = 0;
             tLoopSum += platTime() - tLoop0; ++nLoop;
-            if (now - lastLoop > 5.0) {
+            if (getenv("MIYU_PROF") && now - lastLoop > 5.0) {
                 lastLoop = now;
                 log_("[prof3] 循环体总耗时 %.2f ms/帧 | %d 帧/5s | 折合单核 %.1f%%",
                      tLoopSum/nLoop*1000, nLoop, tLoopSum/5.0*100);
