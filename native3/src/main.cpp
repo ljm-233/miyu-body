@@ -22,6 +22,7 @@
 #include <GL/glew.h>
 
 #include "platform.h"
+#include "ctl.h"   // 本地控制口：外面推「她在说什么/什么心情」，见第十一节
 
 #include "CubismFramework.hpp"
 #include "Model/CubismMoc.hpp"
@@ -278,6 +279,67 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
     }
 }
 
+// ── 表情：启动时 MIYU_EXPR + 运行时由 ctl 切换（2026-11-09 晚）──────
+// 原来的写法是「启动读一次 MIYU_EXPR，之后再也不动」。现在收成一件事：
+// 谁要表情（启动 MIYU_EXPR / socket 里的 {"expr":"前倾"}）都走 exprPlay()。
+//
+// 运行时切换靠的是 SDK 自己的机制，不要自己写淡入淡出：
+//   CubismMotionQueueManager::StartMotion() 会给**已经在播的**每个 entry
+//   打上 SetFadeout(它自己的 FadeOutTime)，然后新的 entry 排队等在后面。
+//   CubismExpressionMotionManager::UpdateMotion() 按 fadeWeight 把前一个算淡、
+//   算到最后一个权重到 1 才把前面的 entry 删掉。这就是「旧的自动 fadeOut」。
+//   → 所以切换 = Create 一个新的 + StartMotion，别 StopAllMotions（那是硬切）。
+//
+// 两个坑：
+//   · Create 出来的 motion 归我们管：StartMotion(m, false) 之后 SDK 不会替你删
+//     （expression 的结束路径只 CSM_DELETE 队列 entry，不碰 motion 本体）。
+//     全部塞进 gExprPool，退出时统一删 —— 切换次数是人给的，不会涨爆。
+//   · 队列 entry 在管理器析构时才释放，所以先删管理器、再删 pool，别反过来。
+static Csm::CubismExpressionMotionManager* gExprMgr = nullptr;
+static std::vector<Csm::ACubismMotion*> gExprPool;
+static std::string gExprName = "(无)";
+
+// name 为空 / "默认" → 淡出回默认表情：用一份**参数表是空的** exp3 顶上，
+// 它什么都不写，于是前一个表情按 fadeWeight 被算回默认值。
+static const char* kDefaultExprJson =
+    "{\"Type\":\"Live2D Expression\",\"FadeInTime\":0.35,\"FadeOutTime\":0.35,\"Parameters\":[]}";
+
+static void exprPlay(const std::string& name) {
+    std::string bytes;
+    std::string label;
+    if (name.empty() || name == "默认") {
+        bytes = kDefaultExprJson;
+        label = "(默认)";
+    } else {
+        const std::string ep = std::string(kModelDir) + "Exp3/" + name + ".exp3.json";
+        std::vector<char> eb = slurp(ep);
+        if (eb.empty()) {
+            log_("[expr] 读不到 %s（保持现在的 %s）", ep.c_str(), gExprName.c_str());
+            return;
+        }
+        bytes.assign(eb.begin(), eb.end());
+        label = name;
+    }
+
+    Csm::CubismExpressionMotion* m = Csm::CubismExpressionMotion::Create(
+        reinterpret_cast<const Csm::csmByte*>(bytes.data()),
+        static_cast<Csm::csmSizeInt>(bytes.size()));
+    if (m == nullptr) {
+        log_("[expr] Create 失败 %s", label.c_str());
+        return;
+    }
+    // exp3.json 里没写 FadeInTime 的时候默认是 0（硬切）。自己按住 0.35s，
+    // 顺便让**下一个**表情切换时拿它当 fadeOut 时长（StartMotion 读的就是这个值）。
+    m->SetFadeInTime(0.35f);
+    m->SetFadeOutTime(0.35f);
+
+    if (gExprMgr == nullptr) gExprMgr = new Csm::CubismExpressionMotionManager();
+    gExprMgr->StartMotion(m, false /* autoDelete：归 gExprPool 管 */);
+    gExprPool.push_back(m);
+    gExprName = label;
+    log_("[expr] -> %s（fade 0.35s，池里 %zu 个）", label.c_str(), gExprPool.size());
+}
+
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
@@ -442,32 +504,23 @@ int main() {
 
     // ── 表情（Exp3/*.exp3.json）────────────────────────────
     // 2026-11-09 22:0x：作者给的 23 个表情才是「她怎么看你」的正路 —— 尤其「前倾」。
-    // MIYU_EXPR=前倾 就播那一个（循环），不设就完全不播。
-    Csm::CubismExpressionMotionManager* exprMgr = nullptr;
-    Csm::CubismExpressionMotion* expr = nullptr;
+    // MIYU_EXPR=前倾 启动就播那一个；之后 socket 里 {"expr":"..."} 可以随时换。
+    // 2026-11-09 晚：创建逻辑收进 exprPlay()，启动和运行时走同一条路。
     if (const char* en = std::getenv("MIYU_EXPR")) {
-        const std::string ep = std::string(kModelDir) + "Exp3/" + en + ".exp3.json";
-        std::vector<char> eb = slurp(ep);
-        if (eb.empty()) {
-            log_("[main] 表情：读不到 %s", ep.c_str());
-        } else {
-            expr = Csm::CubismExpressionMotion::Create(
-                reinterpret_cast<const Csm::csmByte*>(eb.data()),
-                static_cast<Csm::csmSizeInt>(eb.size()));
-            if (!expr) {
-                log_("[main] 表情：Create 失败 %s", ep.c_str());
-            } else {
-                exprMgr = new Csm::CubismExpressionMotionManager();
-                exprMgr->StartMotion(expr, false /* autoDelete */);
-                log_("[main] 表情：%s 已开始（%zu 字节）", en, eb.size());
-            }
-        }
+        exprPlay(en);
     }
 
     // 眨眼状态翻转打点（一次眨眼两行；不进每帧日志）
     const Csm::csmInt32 eyeLi = model->GetParameterIndex(
         Csm::CubismFramework::GetIdManager()->GetId("ParamEyeLOpen"));
     bool eyesClosed = false;
+
+    // 嘴：ParamMouthOpenY (0..1)，模型里存在（第 2 节参数表）。ctl 算好包络，这里只 Set。
+    // socket 在这里建：模型/贴图都过了，接下来才有人往口子里推话。
+    ctl::init();
+    const Csm::csmInt32 mouthI = model->GetParameterIndex(
+        Csm::CubismFramework::GetIdManager()->GetId("ParamMouthOpenY"));
+    log_("[main] 嘴参数 ParamMouthOpenY 索引=%d（socket %s）", mouthI, ctl::sockPath());
 
     // ── 诊断：参数表 + drawable 包围盒（MIYU_DUMP=1 才打印）──
     const bool kDump = std::getenv("MIYU_DUMP") != nullptr;
@@ -546,9 +599,23 @@ int main() {
         // 眨眼必须夹在动作之后（动作会写参数，眨眼要压过它）、Update 之前（Update 才把
         // 参数算进顶点；反了就是不生效，而且不报错）。
         model->LoadParameters();
+
+        // 本地控制口：非阻塞收一行（一行一条 JSON）。放这么早是因为下面几件事都吃它：
+        // 表情请求要在 UpdateMotion 之前切、嘴的包络要在表情之后写。
+        ctl::poll(now);
+        std::string exprReq;
+        if (ctl::takeExpr(exprReq)) exprPlay(exprReq);
+
         if (motionManager) motionManager->UpdateMotion(model, dt);
         else if (kUseSine) idleTick(model, now);   // 只有 MIYU_IDLE_SINE=1 才走手写正弦
-        if (exprMgr) exprMgr->UpdateMotion(model, dt);   // 表情在动作之后、眨眼之前
+        if (gExprMgr) gExprMgr->UpdateMotion(model, dt);   // 表情在动作之后、眨眼之前
+        // 嘴：在表情之后写（表情要是不小心也写了 ParamMouthOpenY，说话优先），
+        // 眨眼之前（眨眼只碰眼睛，顺序其实无所谓，就近放）。一律 Set —— 这个参数
+        // 不会被 LoadParameters 归零，Add 会一帧一帧累加顶死，和 ParamEyeBall 一个毛病。
+        if (mouthI >= 0) {
+            const float mv = ctl::mouth(now);
+            model->SetParameterValue(mouthI, mv < 0.0f ? 0.02f : mv, 1.0f);   // 不说时只有一点呼吸
+        }
         // 视线：夹在待机微动之后（叠在它上面，不覆盖）、眨眼之前。
         // 用逻辑尺寸归一化 —— platPointer 给的是 surface-local 逻辑 px，不是物理 px。
         int lw = 0, lh = 0;
@@ -616,6 +683,11 @@ int main() {
         motionManager = nullptr;
     }
     if (idleMotion) { Csm::ACubismMotion::Delete(idleMotion); idleMotion = nullptr; }
+    // 表情：先删管理器（它析构时扔掉队列 entry，不会碰 motion 本体 —— 我们 StartMotion
+    // 时传的 autoDelete=false），再删池里那些自己 Create 出来的 motion。
+    if (gExprMgr) { delete gExprMgr; gExprMgr = nullptr; }
+    for (Csm::ACubismMotion* m : gExprPool) Csm::ACubismMotion::Delete(m);
+    gExprPool.clear();
     if (eyeBlink) { Csm::CubismEyeBlink::Delete(eyeBlink); eyeBlink = nullptr; }
     Csm::Rendering::CubismRenderer::Delete(base);
     moc->DeleteModel(model);

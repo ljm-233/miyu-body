@@ -614,3 +614,154 @@ idle 本帧算的值，叠得干干净净。但**眼珠那两个不是**：
 
 **所以**：这是「静态立绘 + 物理 + 表情」型模型，**头不能转**。
 「让她转头看人」这件事，在这个模型上做不到；只有两条路——换一个头部可动的模型，或者在渲染层把整张图轻微倾斜/位移来模拟（那是假的，得说清楚）。
+
+## 十一、本地控制口：外面推「她在说什么」进来（2026-11-09 21:3x）
+
+一句话：**身体现在有嘴巴了**。外面不需要碰渲染、不需要重启，往一个 Unix socket 里写一行 JSON，她就张嘴说那句话（嘴真的动，下面有像素数据）。
+
+### 11.1 接线（哪个文件管什么）
+
+| 文件 | 干什么 |
+| --- | --- |
+| `src/ctl.h` / `src/ctl.cpp` | socket + 收行 + 粗放解析 + 嘴的包络计算。**不认识 Cubism 的类型** |
+| `src/main.cpp` | 每帧 `ctl::poll(now)`；把 `ctl::mouth(now)` 写进 `ParamMouthOpenY`；表情请求交给 `exprPlay()` |
+| `tools/body-say.sh` | 客户端。python3 组 JSON + 发 socket（`socat` 不一定有，python 一定有） |
+
+两个 target（`miyu` / `miyu-wayland`）都编进了 `ctl.cpp`，X11 备胎上这套一样能用。
+
+### 11.2 socket
+
+- 路径：`$XDG_RUNTIME_DIR/miyu-body.sock`（本机 = `/run/user/1000/miyu-body.sock`）；拿不到 `XDG_RUNTIME_DIR` 就 `/tmp/miyu-body-$UID.sock`
+- `AF_UNIX` + `SOCK_STREAM`，`listen(8)`，listen fd 和 accept 出来的 fd **都是 O_NONBLOCK**
+- **一行一条命令**，收完这一行就 `close`，下一帧再 `accept` 下一个 —— 不用管粘包，也不用管多客户端
+- 客户端如果 connect 了 1 秒还没发完整一行，直接丢弃（防止半截连接占着 fd）
+- 建不起来（bind 失败/路径太长）只在日志里记一行，**渲染照跑**，不 return
+- 启动时 `unlink` 旧文件，权限 `0600`
+
+### 11.3 命令格式
+
+一行 JSON，字段全可选：
+
+```json
+{"say":"今晚先把透明修好","mood":54,"expr":"前倾","dur":null}
+```
+
+| 字段 | 类型 | 作用 |
+| --- | --- | --- |
+| `say` | 字符串 | 说话文本。时长 = `dur` 或 `max(1.2s, 字数 × 0.16s)`，上限 60s 防呆；空串 = 闭嘴 |
+| `mood` | 0-100 数字 | 存下来 + 打日志 `[ctl] mood=54`，暂时不驱动任何东西（以后接表情） |
+| `expr` | 字符串 | 表情名，对应 `Exp3/<名字>.exp3.json`；`""` 或 `"默认"` = 淡出回默认 |
+| `dur` | 秒（数字） | 不给 / 给 null / ≤0 都按字数算 |
+
+解析是**手写的粗放匹配**（`"key":"值"` / `"key":数字`），故意不引 json 库：
+- 只认双引号字符串值：`{"expr":123}` 会被当成没有 expr
+- `"mood":"高"` 这种字符串数字也当没有
+- 整行不以 `{` 开头、或者一个认识的字段都没有 → 一行警告，然后**继续跑**
+- 同一条畸形行只警告一次（`gWarned`），不会刷屏
+
+开关表新增：
+
+| 现象 | 日志 |
+| --- | --- |
+| 起来了 | `[ctl] socket = /run/user/1000/miyu-body.sock（一行一条 JSON：…）` |
+| 说一句话 | `[ctl] say 4.2s: 今晚先把透明修好`（**一句话一行，不是每帧**） |
+| 心情 | `[ctl] mood=54` |
+| 表情 | `[ctl] expr 请求: 前倾` + `[expr] -> 前倾（fade 0.35s，池里 N 个）` |
+| 畸形 | `[ctl] 警告：不是一行 JSON，忽略：not json` |
+
+### 11.4 嘴的包络（参数）
+
+`ParamMouthOpenY`（本模型索引 **107**，0..1），每帧 **Set**（和 `ParamEyeBall` 一样：这个参数不会被 `LoadParameters` 归零，Add 会一帧一帧累加顶死）：
+
+```
+t     = now - 收到 say 的时刻
+开合  = 0.5 + 0.5 * sin(t * 2π / 0.22)          # 0.22s 一个周期，一口一张
+env   = min(1, t/0.15, (dur - t)/0.2)           # 前 0.15s 渐入、最后 0.2s 渐出
+值    = clamp(开合 * env, 0, 1)
+```
+
+- 说话结束（`t ≥ dur`）→ 返回 -1，main 那边写 **0.02**（一点点呼吸，不是死 0；反正肉眼看不出来）
+- **没有 say 的时候也写**，只是写 0.02：这个参数没有别的写入者（23 个 exp3 里一个都没写 `ParamMouthOpenY`，`grep -l` 验过），所以「一直 Set」不会抢别人的
+- 写入位置：`LoadParameters → 动作/待机 → **表情** → **嘴** → 视线 → 眨眼 → physics → Update`。嘴放在表情之后，万一以后某个表情也写这个参数，说话优先
+
+### 11.5 表情运行时切换（复用 SDK，不自己写淡入淡出）
+
+启动的 `MIYU_EXPR` 和 socket 里的 `{"expr":"…"}` 现在走**同一个函数** `exprPlay(name)`：
+
+1. 读 `Exp3/<name>.exp3.json`（`默认`/空串用内置的空参数表 exp3：`{"Type":"Live2D Expression","FadeInTime":0.35,"FadeOutTime":0.35,"Parameters":[]}`）
+2. `CubismExpressionMotion::Create` → `SetFadeInTime(0.35)` / `SetFadeOutTime(0.35)`（exp3.json 里不写 FadeInTime 时默认 **0**，那就是硬切）
+3. `gExprMgr->StartMotion(m, false)`
+
+旧的怎么淡出，**SDK 自己干**：
+- `CubismMotionQueueManager::StartMotion()` 会给队列里**已在播的每个 entry** `SetFadeout(它自己的 FadeOutTime)`，新的排后面
+- `CubismExpressionMotionManager::UpdateMotion()` 按 fadeWeight 把前一个算淡，等最后一个权重到 1 才把前面的 entry 删掉
+- 所以「切表情」= Create + StartMotion，**别 `StopAllMotions()`**（那是硬切回默认）
+- 回默认为什么用「空参数表」的 exp3：它一个参数都不写，前一个表情的 fadeWeight 往下掉时数值被算回默认值 → 平滑回去，不用自己写插值
+
+两个内存规矩（踩过就会 double free / 泄漏）：
+- `StartMotion(m, false)` 之后 SDK **不会**替你删 motion（expression 的结束路径只 `CSM_DELETE` 队列 entry，不碰 motion 本体）→ 全部 push 进 `gExprPool`，退出时统一 `ACubismMotion::Delete`
+- 退出顺序：**先 `delete gExprMgr`**（它析构时扔 entry，`autoDelete=false` 所以不碰 motion），再删 pool
+
+### 11.6 验证（2026-11-09 21:3x，实测）
+
+为了拿到**没有噪声底**的对照，这一轮用冻结实例测的（`MIYU_NO_IDLE=1 MIYU_NO_PHYS=1 MIYU_NO_EYES=1 MIYU_NO_LOOK=1`，窗口在 HDMI-A-3）：
+`grim -o HDMI-A-3` 抓帧，嘴部 ROI = 屏幕 `(883,372)-(899,384)`（16×12）—— 这个 ROI 是先放大看过、确认整块落在嘴唇上的。
+
+**A. 嘴真的在动**（say「测试一下嘴会不会动」，1.4s，间隔 120ms 连抓 6 帧）
+
+| 对比 | 嘴部变化像素 | 嘴部墨迹像素（R<246） |
+| --- | --- | --- |
+| 静默两帧（噪声底） | 0/192 (0.0%) | 4 |
+| 帧0 vs 帧1 | 54/192 (28.1%) | 14 |
+| 帧0 vs 帧2 | 21/192 (10.9%) | 22 |
+| 帧0 vs 帧3 | 68/192 (35.4%) | 36 |
+| 帧0 vs 帧4 | 34/192 (17.7%) | 23 |
+| 帧0 vs 帧5 | 13/192 (6.8%) | 4 |
+
+逐帧 ASCII 图里能直接看到嘴从一条线（`rest`：`000000030001100030`）张成 8px 高的椭圆（`say3`），再合回去。**0.22s 的周期和 120ms 采样对上，来回都抓到了。**
+
+**B. 说完自己停**（静默 3s 后再抓两帧）：0/192 (0.0%)，而且**和说话前那一帧逐像素完全一致**（0/192）—— 嘴回到静止，没有残留。
+
+**C. 表情**（`tools/body-say.sh --expr …`，每步 fade 0.35s 后抓图，ROI 只取她身上的位置，桌面背景不参与）
+
+| 表情 | 脸 ROI 变化 | 结论 |
+| --- | --- | --- |
+| `前倾` | **0/2944 (0.0%)** | 见下面那条，**这个表情在这个模型上看不出来** |
+| `＞＜` | 340/2944 (11.5%) | 眼睛变成 `＞＜` |
+| `脸红` / `兔牙` | 1223/2944 (41.5%) | 脸红 + 嘴微张 |
+| `屑屑眼` | 1189/2944 (40.4%) | 圈圈眼 |
+| `黑脸` | 1867/2944 (63.4%) | 整张脸黑掉 |
+
+**顺手挖出来的一条新事实（接第十节）**：`前倾.exp3.json` 只驱动 `LeanInput = -30`，而 `LeanInput` 在这个模型上**是空壳** —— 用 `MIYU_FORCE_PARAM="LeanInput=0"` 和 `"LeanInput=-30"` 各起一次，全身 ROI **0/227200 (0.00%)**，一个像素都不变。所以：
+- 运行时切换表情这条路是通的（`＞＜`/`黑脸` 立刻能看到）
+- 但「前倾」这个表情本身在这个模型上没有视觉表现，别再拿它当「凑近」用；要「凑近」只能动渲染层的缩放/位移（那是假的）
+
+**D. 畸形输入**（往 socket 里直接写）
+
+```
+[ctl] 警告：不是一行 JSON，忽略：not json
+[ctl] 警告：没有一个认识的字段（say/mood/expr/dur），忽略：{"say":
+[ctl] 警告：没有一个认识的字段（say/mood/expr/dur），忽略：{"abc":1}
+[ctl] 警告：没有一个认识的字段（say/mood/expr/dur），忽略：{"mood":"高"}
+[ctl] 警告：没有一个认识的字段（say/mood/expr/dur），忽略：{"expr":123}
+```
+
+`systemctl --user is-active` 一直 `active`，PID 没变 —— 不崩、不重启、不断嘴。
+
+### 11.7 客户端
+
+```sh
+tools/body-say.sh "今晚先把透明修好"          # 只说
+tools/body-say.sh --mood 62 "有点累"          # 带心情
+tools/body-say.sh --expr 前倾 "你回来了"      # 带表情
+tools/body-say.sh --expr 默认                 # 淡出回默认表情
+tools/body-say.sh --dur 3.5 "慢慢说"          # 指定时长
+```
+
+脚本自己不猜 socket：先试 `$XDG_RUNTIME_DIR/miyu-body.sock`，没有就 `/tmp/miyu-body-$UID.sock`；两个都不在就报一句「身体起了吗」退出。
+
+### 11.8 还没做的（别以为是 bug）
+
+- `mood` 只存不打驱动：现在到 `[ctl] mood=N` 为止，表情映射还没接
+- 一次只服务一条连接；外面连着发两条要各自 connect（脚本已经是这样）
+- 没有认证：socket 权限 `0600`，同用户能写 = 能让她说话。这是本地口子的本意，别把 `$XDG_RUNTIME_DIR` 挪到共享目录
