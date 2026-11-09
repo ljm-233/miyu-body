@@ -298,3 +298,167 @@ platSetInputRegionFromAlpha(pix.data(), W, H, 8);
 她照样在（头发像素同为 `(55,142,232)`）。
 
 收尾：`pkill -x miyu-wayland; pkill -x miyu`，`ps` 里两种进程各 0 个，屏幕不留窗口。
+
+---
+
+## 七、鼠标拖动（2026-11-09 20:0x）
+
+`wl_seat` + `wl_pointer`，按 BTN_LEFT + 指针在她身上 → 拖；`MIYU_DRAG=0` 关掉；
+拖动期间 main.cpp 跳过 input region 重算（`platIsDragging()`），松手那一帧补算一次。
+
+### 7.1 三个必须记住的坑
+
+**① wl_seat 只能绑 v4，不能绑最新的。**
+`wl_pointer` 的版本跟着 seat 走；v5 起多了 `frame / axis_source / axis_stop /
+axis_discrete`，listener 里少写一个 libwayland 就当场
+`listener function for opcode 5 of wl_pointer is NULL` 然后**断开连接、进程直接死**。
+v4 的 wl_pointer 正好是 `enter/leave/motion/button/axis` 五个，一一对上。
+
+**② layer surface 的 local 坐标，差要**去重**，而且不能做「自己挪了多少就补偿多少」。**
+niri 算 `motion` 的 local 用的是**拖动开始那会儿的 surface 矩形**，我们挪窗口它不改；
+并且我们每 commit 一次 margin，它还会把**同一个 local 重发一遍**（一次 commit 一个事件）。
+两种写法都试过，都炸：
+- 按「上次 local」累加 + 挪完补偿：每个重发的同值事件都被当成新位移，
+  注入 −100 窗口跑 −620（几十帧飞到屏幕边上）。
+- 现在的写法：**同值事件直接丢**（`x == refSx && y == refSy` 就 return），
+  差值就是指针的纯位移，不做补偿。实测注入 −100 → margin −100，一格不差。
+  代价：真鼠标停住不动时不会有 motion 事件，也就不会漂。
+
+**③ 屏幕逻辑尺寸要问 xdg-output，不能用 mode/scale 估。**
+`wl_output.scale` 被 niri 向上取整成 2（真实 1.5），`mode/scale = 1280x800`，
+比窗口 500x900 还矮 → 竖直方向 margin 永远被 `apply_margin` 夹成 0，**拖着不动**。
+改成 `zxdg_output_manager_v1` 拿真逻辑尺寸（1707x1067）后竖直方向正常。
+顺带：`apply_margin` 现在把夹过的值**写回** posX/posY，不然拖动时 pos 会一直在屏外涨。
+
+### 7.2 验证怎么做（工具都在 `tools/`，input-probe/ 只读）
+
+```bash
+gcc -O2 -I../.. -I../../input-probe $(pkg-config --cflags wayland-client) \
+    -o tools/draginject tools/draginject.c \
+    ../../input-probe/gen/virtual-pointer-protocol.c $(pkg-config --libs wayland-client)
+
+tools/dragtest.sh DX DY STEPS STEP_MS     # 等静默 → grim → 注入 → grim → 比对
+```
+
+- 注入用 `--rel`（relative motion）。**别用 motion_absolute**：那是瞬移，
+  合成器那边 surface 位置还没跟上时算出来的假位移会把结论带偏。
+- bbox 用「有窗截图 − 没窗参照图」的差，别按头发色筛 —— 壁纸也是蓝的，会命中整块屏；
+  顶部 bar 要切掉（时钟每分钟变）。
+
+实测（eDP-1 scale 1.5，窗口 500x900 逻辑）：
+
+| 注入 | margin 前 → 后 | 截图 bbox 前 → 后（物理） |
+| --- | --- | --- |
+| (−100, 0) | (1207,150) → (1107,150) | [1967,442..2468,1537] → [1817,442..2318,1537]（−150 px = −100 逻辑）|
+| (−80, −50) | (1061,94) → (981,44) | [1751,358..2249,1453] → [1631,283..2129,1378]（−120,−75 px）|
+| (−80, +30) | (592,1) → (512,31) | [1044,218..1545,1312] → [927,263..1425,1358] |
+| `MIYU_DRAG=0`，(−100,0) | 无变化 | bbox 完全相同，日志 0 条拖动记录 |
+
+拖动期间 region 重算：`0` 次（松手那行会打「拖动期间跳过 N 帧」，实测 N=149）。
+
+---
+
+## 八、眨眼 + 待机动作 IDLE（2026-11-09 20:xx）
+
+### 8.1 主循环顺序（死规矩，写反了不报错、就是不生效）
+
+```cpp
+model->LoadParameters();
+motionManager->UpdateMotion(model, dt);     // ① 动作先写参数
+eyeBlink->UpdateParameters(model, dt);      // ② 眨眼压过动作
+physics->Evaluate(model, dt);               // ③ 物理读参数算头发/尾巴
+model->Update();                            // ④ 最后才算进顶点
+```
+
+- `CubismEyeBlink::Create()` 收的是 **`ICubismModelSetting*`，不是文件路径**。
+  `main.cpp` 里已经有解析好的 `CubismModelSettingJson setting`，直接 `Create(&setting)`；
+  它自己遍历 `model3.json` 的 `Groups` 里 `Target == "EyeBlink"` 的 `Ids`
+  （本模型：`ParamEyeLOpen` / `ParamEyeROpen`）。日志会打 `眨眼：参数 2 个 [...]`，
+  这个数字是 0 就说明 `Groups` 没读到，别往下查渲染。
+- `UpdateParameters` 必须在 `model->Update()` **之前**；顺序反了画面一动不动，且没有任何报错。
+- 默认节奏：间隔 4s（`rand` 随机 0..2×间隔），闭 0.1 / 合 0.05 / 开 0.15 = 一次 0.3s。
+  所以**验证窗口至少要 8s**，30 张 100ms 的窗口有一半概率一次都没眨。
+- 眨眼状态翻转会打一行 `[blink] 闭/睁 ParamEyeLOpen=... t=...`（一次眨眼两行），
+  排查时先看这个，比截图快。
+
+### 8.2 IDLE 怎么加载（`Motions` 是空的，只能自己 Create）
+
+`model3.json` 里 `Motions` 是 `null` —— 那 8 个 `motion3.json` 一个都没登记，
+`setting.GetMotionCount()` 是 0，**不能**指望 `setting` 帮忙加载。
+
+```cpp
+auto buf = slurp(std::string(kModelDir) + "Animation/IDLE.motion3.json");
+CubismMotion* m = CubismMotion::Create(buf.data(), buf.size());   // 只吃内存，不吃路径
+m->SetLoop(true);        // ← 必须自己设，见下
+m->SetLoopFadeIn(true);
+m->SetFadeInTime(1.0f);  // 从静态站姿淡入，别一上来就弹
+m->SetFadeOutTime(1.0f);
+motionManager = new CubismMotionManager();
+motionManager->StartMotionPriority(m, false /* autoDelete */, 1 /* priority */);
+```
+
+**`CubismMotion::Create` 不读 `Meta.Loop`**：`CubismMotion.cpp` 里那两行是注释掉的
+（`// ret->_loop = (ret->_motionData->Loop > 0);`）。IDLE 的 `Meta.Loop` 明明是 `true`，
+不自己 `SetLoop(true)` 就是播 5.983s 停住、`GetDuration()` 变 -1 之外什么都不发生 —— 看起来像"没接上"。
+
+### 8.3 哪几个 motion 绝对不能播
+
+`Animation/` 里这 6 个是**给另一版模型做服装/体型切换**的，本模型播了会散架
+（部件/参数结构对不上，不是"动作不好看"）：
+
+- `脱捕.motion3.json`
+- `举手切默认手.motion3.json`
+- `默认手切举手.motion3.json`
+- `狗尾草切换出来.motion3.json`
+- `狗尾草切回默认手.motion3.json`
+- `竖手指切出来动画.motion3.json`
+- `竖手指切回默认.motion3.json`
+
+**只播 `Animation/IDLE.motion3.json`。** 加新动作前先看它改的是不是这几个部件。
+
+### 8.4 两个开关
+
+| 环境变量 | 作用 | 关掉后日志 |
+| --- | --- | --- |
+| `MIYU_NO_EYES=1` | 不建 `CubismEyeBlink`，不眨眼 | `眨眼：MIYU_NO_EYES 已设 —— 关`，`[blink]` 行 0 条 |
+| `MIYU_NO_IDLE=1` | 不读 `IDLE.motion3.json`，不建 `motionManager` | `待机动作：MIYU_NO_IDLE 已设 —— 关` |
+
+配合已有的 `MIYU_NO_PHYS` / `MIYU_NO_INPUT_REGION` / `MIYU_DRAG` 用，排查时一次只关一个。
+
+### 8.5 收尾
+
+`main()` 结束前按 动作 → 眨眼 → 渲染器 → 模型 → moc → `CubismFramework::Dispose()` 的顺序释放。
+`StartMotionPriority(..., autoDelete=false, ...)`：循环动作不会自己结束，所有权留在我们手里，
+所以是 `StopAllMotions()` + `delete motionManager` + `ACubismMotion::Delete(idle)` 三步，
+不能只靠 `autoDelete`。
+
+### 8.6 验证怎么做（别靠肉眼，靠像素）
+
+`grim` 连拍太慢（一张 ~0.6s，100ms 的眨眼直接漏掉），改用 **wf-recorder 录 60fps + ffmpeg 裁帧**：
+
+```bash
+wf-recorder -o eDP-1 -r 60 -f /tmp/rec.mp4      # 录 20s+，前 12s 是窗口/物理沉降期
+ffmpeg -ss 14 -t 6 -i /tmp/rec.mp4 -vf "crop=550:1124:1952:428" -pix_fmt rgb24 -f rawvideo -
+```
+
+**坑**：`crop` 的宽高必须是**偶数**。`yuv420p` 下 ffmpeg 会悄悄把它调成偶数，
+按奇数宽高去 `reshape` 就会整帧错位 —— 表现为"每一帧都变、86% 像素都在动"，
+而单独看每张图又完全正常。实测裁剪宽高取 550×1124 时 `len(raw) % (w*h*3) == 0`。
+
+实测（eDP-1，窗口物理 bbox `[1967,442 .. 2468,1537]` = 502×1096）：
+
+| 项 | 结果 |
+| --- | --- |
+| 眼部区域（全屏物理） | `x 2060..2314, y 516..612`（254×96） |
+| 眨眼：30 张 / 间隔 100ms 窗口 | 最多 **20/30 张**眼部有变化（中位 14/30），单步峰值 **4690 px** |
+| 眨眼：眼部平均亮度差 | 峰值 **13.2**（0–255），肉眼即闭眼（截图 `eye_closed.png`） |
+| 眨眼频率 | 22s 里 4 次，日志 `[blink] 闭/睁` 各 4 条 |
+| IDLE：逐帧变化（60fps） | 中位 **649–888 px** / 帧，最大 3936 px（618k 像素的 0.1–0.6%） |
+| IDLE：30 张 / 3s 累计 | **6422 px（1.04%）**，分布在整只身上（bbox 48..548 × 68..994） |
+| 散架检查 | 模型连通块 11 个，最大块占 **99.96%**；bbox 13s / 16s 都是 502×1096，一格没变 |
+| 两个开关都关 | 沉降后（t>13s）逐帧变化 **中位 0**，`[blink]` 0 条 |
+
+**注意**：起窗后前 **10–13s** 内画面本来就在变（compositor configure 500x900 → 500x880、
+物理沉降），这期间做差分会得出"整帧都在动"的假结论。取证一律从 t≥13s 开始。
+另外即使两个开关全关，稳定期偶尔仍有 1–2 帧整屏重绘（17–21 万 px 一跳然后衰减），
+这是平台层既有的重绘，不是动作，别把它算进"她在动"。

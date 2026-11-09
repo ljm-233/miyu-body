@@ -32,6 +32,10 @@
 #include "CubismModelSettingJson.hpp"
 #include "ICubismAllocator.hpp"
 #include "Physics/CubismPhysics.hpp"
+#include "Effect/CubismEyeBlink.hpp"
+#include "Motion/CubismMotion.hpp"
+#include "Motion/CubismMotionManager.hpp"
+#include "Id/CubismIdManager.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -87,6 +91,56 @@ GLuint load_tex(const std::string& p) {
 
 }  // namespace
 
+
+// ── 待机微动（自己写的节奏，不是 motion）────────────────────────
+// 为什么不用 Animation/IDLE.motion3.json：把那 21 条曲线拆开看，驱动的是
+// ShockR/L（电击）、冒汗1/2、泪花闪烁、流泪-膨胀/滴下、落泪、星星闪烁、光1~4、
+// 呆滞 —— 这是一套表情特效开关，不是站立微摆。播了身体不动，只偶尔闪一下星星。
+// 所以改成直接写她自己的参数：呼吸一直走，头/歪头/重心每隔几秒换一个姿态。
+// 关键：**不是匀速正弦**，一段一段来、段间有停顿，否则一眼看出是程序。
+struct IdleRig {
+    Csm::csmInt32 iBreath = -1, iAx = -1, iAz = -1, iBz = -1;
+    double segT0 = 0.0, segLen = 4.0;
+    float fAx = 0, tAx = 0, fAz = 0, tAz = 0, fBz = 0, tBz = 0;
+    bool ready = false;
+};
+static IdleRig gIdle;
+
+static void idleInit(Csm::CubismModel* model) {
+    Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+    gIdle.iBreath = model->GetParameterIndex(m->GetId("ParamBreath"));
+    gIdle.iAx = model->GetParameterIndex(m->GetId("ParamAngleX"));
+    gIdle.iAz = model->GetParameterIndex(m->GetId("ParamAngleZ"));
+    gIdle.iBz = model->GetParameterIndex(m->GetId("ParamBodyAngleZ"));
+    gIdle.ready = true;
+    log_("[main] 待机参数索引 breath=%d angleX=%d angleZ=%d bodyZ=%d",
+         gIdle.iBreath, gIdle.iAx, gIdle.iAz, gIdle.iBz);
+}
+
+static float idleRnd() { return static_cast<float>(rand()) / static_cast<float>(RAND_MAX); }
+
+static void idleTick(Csm::CubismModel* model, double now) {
+    if (!gIdle.ready) idleInit(model);
+    if (now - gIdle.segT0 >= gIdle.segLen) {
+        gIdle.segT0 = now;
+        gIdle.segLen = 3.0 + 5.0 * idleRnd();          // 3~8 秒换一个姿态
+        gIdle.fAx = gIdle.tAx; gIdle.fAz = gIdle.tAz; gIdle.fBz = gIdle.tBz;
+        gIdle.tAx = (idleRnd() * 2.0f - 1.0f) * 7.0f;  // 头左右 ±7 度
+        gIdle.tAz = (idleRnd() * 2.0f - 1.0f) * 3.5f;  // 歪头 ±3.5 度
+        gIdle.tBz = (idleRnd() * 2.0f - 1.0f) * 2.5f;  // 重心 ±2.5
+    }
+    const float u = static_cast<float>((now - gIdle.segT0) / gIdle.segLen);
+    const float s = u * u * (3.0f - 2.0f * u);           // smoothstep：起止都不突
+    const float ax = gIdle.fAx + (gIdle.tAx - gIdle.fAx) * s;
+    const float az = gIdle.fAz + (gIdle.tAz - gIdle.fAz) * s;
+    const float bz = gIdle.fBz + (gIdle.tBz - gIdle.fBz) * s;
+    const float br = 0.5f + 0.5f * sinf(static_cast<float>(now * 2.0 * 3.14159265358979 / 4.2));
+    if (gIdle.iBreath >= 0) model->AddParameterValue(gIdle.iBreath, br, 1.0f);
+    if (gIdle.iAx >= 0)     model->AddParameterValue(gIdle.iAx, ax, 1.0f);
+    if (gIdle.iAz >= 0)     model->AddParameterValue(gIdle.iAz, az, 1.0f);
+    if (gIdle.iBz >= 0)     model->AddParameterValue(gIdle.iBz, bz, 1.0f);
+}
+
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
@@ -98,7 +152,14 @@ int main() {
     //     EGL 下没有 GLX display，但 GLEW 退回 glXGetProcAddress，那一步不需要 display，
     //     指针全都解析到了（实测 44 个常用入口 0 个空指针），照常画。
     log_("[main] GL=%s | %s | glew=%d", glGetString(GL_VERSION), glGetString(GL_RENDERER), ge);
-    platSetPosition(1900, 150);
+    // 2026-11-09 20:1x：初始位置原来写死 (1900,150)，那是 X11 时代的屏幕坐标；
+    // Wayland 的 layer-shell margin 是「相对单个 output」的，1900 在 1707 宽的逻辑屏上
+    // 直接跑到屏外。改成读环境变量，默认落在屏幕左半边、竖直中间偏下一点。
+    {
+        const char* ex = getenv("MIYU_X");
+        const char* ey = getenv("MIYU_Y");
+        platSetPosition(ex ? atoi(ex) : 640, ey ? atoi(ey) : 120);
+    }
 
     // ── Cubism ──────────────────────────────────────────────
     static Alloc alloc;
@@ -173,12 +234,69 @@ int main() {
         log_("[main] pose = %s", (po != nullptr && po[0] != '\0') ? po : "(model3.json 里没有 Pose)");
     }
 
-    // ── 不播动作 / 不眨眼 ──────────────────────────────────
-    // 2026-11-09 13:3x：这两块（CubismEyeBlink::Create + CubismMotionManager + 读 IDLE）
-    // 都**没有被每帧调用**，对画面零影响，只是启动时多读几个文件、多打几行日志。
-    // 全部删掉，免得下次有人以为"已经在眨眼/已经在播动作"。
-    // 要接的话姿势、陷阱和正确做法见 NOTES.md 最后一节。
-    log_("[main] 姿态 = 静态站姿（无动作 / 无眨眼 / 只跑 physics）");
+    // ── 眨眼 ────────────────────────────────────────────────
+    // Create() 收的是 ICubismModelSetting*，不是文件路径 —— 我们已经有解析好的 setting，
+    // 直接交进去；它自己遍历 Groups 里 Target=="EyeBlink" 的 Ids
+    // （本模型：ParamEyeLOpen / ParamEyeROpen）。
+    // MIYU_NO_EYES=1 关掉，方便排查。
+    const bool kNoEyes = std::getenv("MIYU_NO_EYES") != nullptr;
+    Csm::CubismEyeBlink* eyeBlink = nullptr;
+    if (kNoEyes) {
+        log_("[main] 眨眼：MIYU_NO_EYES 已设 —— 关");
+    } else {
+        eyeBlink = Csm::CubismEyeBlink::Create(&setting);
+        // 默认 4s 间隔、闭 0.1 / 合 0.05 / 开 0.15，一次眨眼 0.3s。
+        const Csm::csmVector<Csm::CubismIdHandle>& ids = eyeBlink->GetParameterIds();
+        std::string idl;
+        for (Csm::csmUint32 i = 0; i < ids.GetSize(); ++i) { idl += ids[i]->GetString().GetRawString(); idl += ' '; }
+        log_("[main] 眨眼：参数 %u 个 [%s]", static_cast<unsigned>(ids.GetSize()), idl.c_str());
+    }
+
+    // ── 待机动作：**只**播 IDLE ──────────────────────────────
+    // model3.json 的 Motions 是空的（那 8 个 motion3 都没登记），所以只能自己 Create。
+    // ⚠️ 绝对不能加载：脱捕.motion3.json / 举手切默认手 / 狗尾草* / 竖手指* ——
+    //    它们是给另一版模型做服装/体型切换的，播了会让人散架。
+    const bool kNoIdle = std::getenv("MIYU_NO_IDLE") != nullptr;
+    // 2026-11-09 20:2x：默认**不播** IDLE.motion3 —— 拆开看过，它驱动的是电击/冒汗/
+    // 泪花/星星闪烁/光1~4 那套表情特效，不是站立微摆。想回退去播它就设 MIYU_IDLE_MOTION=1。
+    const bool kUseIdleMotion = std::getenv("MIYU_IDLE_MOTION") != nullptr;
+    Csm::CubismMotionManager* motionManager = nullptr;
+    Csm::CubismMotion* idleMotion = nullptr;
+    if (kNoIdle) {
+        log_("[main] 待机：MIYU_NO_IDLE 已设 —— 关");
+    } else if (!kUseIdleMotion) {
+        log_("[main] 待机：走自己写的微动（呼吸4.2s / 头±7° / 歪头±3.5° / 重心±2.5，3~8s 换一次姿态）");
+    } else {
+        const std::string ip = std::string(kModelDir) + "Animation/IDLE.motion3.json";
+        std::vector<char> ib = slurp(ip);
+        if (ib.empty()) {
+            log_("[main] 待机动作：读不到 %s", ip.c_str());
+        } else {
+            idleMotion = Csm::CubismMotion::Create(
+                reinterpret_cast<const Csm::csmByte*>(ib.data()),
+                static_cast<Csm::csmSizeInt>(ib.size()));
+        }
+        if (idleMotion == nullptr) {
+            log_("[main] 待机动作：CubismMotion::Create 失败");
+        } else {
+            // motion3 里 Meta.Loop 是 true，但 CubismMotion::Create **不读它**
+            // （SDK 里那行是注释掉的）→ 不自己 SetLoop(true) 就 5.983s 停住不动。
+            idleMotion->SetLoop(true);
+            idleMotion->SetLoopFadeIn(true);   // 循环接缝不跳
+            idleMotion->SetFadeInTime(1.0f);   // 从静态站姿淡入，别一上来就弹
+            idleMotion->SetFadeOutTime(1.0f);
+            motionManager = new Csm::CubismMotionManager();
+            const Csm::CubismMotionQueueEntryHandle h =
+                motionManager->StartMotionPriority(idleMotion, false /* autoDelete */, 1 /* priority */);
+            log_("[main] 待机动作：IDLE.motion3.json %zu 字节，时长 %.3fs，loop=1，句柄=%p",
+                 ib.size(), idleMotion->GetLoopDuration(), h);
+        }
+    }
+
+    // 眨眼状态翻转打点（一次眨眼两行；不进每帧日志）
+    const Csm::csmInt32 eyeLi = model->GetParameterIndex(
+        Csm::CubismFramework::GetIdManager()->GetId("ParamEyeLOpen"));
+    bool eyesClosed = false;
 
     // ── 诊断：参数表 + drawable 包围盒（MIYU_DUMP=1 才打印）──
     const bool kDump = std::getenv("MIYU_DUMP") != nullptr;
@@ -253,7 +371,22 @@ int main() {
         Csm::CubismMatrix44 proj;
         proj.Scale(2.0f * k / static_cast<float>(W), 2.0f * k / static_cast<float>(H));
 
+        // 顺序是死规矩：LoadParameters → 动作 → 眨眼 → physics → Update。
+        // 眨眼必须夹在动作之后（动作会写参数，眨眼要压过它）、Update 之前（Update 才把
+        // 参数算进顶点；反了就是不生效，而且不报错）。
         model->LoadParameters();
+        if (motionManager) motionManager->UpdateMotion(model, dt);
+        else if (!kNoIdle) idleTick(model, now);   // 没有 motion 时走自己写的待机微动
+        if (eyeBlink) {
+            eyeBlink->UpdateParameters(model, dt);
+            if (eyeLi >= 0) {
+                const float v = model->GetParameterValue(eyeLi);
+                if ((v < 0.5f) != eyesClosed) {
+                    eyesClosed = (v < 0.5f);
+                    log_("[blink] %s ParamEyeLOpen=%.3f t=%.2fs", eyesClosed ? "闭" : "睁", v, now);
+                }
+            }
+        }
         if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
         model->Update();
         renderer->SetMvpMatrix(&proj);
@@ -265,19 +398,30 @@ int main() {
         //   · 必须在 platSwapBuffers 之前读 —— 读的是刚画完的这张
         //   · 逻辑尺寸 / 上下翻转由 platSetInputRegionFromAlpha 负责（它知道 scale）
         //   · MIYU_NO_INPUT_REGION=1 时整块跳过（整窗可点，用来对照排查）
+        //   · **拖动期间整块跳过**：她一个像素都没变，重算纯浪费（一次读回 1000x1800
+        //     再逐像素扫，是这层最贵的一步）；松手那一帧立刻补算一次。
         static const bool kNoRegion = std::getenv("MIYU_NO_INPUT_REGION") != nullptr;
         static int lastRW = -1, lastRH = -1;
         static unsigned long frameNo = 0;
+        static bool wasDragging = false;
+        static unsigned long dragFrames = 0;
+        const bool dragging = platIsDragging();
+        const bool justReleased = wasDragging && !dragging;   // 松手这一帧
+        wasDragging = dragging;
+        if (dragging) ++dragFrames;
         if (!kNoRegion) {
             ++frameNo;
-            if (frameNo == 1 || frameNo % 10 == 0 || W != lastRW || H != lastRH) {
+            if (!dragging &&
+                (justReleased || frameNo == 1 || frameNo % 10 == 0 || W != lastRW || H != lastRH)) {
                 static std::vector<unsigned char> pix;
                 pix.resize(static_cast<size_t>(W) * static_cast<size_t>(H) * 4);
                 glPixelStorei(GL_PACK_ALIGNMENT, 1);
                 glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pix.data());
                 platSetInputRegionFromAlpha(pix.data(), W, H, 8);
-                if (W != lastRW || H != lastRH)
-                    log_("[main] framebuffer %dx%d，输入区重算（第 %lu 帧）", W, H, frameNo);
+                if (W != lastRW || H != lastRH || justReleased)
+                    log_("[main] 输入区重算（第 %lu 帧，framebuffer %dx%d%s，拖动期间跳过 %lu 帧）",
+                         frameNo, W, H, justReleased ? "，刚松手" : "", dragFrames);
+                if (justReleased) dragFrames = 0;
                 lastRW = W;
                 lastRH = H;
             }
@@ -287,5 +431,19 @@ int main() {
         platPollEvents();
     }
     platShutdown();
+
+    // ── 收尾：拿到的都还回去（顺序：渲染器 → 模型 → moc → 框架）────
+    if (motionManager) {
+        motionManager->StopAllMotions();
+        delete motionManager;
+        motionManager = nullptr;
+    }
+    if (idleMotion) { Csm::ACubismMotion::Delete(idleMotion); idleMotion = nullptr; }
+    if (eyeBlink) { Csm::CubismEyeBlink::Delete(eyeBlink); eyeBlink = nullptr; }
+    Csm::Rendering::CubismRenderer::Delete(base);
+    moc->DeleteModel(model);
+    Csm::CubismMoc::Delete(moc);
+    Csm::CubismFramework::Dispose();
+    log_("[main] 收尾完成");
     return 0;
 }

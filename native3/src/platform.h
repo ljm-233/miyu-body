@@ -41,8 +41,23 @@ double platTime();
 // 把窗口挪到屏幕坐标 (x, y)。
 void platSetPosition(int x, int y);
 
+// 现在是不是正被按住拖动（鼠标拖窗）。
+//   · Wayland 实现：按下 BTN_LEFT 且指针在她身上 → true，松开 → false
+//   · X11 实现：恒 false（GLFW 那边有自己的窗口拖动，这一层不接管）
+// 调用方拿它省事：拖动期间别重算 input region（她一个像素都没动，算了浪费），
+// 松手那一帧再补算一次。
+bool platIsDragging();
+
 // 销毁窗口（调用方负责先释放 GL 资源）。
 void platShutdown();
+
+// ── 多屏（只有 Wayland 实现提供这三个；X11 实现里没有定义，main.cpp 也不调）──
+// 起因：layer-shell 的 get_layer_surface 把 surface **绑死在单个 wl_output** 上，
+// 协议没有「改 output」这个动作。跨屏的唯一做法是拆掉整条 surface 链、在目标
+// output 上重建一条新的 —— EGL context 和它里面的纹理一个字节都不动。
+int  platOutputCount();            // 扫到几个 wl_output
+int  platCurrentOutput();          // 当前挂在第几个（-1 = 还没起来）
+bool platMoveToOutput(int index);  // 整个浮层搬到第 index 个 output 上
 
 // 只有 Wayland 实现会真的用：把当前 framebuffer 的 alpha 转成输入区域。
 // X11 实现里是空函数。

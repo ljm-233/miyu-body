@@ -42,6 +42,7 @@ add_executable(miyu-wayland
   src/platform_wayland.cpp
   src/layer-shell-protocol.c
   src/xdg-shell-protocol.c
+  src/xdg-output-protocol.c
   src/alpha_region.c)
 target_include_directories(miyu-wayland PRIVATE
   ${GL_INCLUDE_DIRS} ${WL_INCLUDE_DIRS}

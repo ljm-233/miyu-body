@@ -35,6 +35,7 @@
 #include <GL/gl.h>
 
 #include "layer-shell-client.h"
+#include "xdg-output-client.h"
 #include "alpha_region.h"
 
 #define LOG(...) do { fprintf(stderr, "[plat-wl] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
@@ -43,11 +44,25 @@
 struct OutInfo {
     wl_output* out = nullptr;
     uint32_t   name = 0;
-    char       label[64] = {0};
+    char       label[64] = {0};    // wl_output.name（niri：eDP-1 / HDMI-A-3），拿不到退 model
+    char       make[32] = {0};
+    char       model[64] = {0};
+    char       desc[96] = {0};
     int        scale = 1;
-    int32_t    x = 0, y = 0;
+    int32_t    x = 0, y = 0;       // wl_output.geometry 的全局坐标（粗略，只进日志）
     int32_t    modeW = 0, modeH = 0;   // 物理像素的 mode（/scale 约等于逻辑尺寸）
+    // zxdg_output_v1 给的**真**逻辑尺寸/位置（比 mode/scale 估的准：
+    // niri 把 scale 向上取整成 2，估算会把 1706x1066 当成 1280x800）
+    zxdg_output_v1* xdg = nullptr;
+    int32_t    lw = 0, lh = 0;
+    int32_t    gx = 0, gy = 0;     // 逻辑**全局**位置（xdg-output 权威，用来判断邻屏）
+    bool       haveXdg = false;
 };
+
+// 跨屏相关常量
+static constexpr int    KEEP_PX      = 120;   // 至少留多少逻辑 px 在屏内（原 apply_margin 的值）
+static constexpr int    CROSS_PX     = 80;    // 越过边界多少逻辑 px 才搬家（防抖阈值）
+static constexpr double CROSS_COOL_S = 0.3;   // 搬完多久内不再搬（300ms）
 
 static struct {
     wl_display*              dpy      = nullptr;
@@ -58,6 +73,19 @@ static struct {
     wl_surface*              surf     = nullptr;
     zwlr_layer_surface_v1*   lsurf    = nullptr;
     wl_output*               chosen   = nullptr;
+    zxdg_output_manager_v1*  xdgMgr   = nullptr;
+
+    // ── 指针 / 拖动 ────────────────────────────────────────────
+    wl_seat*                 seat     = nullptr;
+    wl_pointer*              ptr      = nullptr;
+    bool                     dragOn   = true;   // MIYU_DRAG=0 关掉
+    bool                     dragging = false;  // 正在拖
+    bool                     ptrIn    = false;  // 指针在 surface 内
+    // 指针「相对当前 surface 位置」的最后已知 local 坐标（逻辑 px）。
+    // 关键：它不是简单地等于最新一次 motion 给的 sx/sy —— 我们挪完窗口之后
+    // 指针相对新位置的 local 要减掉自己挪的那一段，否则拖动会自己衰减到 0（见下面注释）。
+    int                      refSx    = 0, refSy = 0;
+    int                      pendX    = 0, pendY = 0;  // 本帧攒下、还没应用到 margin 的位移
 
     wl_egl_window*           ewin     = nullptr;
     EGLDisplay               edpy     = EGL_NO_DISPLAY;
@@ -67,8 +95,20 @@ static struct {
 
     OutInfo                  outs[8];
     int                      nouts    = 0;
+    int                      curIdx   = -1;   // 当前挂在哪个 output 上（outs 下标）
     int                      scale    = 1;
-    int                      logicalW = 0, logicalH = 0;  // 选中 output 的逻辑尺寸
+    int                      logicalW = 0, logicalH = 0;  // **当前** output 的逻辑尺寸
+    char                     title[64] = {0};             // 重建 layer surface 要同一份
+
+    // 跨屏防抖：越界累积量（逻辑 px，带符号）+ 冷却截止时间
+    int                      overX    = 0, overY = 0;
+    double                   coolUntil = 0.0;
+
+    // 上一帧的逻辑 alpha 掩码：切屏时复用它，立刻把 input region 重算一遍
+    // （buffer scale 变了，但逻辑尺寸还是 500x900，掩码可以直接用）
+    unsigned char*           mask     = nullptr;
+    size_t                   maskCap  = 0;
+    int                      maskW    = 0, maskH = 0, maskTh = 8;
 
     int                      reqW     = 0, reqH = 0;   // 逻辑尺寸（请求值）
     int                      cfgW     = 0, cfgH = 0;   // configure 给的逻辑尺寸
@@ -82,10 +122,14 @@ static struct {
 /* ---------------- wl_output ---------------- */
 static void out_geometry(void* d, wl_output*, int32_t x, int32_t y, int32_t pw, int32_t ph,
                          int32_t sub, const char* make, const char* model, int32_t tf) {
-    (void)pw;(void)ph;(void)sub;(void)make;(void)tf;
+    (void)pw;(void)ph;(void)sub;(void)tf;
     OutInfo* o = (OutInfo*)d;
     o->x = x; o->y = y;
-    if (model) snprintf(o->label, sizeof o->label, "%s", model);
+    if (make)  snprintf(o->make,  sizeof o->make,  "%s", make);
+    if (model) {
+        snprintf(o->model, sizeof o->model, "%s", model);
+        if (!o->label[0]) snprintf(o->label, sizeof o->label, "%s", model);
+    }
 }
 static void out_mode(void* d, wl_output*, uint32_t, int32_t w, int32_t h, int32_t) {
     ((OutInfo*)d)->modeW = w;
@@ -96,11 +140,141 @@ static void out_scale(void* d, wl_output*, int32_t f) { ((OutInfo*)d)->scale = f
 static void out_name(void* d, wl_output*, const char* name) {
     if (name) snprintf(((OutInfo*)d)->label, sizeof ((OutInfo*)d)->label, "%s", name);
 }
-static void out_desc(void*, wl_output*, const char*) {}
+static void out_desc(void* d, wl_output*, const char* desc) {
+    if (desc) snprintf(((OutInfo*)d)->desc, sizeof ((OutInfo*)d)->desc, "%s", desc);
+}
 
 static const wl_output_listener out_listener = {
     out_geometry, out_mode, out_done, out_scale, out_name, out_desc
 };
+
+/* ---------------- zxdg_output_v1：真逻辑尺寸 ----------------
+ * wl_output 只给物理 mode + 整数 scale（niri 报 2，实际 1.5），
+ * 所以「屏有多大」只能靠它估。估小了后果很实在：mode/scale = 1280x800，
+ * 比窗口 (500x900) 还矮 → 竖直方向的 margin 永远被夹成 0，**拖不动**。
+ * xdg-output 直接给逻辑尺寸 1706x1066，用它做边界才对。
+ */
+static void xo_pos(void* d, zxdg_output_v1*, int32_t x, int32_t y) {
+    ((OutInfo*)d)->gx = x; ((OutInfo*)d)->gy = y;
+}
+static void xo_size(void* d, zxdg_output_v1*, int32_t w, int32_t h) {
+    OutInfo* o = (OutInfo*)d;
+    o->lw = w; o->lh = h;
+    o->haveXdg = (w > 0 && h > 0);
+}
+static void xo_done(void*, zxdg_output_v1*) {}
+static void xo_name(void*, zxdg_output_v1*, const char*) {}
+static void xo_desc(void*, zxdg_output_v1*, const char*) {}
+static const zxdg_output_v1_listener xo_listener = {
+    xo_pos, xo_size, xo_done, xo_name, xo_desc
+};
+
+/* ---------------- wl_pointer / 拖动 ----------------
+ *
+ * 拖动的坐标账 —— 这块真机试了三版，前两版都是飞的，先把结论写在这儿：
+ *
+ *   `wl_pointer.motion` 给的是 **surface-local 逻辑坐标**，而窗口跟着指针走，
+ *   参考系自己在动。所以「新 margin = 按下 margin + (当前 local − 按下 local)」
+ *   这条路是死的：窗口一追上指针，local 回到按下时的值，算出来 0，拖动当场停住。
+ *
+ *   现在的做法：记「上一次收到的 local」refSx/refSy，delta = 这次 − 上次，
+ *   攒进 pendX/pendY，一帧结束前一次性应用到 margin。
+ *   两个反直觉但必须遵守的细节：
+ *
+ *   ① **同值事件直接丢弃**。niri 每 commit 一次 margin（layer surface 挪动）
+ *      就把同一个 local 再发一遍。当成新位移 → 每帧多挪一格 → 几十帧飞到屏幕边上
+ *      （实测注入 −100，窗口跑了 −620）。
+ *   ② **不做「挪了多少就补偿多少」**。niri 算 local 用的是拖动开始时的 surface
+ *      矩形，我们挪窗口它不改 —— local 的差本身就是指针纯位移，再补偿一次
+ *      就把自己挪的重复算进下一格，位移指数放大（同一组实测里就是这条最凶）。
+ *
+ *   结果：注入多少就走多少，margin 一分不差（见 NOTES.md 第七节实测表）。
+ */
+#define BTN_LEFT 0x110
+static void drag_apply_pending();   // 定义在 apply_margin 之后
+
+static void ptr_enter(void*, wl_pointer*, uint32_t, wl_surface* s, wl_fixed_t sx, wl_fixed_t sy) {
+    if (!s || s != W.surf) return;
+    W.ptrIn = true;
+    W.refSx = wl_fixed_to_int(sx);
+    W.refSy = wl_fixed_to_int(sy);
+    LOG("指针进入 surface，local=(%d,%d)", W.refSx, W.refSy);
+}
+
+static void ptr_leave(void*, wl_pointer*, uint32_t, wl_surface* s) {
+    if (!s || s != W.surf) return;
+    W.ptrIn = false;
+    // 拖动中指针可能短暂跑出 surface：**不要**在这里结束拖动，
+    // 也别拿这一刻的 local 当基准（已经在窗外了）。回到 surface 时 enter 会重置基准。
+    if (W.dragging) LOG("指针离开 surface（拖动中，保持拖动状态）");
+}
+
+static const bool dbg = getenv("MIYU_DRAG_DEBUG") != nullptr;
+static void ptr_motion(void*, wl_pointer*, uint32_t, wl_fixed_t sx, wl_fixed_t sy) {
+    const int x = wl_fixed_to_int(sx);
+    const int y = wl_fixed_to_int(sy);
+    // 合成器在 layer surface 挪动之后会把**同一个** local 重发一次（一次 commit 一个），
+    // 值一模一样。当成新位移就会每帧再挪一格，几十帧就飞到屏幕边上
+    // （实测：注入 −100，窗口跑了 −620）。同值直接丢。
+    if (x == W.refSx && y == W.refSy) return;
+    const int dx = x - W.refSx;
+    const int dy = y - W.refSy;
+    W.refSx = x;
+    W.refSy = y;
+    if (!W.dragging) {
+        if (dbg) LOG("[dbg] motion（未拖）local=(%d,%d) ref=(%d,%d) pos=(%d,%d) ptrIn=%d",
+                     x, y, W.refSx, W.refSy, W.posX, W.posY, (int)W.ptrIn);
+        return;
+    }
+    if (!W.ptrIn) { W.ptrIn = true; return; }   // 刚回来，这一格不认（避免跳一下）
+    if (dbg) LOG("[dbg] motion local=(%d,%d) ref=(%d,%d) d=(%d,%d) pos=(%d,%d) pend=(%d,%d)",
+                 x, y, W.refSx - dx, W.refSy - dy, dx, dy, W.posX, W.posY, W.pendX, W.pendY);
+    W.pendX += dx;
+    W.pendY += dy;
+}
+
+static void ptr_button(void*, wl_pointer*, uint32_t, uint32_t, uint32_t button, uint32_t state) {
+    if (!W.dragOn) return;                       // MIYU_DRAG=0
+    if (button != BTN_LEFT) return;
+    if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
+        drag_apply_pending();                    // 把按下前攒的零头清掉
+        if (!W.ptrIn) return;                    // 不在她身上按下 → 不拖
+        W.dragging = true;
+        W.pendX = W.pendY = 0;
+        LOG("开始拖动：margin=(%d,%d) 按点 local=(%d,%d)", W.posX, W.posY, W.refSx, W.refSy);
+    } else if (state == WL_POINTER_BUTTON_STATE_RELEASED) {
+        if (!W.dragging) return;
+        drag_apply_pending();
+        W.dragging = false;
+        LOG("结束拖动：margin=(%d,%d)", W.posX, W.posY);
+    }
+}
+
+static void ptr_axis(void*, wl_pointer*, uint32_t, uint32_t axis, wl_fixed_t value) {
+    LOG("pointer axis=%u value=%.2f（不处理）", axis, wl_fixed_to_double(value));
+}
+
+static const wl_pointer_listener ptr_listener = {
+    ptr_enter, ptr_leave, ptr_motion, ptr_button, ptr_axis
+};
+
+static void seat_caps(void*, wl_seat* s, uint32_t caps) {
+    const bool want = (caps & WL_SEAT_CAPABILITY_POINTER) != 0;
+    if (want && !W.ptr) {
+        W.ptr = wl_seat_get_pointer(s);
+        wl_pointer_add_listener(W.ptr, &ptr_listener, nullptr);
+        LOG("wl_pointer 就位（拖动%s）", W.dragOn ? "开" : "关：MIYU_DRAG=0");
+    } else if (!want && W.ptr) {
+        wl_pointer_destroy(W.ptr);
+        W.ptr = nullptr;
+        W.dragging = false;
+        LOG("seat 撤了 pointer 能力");
+    }
+}
+static void seat_name(void*, wl_seat*, const char* n) {
+    LOG("seat=%s", n ? n : "?");
+}
+static const wl_seat_listener seat_listener = { seat_caps, seat_name };
 
 /* ---------------- registry ---------------- */
 static void reg_global(void*, wl_registry* r, uint32_t name, const char* iface, uint32_t ver) {
@@ -108,9 +282,20 @@ static void reg_global(void*, wl_registry* r, uint32_t name, const char* iface, 
         W.comp = (wl_compositor*)wl_registry_bind(r, name, &wl_compositor_interface, ver < 4 ? ver : 4);
     } else if (!strcmp(iface, wl_shm_interface.name)) {
         W.shm = (wl_shm*)wl_registry_bind(r, name, &wl_shm_interface, 1);
+    } else if (!strcmp(iface, wl_seat_interface.name)) {
+        // 绑 v4 而不是最新的：wl_pointer 的版本跟着 seat 走，v5 起多了 frame /
+        // axis_source / axis_stop / axis_discrete 这些事件，listener 里少一个
+        // libwayland 就当场 "listener function for opcode N is NULL" 断开连接
+        // （第一次就是绑到 v7、只写了 5 个回调，进程直接死）。
+        // v4 的 wl_pointer 正好是 enter/leave/motion/button/axis 五个，一一对上。
+        W.seat = (wl_seat*)wl_registry_bind(r, name, &wl_seat_interface, ver < 4 ? ver : 4);
+        wl_seat_add_listener(W.seat, &seat_listener, nullptr);
     } else if (!strcmp(iface, zwlr_layer_shell_v1_interface.name)) {
         W.lshell = (zwlr_layer_shell_v1*)wl_registry_bind(r, name, &zwlr_layer_shell_v1_interface,
                                                          ver < 4 ? ver : 4);
+    } else if (!strcmp(iface, zxdg_output_manager_v1_interface.name)) {
+        W.xdgMgr = (zxdg_output_manager_v1*)wl_registry_bind(
+            r, name, &zxdg_output_manager_v1_interface, ver < 3 ? ver : 3);
     } else if (!strcmp(iface, wl_output_interface.name)) {
         if (W.nouts < 8) {
             OutInfo* o = &W.outs[W.nouts++];
@@ -149,31 +334,332 @@ static void* gpa(const char* n) {
 extern "C" void* platGLProc(const char* name) { return gpa(name); }
 
 /* ---------------- 内部 ---------------- */
+
+// 把 posX/posY 夹进**当前 output** 的逻辑边界，再作为 margin 提交。
+// 2026-11-09 20:1x：以前这里是「整个窗口必须留在屏内」，拖到边就贴住，
+// 他觉得像有一圈隐形边框。改成「至少留 KEEP_PX 在屏内」——允许她半个身子
+// 探出屏幕，但不会整个跑丢。margin 在协议里是 int32，负数合法。
+//
+// 2026-11-09 21:xx（跨屏）：夹边界必须用**当前 output** 的逻辑尺寸。
+// 以前 W.logicalW/H 只在 init 时按 eDP-1 的 1706x1066 填一次，搬到 HDMI-A-3
+// 之后还拿 1706 去夹 1920 宽的屏，右边永远够不着。现在 buildSurface() 每次
+// 换屏都会把 W.logicalW/H 换成新 output 的 xdg-output 值。
 static void apply_margin() {
     if (!W.lsurf) return;
     // anchor TOP|LEFT：margin top = y，left = x。
     // 注意：TOP 边被 exclusive zone（顶上 bar，约 37 逻辑 px）占着时，margin
     // 从 zone 的下沿起算 —— 也就是 y=0 实际落在物理 y≈56，不是屏顶。贴边自己减。
-    int mx = W.posX < 0 ? 0 : W.posX;
-    int my = W.posY < 0 ? 0 : W.posY;
-    // 夹在屏内。main.cpp 里给的是 X11 那套屏幕坐标 (1900,150)，而这里是**相对
-    // 单个 output** 的 margin —— 1900 在 1706 宽的 eDP-1 上就是屏外，niri 把整块
-    // 放到看不见的地方。所以按逻辑屏尺寸收回边界（放不下就贴 0）。
-    if (W.logicalW > 0 && mx + W.reqW > W.logicalW)
-        mx = (W.logicalW > W.reqW) ? W.logicalW - W.reqW : 0;
-    if (W.logicalH > 0 && my + W.reqH > W.logicalH)
-        my = (W.logicalH > W.reqH) ? W.logicalH - W.reqH : 0;
+    int mx = W.posX, my = W.posY;
+    if (W.logicalW > 0) {
+        const int lo = -(W.reqW - KEEP_PX), hi = W.logicalW - KEEP_PX;
+        if (mx < lo) mx = lo;
+        if (mx > hi) mx = hi;
+    }
+    if (W.logicalH > 0) {
+        const int lo = -(W.reqH - KEEP_PX), hi = W.logicalH - KEEP_PX;
+        if (my < lo) my = lo;
+        if (my > hi) my = hi;
+    }
     if (mx != W.posX || my != W.posY)
-        LOG("位置夹回屏内：(%d,%d) -> margin (%d,%d)", W.posX, W.posY, mx, my);
-    zwlr_layer_surface_v1_set_margin(W.lsurf, (uint32_t)my, 0, 0, (uint32_t)mx);
+        LOG("位置夹回屏内：(%d,%d) -> margin (%d,%d)（%s 逻辑 %dx%d）",
+            W.posX, W.posY, mx, my,
+            (W.curIdx >= 0 ? W.outs[W.curIdx].label : "?"), W.logicalW, W.logicalH);
+    // 夹过的值写回 posX/posY：拖动时靠「应用前后的位置差」算真实位移，
+    // 不写回的话 pos 会一直在屏外涨，refSx 的补偿永远对不上（越拖越往外漂）。
+    W.posX = mx;
+    W.posY = my;
+    zwlr_layer_surface_v1_set_margin(W.lsurf, my, 0, 0, mx);
     wl_surface_commit(W.surf);
     wl_display_flush(W.dpy);
+}
+
+// 把 W.mask（逻辑尺寸的 alpha 掩码）应用成 input region。
+// 切屏时也调它：buffer scale 变了，但**逻辑尺寸没变**（500x900），
+// 上一帧的掩码可以直接再用一次，不用等 main 下一轮 glReadPixels。
+static size_t applyRegionFromMask(const char* why) {
+    if (!W.surf || !W.comp || !W.mask || W.maskW <= 0 || W.maskH <= 0) return 0;
+    const uint8_t th = (uint8_t)(W.maskTh < 0 ? 0 : (W.maskTh > 255 ? 255 : W.maskTh));
+    const size_t stride = (size_t)W.maskW * 4;
+    const size_t n = alpha_region_scan(W.mask, W.maskW, W.maskH, stride, th, nullptr, 0);
+    alpha_region_apply(W.surf, W.comp, W.mask, W.maskW, W.maskH, stride, th, 4096);
+    wl_surface_commit(W.surf);
+    wl_display_flush(W.dpy);
+    LOG("input region（%s）：逻辑 %dx%d | %zu 条矩形 | threshold=%u",
+        why, W.maskW, W.maskH, n, th);
+    return n;
+}
+
+// 等 layer surface 的 configure（非阻塞 poll 包一层，别把事件循环卡死）
+static bool waitConfigure(int timeoutMs) {
+    W.configured = 0;
+    int waited = 0;
+    while (!W.configured) {
+        if (waited >= timeoutMs) return false;
+        struct pollfd pfd;
+        pfd.fd = wl_display_get_fd(W.dpy);
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        if (poll(&pfd, 1, 50) > 0) {
+            if (wl_display_dispatch(W.dpy) < 0) return false;
+        }
+        waited += 50;
+        wl_display_flush(W.dpy);
+    }
+    return true;
+}
+
+// 在 outs[idx] 上建 wl_surface + layer surface（OVERLAY / TOP|LEFT / 不占 zone / 不吃键盘）
+static bool makeLayerSurface(int idx) {
+    OutInfo* o = &W.outs[idx];
+    W.curIdx   = idx;
+    W.chosen   = o->out;
+    W.scale    = o->scale > 0 ? o->scale : 1;
+    W.logicalW = o->lw;
+    W.logicalH = o->lh;
+
+    W.surf = wl_compositor_create_surface(W.comp);
+    if (!W.surf) { LOG("wl_compositor_create_surface 失败"); return false; }
+    W.lsurf = zwlr_layer_shell_v1_get_layer_surface(W.lshell, W.surf, W.chosen,
+                ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, W.title[0] ? W.title : "plat-wayland");
+    if (!W.lsurf) { LOG("get_layer_surface 失败"); return false; }
+    zwlr_layer_surface_v1_add_listener(W.lsurf, &ls_listener, nullptr);
+    zwlr_layer_surface_v1_set_size(W.lsurf, (uint32_t)W.reqW, (uint32_t)W.reqH);
+    zwlr_layer_surface_v1_set_anchor(W.lsurf,
+        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
+    zwlr_layer_surface_v1_set_exclusive_zone(W.lsurf, 0);
+    zwlr_layer_surface_v1_set_keyboard_interactivity(W.lsurf,
+        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+    wl_surface_commit(W.surf);
+
+    if (!waitConfigure(2000)) { LOG("等 configure 超时（%s）", o->label); return false; }
+    LOG("layer surface 挂在 %s 上：逻辑 %dx%d / scale %d / 全局 %+d,%+d",
+        o->label, W.logicalW, W.logicalH, W.scale, o->gx, o->gy);
+    return true;
+}
+
+// 建 wl_egl_window + EGLSurface，并把**已有的** context 挂上去（context 不重建）
+static bool createEGLWindow() {
+    const int pw = W.reqW * W.scale, ph = W.reqH * W.scale;
+    // 关键：buffer 建大了，必须同时告诉合成器 buffer_scale=scale，
+    // 否则它把 1000x1800 的 buffer 当成「1000x1800 逻辑」，窗口会比请求大一整倍。
+    wl_surface_set_buffer_scale(W.surf, W.scale);
+    W.ewin = wl_egl_window_create(W.surf, pw, ph);
+    if (!W.ewin) { LOG("wl_egl_window_create 失败"); return false; }
+    W.esurf = eglCreateWindowSurface(W.edpy, W.ecfg, (EGLNativeWindowType)W.ewin, nullptr);
+    if (W.esurf == EGL_NO_SURFACE) { LOG("eglCreateWindowSurface 失败 0x%x", eglGetError()); return false; }
+    if (!eglMakeCurrent(W.edpy, W.esurf, W.esurf, W.ectx)) {
+        LOG("eglMakeCurrent 失败 0x%x", eglGetError());
+        return false;
+    }
+    glViewport(0, 0, pw, ph);
+    LOG("逻辑尺寸 %dx%d  ->  物理尺寸 %dx%d (scale=%d)", W.reqW, W.reqH, pw, ph, W.scale);
+    return true;
+}
+
+// 搬到 outs[idx]：拆 surface 链 → 在目标 output 上重建 → 重新挂 context → 重算 region。
+// **GL context 和它里面的纹理一个字节都不动**，只重建 surface（这是整件事的关键）。
+static bool buildSurface(int idx, const char* why, int entryX, int entryY) {
+    if (idx < 0 || idx >= W.nouts) return false;
+    OutInfo* t = &W.outs[idx];
+    LOG("搬家（%s）：output[%d] %s  ->  output[%d] %s",
+        why, W.curIdx, W.curIdx >= 0 ? W.outs[W.curIdx].label : "?", idx, t->label);
+
+    // ① 拆旧链。顺序是死的：EGLSurface 引用 wl_egl_window，必须先拆它；
+    //    layer surface 引用 wl_surface，同样先拆。
+    if (W.esurf != EGL_NO_SURFACE) {
+        eglMakeCurrent(W.edpy, EGL_NO_SURFACE, EGL_NO_SURFACE, W.ectx);  // 先解绑，context 留着
+        eglDestroySurface(W.edpy, W.esurf);
+        W.esurf = EGL_NO_SURFACE;
+    }
+    if (W.ewin)  { wl_egl_window_destroy(W.ewin);  W.ewin  = nullptr; }
+    if (W.lsurf) { zwlr_layer_surface_v1_destroy(W.lsurf); W.lsurf = nullptr; }
+    if (W.surf)  { wl_surface_destroy(W.surf); W.surf = nullptr; }
+    wl_display_flush(W.dpy);
+
+    // ② 目标 output 上重建
+    if (!makeLayerSurface(idx)) { W.closed = 1; return false; }
+    if (!createEGLWindow())     { W.closed = 1; return false; }
+
+    // ③ 位置：新屏上的初始 margin，夹一遍再提交
+    W.posX = entryX;
+    W.posY = entryY;
+    W.ptrIn = false;          // 新 surface 上指针要重新 enter，基准重来
+    W.overX = W.overY = 0;
+    W.coolUntil = platTime() + CROSS_COOL_S;
+    apply_margin();
+
+    // 拖到一半搬家的，这次拖动到此为止。
+    // 原因（实测）：surface 重建之后 niri 的 drag 坐标系还挂在**旧** surface 上，
+    // 每帧会交错发两套 local（新 surface 一套、旧矩形一套），差值一对 +40 / −40
+    // 互相抵消，窗口原地抖。不是我们的账算错，是那个锚点已经不存在了。
+    // 所以搬完就松手：他重新按住就能在新屏上继续拖（按下 → 新 surface 上 enter → 新基准）。
+    if (W.dragging) {
+        W.dragging = false;
+        LOG("跨屏后结束本次拖动（surface 重建了，niri 的 drag 锚点失效，重新按下才能继续拖）");
+    }
+
+    // ④ input region：立刻重算（buffer scale 变了；逻辑尺寸没变，掩码能直接复用）
+    if (W.mask && W.maskW == W.reqW && W.maskH == W.reqH) applyRegionFromMask("切屏后立即");
+
+    // 先把新 surface 刷成一张全透明，别让它露出上一帧的残留
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    eglSwapBuffers(W.edpy, W.esurf);
+
+    LOG("已经搬到 %s 上：逻辑 %dx%d / scale %d / 物理 %dx%d / margin (%d,%d)",
+        t->label, W.logicalW, W.logicalH, W.scale,
+        W.reqW * W.scale, W.reqH * W.scale, W.posX, W.posY);
+    return true;
+}
+
+// 找当前 output 在 axis(0=x,1=y) 那一侧、dir(+1/-1) 方向上的邻屏。
+// 用 xdg-output 的**逻辑全局坐标**，要求另一条轴上有重叠（真的挨着）。
+static int findNeighbor(int axis, int dir) {
+    if (W.curIdx < 0) return -1;
+    OutInfo* c = &W.outs[W.curIdx];
+    const int32_t cStart      = axis == 0 ? c->gx : c->gy;
+    const int32_t cLen        = axis == 0 ? c->lw : c->lh;
+    const int32_t cCrossStart = axis == 0 ? c->gy : c->gx;
+    const int32_t cCrossLen   = axis == 0 ? c->lh : c->lw;
+    if (cLen <= 0) return -1;
+
+    int best = -1;
+    int64_t bestD = INT64_MAX;
+    for (int i = 0; i < W.nouts; i++) {
+        if (i == W.curIdx) continue;
+        OutInfo* o = &W.outs[i];
+        const int32_t oStart      = axis == 0 ? o->gx : o->gy;
+        const int32_t oLen        = axis == 0 ? o->lw : o->lh;
+        const int32_t oCrossStart = axis == 0 ? o->gy : o->gx;
+        const int32_t oCrossLen   = axis == 0 ? o->lh : o->lw;
+        if (oLen <= 0) continue;
+        if (dir > 0 && oStart < cStart + cLen - 1) continue;          // 不在右边/下面
+        if (dir < 0 && oStart + oLen > cStart + 1) continue;          // 不在左边/上面
+        if (oCrossStart + oCrossLen <= cCrossStart ||
+            oCrossStart >= cCrossStart + cCrossLen) continue;          // 另一条轴上不重叠
+        const int64_t d = dir > 0 ? (int64_t)oStart - (cStart + cLen)
+                                  : (int64_t)cStart - (oStart + oLen);
+        if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+}
+
+// 拖动越界判定 + 搬家。
+// 为什么不能直接看 margin 有没有超出屏宽：margin 被 apply_margin() 夹住，永远超不过。
+// 能反映「他还在往外推」的只有每帧攒下的 pend（want = 夹住的 pos + pend），
+// 所以这里把它相对**夹边界**多出来的部分累积起来，累积到 CROSS_PX 才搬。
+//   · 一旦往反方向拖（want 回到边界内），累积清零 → 不会在边界上来回抖
+//   · 搬完 CROSS_COOL_S 内直接返回 → 300ms 内不可能连搬
+static bool maybeCross(int wantX, int wantY) {
+    if (W.nouts < 2 || W.curIdx < 0) return false;
+    if (platTime() < W.coolUntil) return false;
+
+    const int hiX = W.logicalW - KEEP_PX, loX = -(W.reqW - KEEP_PX);
+    const int hiY = W.logicalH - KEEP_PX, loY = -(W.reqH - KEEP_PX);
+    if (W.logicalW > 0) {
+        if (wantX > hiX)      W.overX += wantX - hiX;
+        else if (wantX < loX) W.overX += wantX - loX;
+        else                  W.overX = 0;
+    }
+    if (W.logicalH > 0) {
+        if (wantY > hiY)      W.overY += wantY - hiY;
+        else if (wantY < loY) W.overY += wantY - loY;
+        else                  W.overY = 0;
+    }
+
+    int axis = -1, dir = 0;
+    if (W.overX >= CROSS_PX)        { axis = 0; dir = +1; }
+    else if (W.overX <= -CROSS_PX)  { axis = 0; dir = -1; }
+    else if (W.overY >= CROSS_PX)   { axis = 1; dir = +1; }
+    else if (W.overY <= -CROSS_PX)  { axis = 1; dir = -1; }
+    if (axis < 0) return false;
+
+    const int nb = findNeighbor(axis, dir);
+    if (nb < 0) {
+        // 那一侧没屏：清零，不然掉头拖回来时会立刻误触
+        if (axis == 0) W.overX = 0; else W.overY = 0;
+        return false;
+    }
+
+    const int over = axis == 0 ? W.overX : W.overY;
+    LOG("跨屏触发：%s越过边界 %d 逻辑 px（阈值 %d，冷却 %.1fs 内不再切）",
+        axis == 0 ? (dir > 0 ? "向右" : "向左") : (dir > 0 ? "向下" : "向上"),
+        over, CROSS_PX, CROSS_COOL_S);
+
+    OutInfo* t = &W.outs[nb];
+    int entryX = W.posX, entryY = W.posY;
+    if (axis == 0) entryX = dir > 0 ? 0 : (t->lw > 0 ? t->lw - W.reqW : 0);
+    else           entryY = dir > 0 ? 0 : (t->lh > 0 ? t->lh - W.reqH : 0);
+    W.pendX = W.pendY = 0;
+    buildSurface(nb, "拖动越界", entryX, entryY);
+    return true;
+}
+
+// 把这一帧攒下的拖动位移一次应用掉。
+// refSx/refSy 要用**实际**挪动的量补偿：屏幕上顶到边被夹住时，pend 比实际挪的多，
+// 按 pend 补偿会让下一次 motion 再把这段重复算一遍 —— 窗口会持续往外顶。
+static void drag_apply_pending() {
+    if (!W.pendX && !W.pendY) return;
+    const int bx = W.posX, by = W.posY;
+    const int px = W.pendX, py = W.pendY;
+    W.pendX = W.pendY = 0;
+    if (maybeCross(bx + px, by + py)) {          // 越界先搬家，搬完这一格位移作废
+        if (dbg) LOG("[dbg] 跨屏后新 margin=(%d,%d)", W.posX, W.posY);
+        return;
+    }
+    platSetPosition(bx + px, by + py);
+    const int ax = W.posX - bx, ay = W.posY - by;
+    (void)ax; (void)ay;   // 只给 dbg 日志用
+    // 注意：这里**不做** refSx -= 实际位移 的补偿。
+    // niri 算 local 用的是「surface 拖动开始时的矩形」，我们挪窗口它不改，
+    // 所以 local 的差本身就是指针的纯位移 —— 再补偿一次就把自己挪的重复算进去，
+    // 位移会指数放大（真机实测过：注入 −100 → 实际跑 −620）。
+    if (dbg) LOG("[dbg] 应用 pend=(%d,%d) 实际=(%d,%d) pos=(%d,%d)",
+                 px, py, ax, ay, W.posX, W.posY);
+}
+
+/* ---------------- 多屏：对外接口 ---------------- */
+// 把所有 output 打成一张表（make/model/geometry/scale/mode/逻辑位置/逻辑尺寸）。
+// 跨屏出问题时先看这张表：逻辑尺寸和逻辑全局位置必须都对得上 `niri msg outputs`。
+static void printOutputTable() {
+    LOG("output 表（%d 个）：", W.nouts);
+    LOG("  idx  name          scale  mode        logical      global        make / model");
+    for (int i = 0; i < W.nouts; i++) {
+        OutInfo* o = &W.outs[i];
+        LOG("  [%d]  %-12s  %3d   %4dx%-4d  %4dx%-4d  %+5d,%+5d   %s / %s%s",
+            i, o->label, o->scale, o->modeW, o->modeH, o->lw, o->lh, o->gx, o->gy,
+            o->make[0] ? o->make : "?", o->model[0] ? o->model : "?",
+            o->haveXdg ? "" : "  (逻辑尺寸是估算值)");
+    }
+}
+
+int  platOutputCount()  { return W.nouts; }
+int  platCurrentOutput(){ return W.curIdx; }
+
+bool platMoveToOutput(int index) {
+    if (!W.inited) { LOG("platMoveToOutput(%d)：还没 init", index); return false; }
+    if (index < 0 || index >= W.nouts) {
+        LOG("platMoveToOutput(%d)：越界（有效 0..%d）", index, W.nouts - 1);
+        return false;
+    }
+    if (index == W.curIdx) {
+        LOG("platMoveToOutput(%d)：已经在 %s 上", index, W.outs[index].label);
+        return true;
+    }
+    return buildSurface(index, "platMoveToOutput", W.posX, W.posY);
 }
 
 bool platInit(int w, int h, const char* title) {
     if (W.inited) return true;
     if (w <= 0 || h <= 0) { LOG("非法尺寸 %dx%d", w, h); return false; }
     W.reqW = w; W.reqH = h;
+
+    // 拖动开关：默认开，只有 MIYU_DRAG=0（严格等于 "0"）才关。
+    {
+        const char* de = getenv("MIYU_DRAG");
+        W.dragOn = !(de && strcmp(de, "0") == 0);
+        LOG("拖动开关：%s (MIYU_DRAG=%s)", W.dragOn ? "开" : "关", de ? de : "(未设，默认开)");
+    }
 
     /* 1) Wayland 连接 + globals */
     W.dpy = wl_display_connect(nullptr);
@@ -191,39 +677,53 @@ bool platInit(int w, int h, const char* title) {
     if (!W.lshell) { LOG("缺 wlr_layer_shell_v1"); return false; }
     if (!W.nouts)  { LOG("没有 wl_output");     return false; }
 
-    /* 选 output：优先 eDP-1（本机主屏），否则第一个 */
-    OutInfo* pick = nullptr;
-    for (int i = 0; i < W.nouts; i++) {
-        LOG("output[%d] %s scale=%d pos=%d,%d", i, W.outs[i].label, W.outs[i].scale,
-            W.outs[i].x, W.outs[i].y);
-        if (!pick && strstr(W.outs[i].label, "eDP-1")) pick = &W.outs[i];
+    // 每个 output 都建一条 xdg_output：拿真逻辑尺寸 + **逻辑全局位置**
+    // （跨屏要靠全局位置判断「哪个屏在哪个方向、挨着谁」）
+    if (W.xdgMgr) {
+        for (int i = 0; i < W.nouts; i++) {
+            W.outs[i].xdg = zxdg_output_manager_v1_get_xdg_output(W.xdgMgr, W.outs[i].out);
+            zxdg_output_v1_add_listener(W.outs[i].xdg, &xo_listener, &W.outs[i]);
+        }
+        wl_display_roundtrip(W.dpy);
+        wl_display_roundtrip(W.dpy);
     }
-    if (!pick) pick = &W.outs[0];
-    W.chosen = pick->out;
-    W.scale  = pick->scale > 0 ? pick->scale : 1;
-    // 逻辑尺寸 ≈ mode(物理) / scale。niri 的 wl_output.scale 向上取整（1.5 报 2），
-    // 所以这个值偏保守 —— 只用来防窗口跑出屏外，不用于精确布局。
-    W.logicalW = pick->modeW > 0 ? pick->modeW / W.scale : 0;
-    W.logicalH = pick->modeH > 0 ? pick->modeH / W.scale : 0;
-    LOG("选中 %s，逻辑屏约 %dx%d (mode %dx%d / scale %d)",
-        pick->label, W.logicalW, W.logicalH, pick->modeW, pick->modeH, W.scale);
+    // 没有 xdg-output 就退回 mode/scale 估算：niri 的 wl_output.scale 向上取整
+    // （1.5 报 2），1706x1066 会估成 1280x800 —— 只够防跑出屏，做不了精确布局。
+    for (int i = 0; i < W.nouts; i++) {
+        OutInfo* o = &W.outs[i];
+        if (!o->haveXdg) {
+            const int s = o->scale > 0 ? o->scale : 1;
+            o->lw = o->modeW > 0 ? o->modeW / s : 0;
+            o->lh = o->modeH > 0 ? o->modeH / s : 0;
+            o->gx = o->x;
+            o->gy = o->y;
+        }
+    }
+    printOutputTable();
+
+    /* 选 output：MIYU_OUTPUT=N 指名；否则优先 eDP-1（本机主屏），再不然第一个 */
+    int pick = -1;
+    {
+        const char* e = getenv("MIYU_OUTPUT");
+        if (e && *e) {
+            const int n = atoi(e);
+            if (n >= 0 && n < W.nouts) {
+                pick = n;
+                LOG("MIYU_OUTPUT=%s -> output[%d] %s", e, n, W.outs[n].label);
+            } else {
+                LOG("MIYU_OUTPUT=%s 越界（有效 0..%d），忽略", e, W.nouts - 1);
+            }
+        }
+        if (pick < 0) {
+            for (int i = 0; i < W.nouts; i++)
+                if (strstr(W.outs[i].label, "eDP-1")) { pick = i; break; }
+        }
+        if (pick < 0) pick = 0;
+    }
 
     /* 2) OVERLAY 层 surface */
-    W.surf = wl_compositor_create_surface(W.comp);
-    W.lsurf = zwlr_layer_shell_v1_get_layer_surface(W.lshell, W.surf, W.chosen,
-                ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, title ? title : "plat-wayland");
-    zwlr_layer_surface_v1_add_listener(W.lsurf, &ls_listener, nullptr);
-    zwlr_layer_surface_v1_set_size(W.lsurf, (uint32_t)w, (uint32_t)h);
-    zwlr_layer_surface_v1_set_anchor(W.lsurf,
-        ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
-    zwlr_layer_surface_v1_set_exclusive_zone(W.lsurf, 0);
-    zwlr_layer_surface_v1_set_keyboard_interactivity(W.lsurf,
-        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
-    wl_surface_commit(W.surf);
-
-    while (!W.configured) {
-        if (wl_display_dispatch(W.dpy) < 0) { LOG("dispatch 失败，configure 没来"); return false; }
-    }
+    snprintf(W.title, sizeof W.title, "%s", title ? title : "plat-wayland");
+    if (!makeLayerSurface(pick)) return false;
 
     /* 3) EGL：platform display + 桌面 GL */
     PFNEGLGETPLATFORMDISPLAYEXTPROC getPlatformDisplayEXT =
@@ -284,26 +784,13 @@ bool platInit(int w, int h, const char* title) {
     }
     if (W.ectx == EGL_NO_CONTEXT) { LOG("eglCreateContext 彻底失败 0x%x", eglGetError()); return false; }
 
-    // 按 ceil(scale) 建大 buffer，避免 scale>1 时糊
-    const int pw = w * W.scale, ph = h * W.scale;
-    // 关键：buffer 建大了，必须同时告诉合成器 buffer_scale=scale，
-    // 否则它把 1000x1800 的 buffer 当成「1000x1800 逻辑」，窗口会比请求大一整倍。
-    wl_surface_set_buffer_scale(W.surf, W.scale);
-    W.ewin = wl_egl_window_create(W.surf, pw, ph);
-    if (!W.ewin) { LOG("wl_egl_window_create 失败"); return false; }
-    W.esurf = eglCreateWindowSurface(W.edpy, W.ecfg, (EGLNativeWindowType)W.ewin, nullptr);
-    if (W.esurf == EGL_NO_SURFACE) { LOG("eglCreateWindowSurface 失败 0x%x", eglGetError()); return false; }
-    if (!eglMakeCurrent(W.edpy, W.esurf, W.esurf, W.ectx)) {
-        LOG("eglMakeCurrent 失败 0x%x", eglGetError());
-        return false;
-    }
+    // 按 ceil(scale) 建大 buffer，避免 scale>1 时糊；buffer_scale 同步告诉合成器
+    if (!createEGLWindow()) return false;
 
     LOG("EGL %d.%d | %s", emaj, emin, eglQueryString(W.edpy, EGL_VENDOR));
     LOG("GL_VERSION=%s", (const char*)glGetString(GL_VERSION));
     LOG("GL_RENDERER=%s", (const char*)glGetString(GL_RENDERER));
-    LOG("逻辑尺寸 %dx%d  ->  物理尺寸 %dx%d (scale=%d)", w, h, pw, ph, W.scale);
 
-    glViewport(0, 0, pw, ph);
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -331,6 +818,9 @@ void platPollEvents() {
         wl_display_cancel_read(W.dpy);
     }
     wl_display_flush(W.dpy);
+
+    // 拖动：这一帧攒的位移在这里一次应用（一帧一次 commit，不是每个 motion 一次）
+    drag_apply_pending();
 }
 
 void platGetFramebufferSize(int* w, int* h) {
@@ -360,6 +850,8 @@ void platSetPosition(int x, int y) {
     apply_margin();
 }
 
+bool platIsDragging() { return W.dragging; }
+
 void platShutdown() {
     if (!W.dpy) return;
     if (W.edpy != EGL_NO_DISPLAY) {
@@ -372,14 +864,20 @@ void platShutdown() {
         W.edpy  = EGL_NO_DISPLAY;
     }
     if (W.ewin) { wl_egl_window_destroy(W.ewin); W.ewin = nullptr; }
+    if (W.ptr)  { wl_pointer_destroy(W.ptr); W.ptr = nullptr; }
+    if (W.seat) { wl_seat_destroy(W.seat); W.seat = nullptr; }
     if (W.lsurf) { zwlr_layer_surface_v1_destroy(W.lsurf); W.lsurf = nullptr; }
     if (W.surf)  { wl_surface_destroy(W.surf); W.surf = nullptr; }
     if (W.lshell){ zwlr_layer_shell_v1_destroy(W.lshell); W.lshell = nullptr; }
     if (W.shm)   { wl_shm_destroy(W.shm); W.shm = nullptr; }
     if (W.comp)  { wl_compositor_destroy(W.comp); W.comp = nullptr; }
-    for (int i = 0; i < W.nouts; i++)
+    for (int i = 0; i < W.nouts; i++) {
+        if (W.outs[i].xdg) { zxdg_output_v1_destroy(W.outs[i].xdg); W.outs[i].xdg = nullptr; }
         if (W.outs[i].out) { wl_output_destroy(W.outs[i].out); W.outs[i].out = nullptr; }
+    }
+    if (W.xdgMgr) { zxdg_output_manager_v1_destroy(W.xdgMgr); W.xdgMgr = nullptr; }
     if (W.reg)   { wl_registry_destroy(W.reg); W.reg = nullptr; }
+    if (W.mask)  { free(W.mask); W.mask = nullptr; W.maskCap = 0; W.maskW = W.maskH = 0; }
     wl_display_disconnect(W.dpy);
     W.dpy = nullptr;
     W.inited = false;
@@ -407,15 +905,17 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
     const int lh = h / s;
     if (lw <= 0 || lh <= 0) return;
 
-    static unsigned char* buf = nullptr;
-    static size_t cap = 0;
     const size_t need = (size_t)lw * (size_t)lh * 4;
-    if (need > cap) {
-        unsigned char* p = (unsigned char*)realloc(buf, need);
+    if (need > W.maskCap) {
+        unsigned char* p = (unsigned char*)realloc(W.mask, need);
         if (!p) { LOG("region 缓冲分配失败 (%zu 字节)", need); return; }
-        buf = p;
-        cap = need;
+        W.mask = p;
+        W.maskCap = need;
     }
+    unsigned char* buf = W.mask;
+    W.maskW = lw;
+    W.maskH = lh;
+    W.maskTh = threshold;
 
     for (int ly = 0; ly < lh; ly++) {
         unsigned char* out = buf + (size_t)ly * (size_t)lw * 4;

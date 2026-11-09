@@ -107,6 +107,12 @@ void platSetPosition(int x, int y) {
     glfwSetWindowPos(g_win, x, y);
 }
 
+// X11 版不接管鼠标拖动：GLFW 那边有自己的窗口拖动（以后要接也是走
+// glfwSetWindowUserPointer + 自己算标题栏），这一层恒 false。
+// 存在的意义有两个：接口两个 target 一致；main.cpp 里「拖动时跳过 region 重算」
+// 那段逻辑在 X11 版永远走「不是拖动」那条路（X11 本来也没有 region）。
+bool platIsDragging() { return false; }
+
 void platShutdown() {
     if (g_win) { glfwDestroyWindow(g_win); g_win = nullptr; }
     if (g_inited) { glfwTerminate(); g_inited = false; }
