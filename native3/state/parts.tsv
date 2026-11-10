@@ -82,6 +82,7 @@ param	arm	PokeArmL	85	1.000	# 左臂的局部版；LArm/LForearm/LWrist
 param	arm	PokeArmR	84	1.000	# 右臂的局部版；RArm/RForearm/RWrist
 param	skirt	PokeSkirt	80	1.000	# 裙子X 摆动的局部版；SkirtX1..4/SkirtSpecial/2
 param	leg	PokeLeg	88	0.600	# 双腿 Z 的局部版；2026-11-10 22:5x 幅度 1.0→0.6（满值张得太开，像劈叉不像被碰）
+param	leg	PositionY	40	-3.000	# 22:5x 新增：配一点下沉，点腿时整个人沉一下（像腿一软），不然只有「张开」，没有「被碰到」
 param	tail	PokeTail	92	1.000	# 尾巴的局部版；Param_Angle_Rotation84..89 + Param52
 param	eye	PokeEye	95	1.000	# 眼睛：眼珠被物理带走 + 点一下眨一次（0.24s 包络）
 param	mouth	PokeMouth	94	1.000	up	# 嘴：ParamMouthOpenY 自己拼的一条链
