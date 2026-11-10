@@ -538,7 +538,8 @@ const char* kHtml = R"HTML(<!doctype html>
     if (diagLine && s.lastHit) {
       var h = s.lastHit;
       diagLine.textContent = h.id > 0
-        ? ('最近一次：' + h.name + '（id ' + h.id + '） u=' + Number(h.u).toFixed(3) + '  v=' + Number(h.v).toFixed(3))
+        ? ('最近一次：' + h.name + '（id ' + h.id + '） u=' + Number(h.u).toFixed(3) + '  v=' + Number(h.v).toFixed(3)
+           + (h.say ? '　她说：' + h.say : '　（这一块没配台词）'))
         : '还没点过她';
     }
     if (!tabRestored) {
@@ -751,7 +752,8 @@ double      gFps      = -1.0;    // 十八：main 的 framePace 每 5 秒喂一�
 std::string gPath     = "settings.json";
 bool        gSmaaOk   = true;    // 十九：postfx 报告 smaa 能不能用（main 启动时喂一次）
 std::vector<std::string> gExprs;
-static std::vector<std::string> gPlans;   // 二十五：plans/*.json 名单
+static std::vector<std::string> gPlans;
+static std::string gLastSay;   // 最近一次点击她说的那句话（诊断用）   // 二十五：plans/*.json 名单
 size_t      gExprIdx  = 0;
 
 struct Conn {
@@ -1017,7 +1019,8 @@ std::string stateJson() {
         s += ",\"name\":\"";
         s += (id > 0 && id < partpoke::kZoneMax) ? partapi::nameOf(id) : "";
         s += "\",\"u\":" + std::to_string(float(partpoke::gLastHitU));
-        s += ",\"v\":" + std::to_string(float(partpoke::gLastHitV)) + "}";
+        s += ",\"v\":" + std::to_string(float(partpoke::gLastHitV));
+        s += ",\"say\":\"" + jsonEsc(gLastSay) + "\"}";
     }
     // 二十五：部位→表情（设置页那一组用它渲染下拉）
     {
@@ -1474,6 +1477,8 @@ void setFps(double fps) { gFps = fps; }
 void setExprNames(std::vector<std::string> names) { gExprs = std::move(names); }
 
 const std::vector<std::string>& exprNames() { return gExprs; }
+
+void setLastSay(const std::string& t) { gLastSay = t; }
 
 void setPlanNames(std::vector<std::string> names) { gPlans = std::move(names); }
 

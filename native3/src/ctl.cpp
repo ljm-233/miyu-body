@@ -189,6 +189,36 @@ int takeObjText(const std::string& s, const char* key, std::string& out) {
 //
 // 用 double fork：孙进程 exec pw-play，子进程立刻退出并由父回收 —— 主循环一秒都不等它，
 // 也不会攒一屋子僵尸。
+// 二十六：读 wav 时长（只支持 PCM/float 的 RIFF，够本项目的合成输出用）。
+// 为什么需要：嘴型的时长是按「字数 × 每字时长」估的，可实际音频往往短得多
+// （单字「痒」只 0.5 秒，估出来 1.2 秒）→ **嘴还在动，声音早没了**，看着像假唱。
+static double wavSeconds(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return 0.0;
+    char hdr[44] = {0};
+    f.read(hdr, 44);
+    if (f.gcount() < 44) return 0.0;
+    if (std::memcmp(hdr, "RIFF", 4) != 0 || std::memcmp(hdr + 8, "WAVE", 4) != 0) return 0.0;
+    auto u32 = [&](int off) {
+        return static_cast<unsigned>(static_cast<unsigned char>(hdr[off])) |
+               (static_cast<unsigned>(static_cast<unsigned char>(hdr[off + 1])) << 8) |
+               (static_cast<unsigned>(static_cast<unsigned char>(hdr[off + 2])) << 16) |
+               (static_cast<unsigned>(static_cast<unsigned char>(hdr[off + 3])) << 24);
+    };
+    auto u16 = [&](int off) {
+        return static_cast<unsigned>(static_cast<unsigned char>(hdr[off])) |
+               (static_cast<unsigned>(static_cast<unsigned char>(hdr[off + 1])) << 8);
+    };
+    const unsigned rate = u32(24);
+    const unsigned byteRate = u32(28);
+    if (rate == 0 || byteRate == 0) return 0.0;
+    f.seekg(0, std::ios::end);
+    const std::streamoff total = f.tellg();
+    const std::streamoff data = total - 44;
+    if (data <= 0) return 0.0;
+    return static_cast<double>(data) / static_cast<double>(byteRate);
+}
+
 void voicePlay(const std::string& text) {
     const char* env = std::getenv("MIYU_VOICE_DIR");
     const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
@@ -229,7 +259,16 @@ void voicePlay(const std::string& text) {
     }
     int st = 0;
     ::waitpid(pid, &st, 0);                        // 只等中间子进程（毫秒级）
-    log_("[voice] 播 %s.wav（vol %.2f）: %s", key.c_str(), gVol, text.c_str());
+    // 二十六：嘴跟着**音频的实际长度**走，不再按字数估
+    const double sec = wavSeconds(path);
+    if (sec > 0.05) {
+        gSayDur = sec;
+        gSayT0  = platTime();
+        gTalking = true;
+        log_("[voice] 播 %s.wav（vol %.2f，实长 %.2fs）: %s", key.c_str(), gVol, sec, text.c_str());
+    } else {
+        log_("[voice] 播 %s.wav（vol %.2f）: %s", key.c_str(), gVol, text.c_str());
+    }
 }
 
 // ── 一行命令 ────────────────────────────────────────────

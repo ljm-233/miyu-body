@@ -1828,6 +1828,7 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
                 if (*line) {
                     const std::string s2 = (gCombo >= 5) ? std::string("够了吧") : std::string(line);
                     ctl::say(s2, now);
+                    web::setLastSay(s2);
                 }
             }
             // ② 这个部位自己的动作（有根参数就晃）—— **不是二选一**，两个一起播

@@ -130,6 +130,7 @@ const std::vector<std::string>& exprNames();
 
 // 二十五：动画计划名单（plans/*.json）
 void setPlanNames(std::vector<std::string> names);
+void setLastSay(const std::string& t);   // 二十六：诊断里显示「刚说的是哪句」
 
 // 设置落到哪个文件（日志/文档用）。
 const char* statePath();
