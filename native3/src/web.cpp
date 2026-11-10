@@ -936,6 +936,11 @@ std::string handleSet(const std::string& body, bool logIt) {
             if (nv != gSet.swayTilt) { gSet.swayTilt = nv; changed.push_back("swayTilt"); }
             continue;
         }
+        if (k == "chestSway" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 2.0f);
+            if (nv != gSet.chestSway) { gSet.chestSway = nv; changed.push_back("chestSway"); }
+            continue;
+        }
         if (k == "dragSpring" && v.t == VNum) {
             const float nv = clampf(float(v.n), 0.0f, 2.0f);
             if (nv != gSet.dragSpring) { gSet.dragSpring = nv; changed.push_back("dragSpring"); }

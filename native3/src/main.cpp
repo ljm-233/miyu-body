@@ -1488,6 +1488,11 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
     float swayK = 1.0f;
     if (gPartPoke.part == "chest") swayK = 0.25f + 0.75f * web::settings().chestSway;
     const float K = 68.0f * swayK, C = 11.2f * swayK;
+    static double lastSwayLog = -1e9;
+    if (gPartPoke.part == "chest" && now - lastSwayLog > 0.5) {
+        lastSwayLog = now;
+        log_("[part] chest 档位=%.2f -> swayK=%.2f K=%.1f C=%.1f", web::settings().chestSway, swayK, K, C);
+    }
     const float h = 1.0f / 240.0f;
     // 2026-11-10 02:5x：子步数必须**按真实帧间隔**算。她跑 200Hz（5ms 一帧），
     // 固定走 6 个子步等于把时间加速 6 倍，弹簧 0.5s 的震荡挤进 0.08s——看着就是秒停。
