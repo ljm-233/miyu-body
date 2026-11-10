@@ -3133,7 +3133,9 @@ static void followTick(Csm::CubismModel* model, double now, float dt) {
         if (tgt < -f.clampv) tgt = -f.clampv;
 
         Spr& sp = spr[f.name];
-        const float K = 170.0f, C = 10.5f;      // ω≈13 rad/s、ζ≈0.40：有滞后、甩过去会回一点
+        // 每条 follow 可以带自己的刚度/阻尼；没写就用默认那组
+        const float K = (f.K > 0.0f) ? f.K : 170.0f;
+        const float C = (f.C > 0.0f) ? f.C : 10.5f;
         float h = dt;
         if (h > 0.02f) h = 0.02f;               // 卡帧别炸
         const int sub = 4;                      // 4 次子步，低帧率也稳

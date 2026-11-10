@@ -112,7 +112,12 @@ expr	waist	圈圈眼
 # 来源：src/main.cpp:3138 legDragTick 的三个常量。
 follow	leg	HipAngleX	0.6	30	ax
 follow	leg	HipAngleZ	2.2	30	az
-follow	leg	PokeLeg	0.0625	1	ax
+# 2026-11-10 23:3x：PokeLeg 原来跟的是 ax（前后倾），可拖动时最大的量是 az（左右摆）。
+# 于是「腿在动、脚看着没动」——脚在画面最下端，靠身体转动带不动多少位移。
+# 改成跟 az、系数放大，左右拖的时候腿张合得更明显，脚尖跟着走。
+follow	leg	PokeLeg	0.120	1	az	110	8.0
+# 再给脚一点上下：拖动时整个人轻微浮沉，脚尖最先感受到（跟 py 源）
+follow	leg	PositionY	0.350	6	py	80	7.0
 # 2026-11-10 22:5x：拖动跟随从「只有腿」扩到胸和尾巴。follow 通用化之后加两行就够。
 # 胸用 PokeChest（幅度 0.25、上限 0.6），尾巴用 PokeTail（0.3、上限 0.8），都跟左右摆动 az。
 follow	chest	PokeChest	0.25	0.6	az

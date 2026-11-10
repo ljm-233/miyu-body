@@ -71,6 +71,10 @@ struct Follow {
     float         gain = 0;
     float         clampv = 0;
     char          src = 'x'; // ax / az / ay → 'x' / 'z' / 'y'
+    // 2026-11-10 23:4x：每条 follow 可以带自己的弹簧刚度/阻尼（第 7、8 列，可省）。
+    // 省略 = 用默认 170 / 10.5。给脚那几条调软，它就跟得更晚、甩得更明显。
+    float         K = 0;     // 0 = 用默认
+    float         C = 0;
 };
 
 struct Alias { unsigned char id = 0; std::string kw; };
@@ -272,6 +276,8 @@ inline void loadParts(Registry& r) {
             fo.name = c[2];
             fo.gain = toF(c[3]);
             fo.clampv = toF(c[4]);
+            fo.K = (c.size() > 6 && !c[6].empty()) ? toF(c[6]) : 0.0f;
+            fo.C = (c.size() > 7 && !c[7].empty()) ? toF(c[7]) : 0.0f;
             fo.src = (c[5].size() > 1) ? c[5][1] : 'x';   // "ax" → 'x'
             r.follows.push_back(fo);
         } else if (c.size() == 1) {
