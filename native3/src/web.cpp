@@ -245,7 +245,7 @@ const char* kHtml = R"HTML(<!doctype html>
        d:'拖她的时候整个人会真的歪过去（动的是投影，不是参数——参数她身上看不见）。1 = 拖得越快歪得越多，松手回弹'},
       {k:'swayIdle', t:'bool', label:'静止轻摆',
        d:'不动的时候极慢地歪一点点（15 秒一个来回，0.3°）；只在「活泼」待机风格下生效'},
-      {k:'chestSway', t:'range', min:0, max:2, step:0.1, label:'胸晃',
+      {k:'chestSway', t:'range', min:0, max:3, step:0.1, label:'胸晃',
        d:'点胸口时晃多大。0 最轻（干脆利落），2 最大（软、晃得久）'},
       {k:'dragSpring', t:'range', min:0, max:2, step:0.1, label:'拖动弹簧',
        d:'拖动不是刚性跟随：她有一点点「重」，弹簧追你，快速拖能看到落后十几到几十像素。0.5 更软更沉，2 更跟手'},
@@ -651,7 +651,7 @@ void loadSettings() {
         else if (k == "dragSway" && v.t == VNum) gSet.dragSway = clampf(float(v.n), 0.0f, 2.0f);
         else if (k == "swayIdle" && v.t == VBool) gSet.swayIdle = v.b;
         else if (k == "swayTilt" && v.t == VNum) gSet.swayTilt = clampf(float(v.n), 0.0f, 4.5f);
-        else if (k == "chestSway" && v.t == VNum) gSet.chestSway = clampf(float(v.n), 0.0f, 2.0f);
+        else if (k == "chestSway" && v.t == VNum) gSet.chestSway = clampf(float(v.n), 0.0f, 3.0f);
         else if (k == "dragSpring" && v.t == VNum) gSet.dragSpring = clampf(float(v.n), 0.0f, 2.0f);
         // 二十一：点哪动哪
         else if (k == "tapPart" && v.t == VBool) gSet.tapPart = v.b;
@@ -937,7 +937,7 @@ std::string handleSet(const std::string& body, bool logIt) {
             continue;
         }
         if (k == "chestSway" && v.t == VNum) {
-            const float nv = clampf(float(v.n), 0.0f, 2.0f);
+            const float nv = clampf(float(v.n), 0.0f, 3.0f);
             if (nv != gSet.chestSway) { gSet.chestSway = nv; changed.push_back("chestSway"); }
             continue;
         }

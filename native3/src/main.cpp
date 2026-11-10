@@ -1488,7 +1488,13 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
     float swayK = 1.0f;
     // 2026-11-10 13:5x：他说「0 是最大档、2 是最小档」，方向反了——
     // K 越大弹簧越硬、同样冲量下位移越小。所以档位越大 K 越小（越软、晃得越大）。
-    if (gPartPoke.part == "chest") swayK = 1.75f - 0.75f * web::settings().chestSway;
+    if (gPartPoke.part == "chest") {
+        // 0→2 段：K 从 1.75 平滑降到 0.25（原来那段手感不动）；2→3 段继续往软走，接到 0.10。
+        const float cs = web::settings().chestSway;
+        const float lo = cs < 2.0f ? cs : 2.0f;
+        const float hi = cs > 2.0f ? (cs - 2.0f) : 0.0f;
+        swayK = (1.75f - 0.75f * lo) - 0.15f * hi;
+    }
     const float K = 68.0f * swayK, C = 11.2f * swayK;
     static double lastSwayLog = -1e9;
     if (gPartPoke.part == "chest" && now - lastSwayLog > 0.5) {
