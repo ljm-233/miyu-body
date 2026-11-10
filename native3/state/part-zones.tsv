@@ -53,7 +53,7 @@ Z	42	43	64	76	headwear
 Z	43	44	45	50	headwear
 Z	43	44	50	70	head
 Z	43	44	70	75	headwear
-Z	44	45	44	49	headwear
+Z	44	45	45	49	headwear
 Z	44	45	49	51	head
 Z	44	45	51	70	brow
 Z	44	45	70	71	head
@@ -140,7 +140,7 @@ Z	62	63	73	75	head
 Z	63	64	45	52	chest
 Z	63	64	52	70	mouth
 Z	63	64	70	75	chest
-Z	64	65	44	52	chest
+Z	64	65	45	52	chest
 Z	64	65	52	70	mouth
 Z	64	65	70	76	chest
 Z	65	66	44	52	chest
@@ -189,7 +189,7 @@ Z	72	73	74	80	arm
 Z	73	74	39	51	arm
 Z	73	74	51	70	chest
 Z	73	74	70	81	arm
-Z	74	75	38	46	arm
+Z	74	75	39	46	arm
 Z	74	75	46	69	chest
 Z	74	75	69	70	arm
 Z	74	75	70	74	chest
@@ -197,13 +197,13 @@ Z	74	75	74	82	arm
 Z	75	76	38	46	arm
 Z	75	76	46	74	chest
 Z	75	76	74	82	arm
-Z	76	77	37	46	arm
+Z	76	77	38	46	arm
 Z	76	77	46	74	chest
 Z	76	77	74	83	arm
 Z	77	78	37	46	arm
 Z	77	78	46	74	chest
 Z	77	78	74	83	arm
-Z	78	79	38	46	arm
+Z	78	79	37	46	arm
 Z	78	79	46	74	chest
 Z	78	79	74	84	arm
 Z	79	80	36	46	arm
@@ -212,7 +212,7 @@ Z	79	80	74	84	arm
 Z	80	81	36	44	arm
 Z	80	81	44	76	chest
 Z	80	81	76	84	arm
-Z	81	82	34	47	arm
+Z	81	82	35	47	arm
 Z	81	82	47	73	chest
 Z	81	82	73	86	arm
 Z	82	83	34	47	arm
@@ -247,7 +247,7 @@ Z	89	90	66	71	chest
 Z	89	90	71	74	arm
 Z	89	90	74	75	chest
 Z	89	90	75	85	arm
-Z	90	91	37	50	arm
+Z	90	91	36	50	arm
 Z	90	91	50	53	chest
 Z	90	91	53	57	waist
 Z	90	91	57	64	chest
@@ -268,7 +268,7 @@ Z	92	93	58	62	skirt
 Z	92	93	62	67	waist
 Z	92	93	67	70	chest
 Z	92	93	70	76	skirt
-Z	92	93	76	84	arm
+Z	92	93	76	85	arm
 Z	93	94	35	48	arm
 Z	93	94	48	51	skirt
 Z	93	94	51	53	chest
@@ -303,7 +303,7 @@ Z	98	99	48	73	skirt
 Z	98	99	73	74	arm
 Z	98	99	74	78	skirt
 Z	98	99	78	88	arm
-Z	99	100	32	47	arm
+Z	99	100	33	47	arm
 Z	99	100	47	78	skirt
 Z	99	100	78	88	arm
 Z	100	101	32	44	arm
@@ -322,7 +322,7 @@ Z	103	104	40	72	waist
 Z	103	104	72	76	skirt
 Z	103	104	76	77	arm
 Z	103	104	77	79	skirt
-Z	103	104	79	86	arm
+Z	103	104	79	87	arm
 Z	104	105	34	40	arm
 Z	104	105	40	72	waist
 Z	104	105	72	75	skirt

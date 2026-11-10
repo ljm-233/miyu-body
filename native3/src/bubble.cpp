@@ -30,11 +30,11 @@ namespace {
 // 撑成 44px，必糊。现在整张图按**物理像素**做：字号 44、内边距圆角全部 ×2，
 // 贴的时候 1:1 不动，字就是渲染器原生的清晰度。
 const int   kFontPx     = 44;      // 字号（物理像素，对应逻辑 22）
-const int   kPadX       = 40;      // 左右内边距
-const int   kPadY       = 24;      // 上下内边距
-const int   kRadius     = 46;      // 圆角半径 —— 大一点更软，不再像标签
-const int   kTailW      = 34;      // 底下小尖角的宽度
-const int   kTailH      = 20;      // 小尖角高度
+const int   kPadX       = 36;      // 左右内边距
+const int   kPadY       = 22;      // 上下内边距
+const int   kRadius     = 32;      // 圆角半径（2026-11-11 02:2x 他说 46 那版难看，改回 32）
+const int   kTailW      = 32;      // 底下小尖角的宽度
+const int   kTailH      = 0;       // 2026-11-11 02:2x 他说去掉小三角，改成 0（画尖角那段自然就不执行了）
 const float kInDur      = 0.16f;   // 淡入 + 放大
 const float kOutDur     = 0.25f;   // 淡出 + 上浮
 const float kHoldExtra  = 0.9f;    // 说完之后再挂这么久才淡出
@@ -144,13 +144,14 @@ bool buildTexture(const std::string& text, double lastSeconds) {
                                                    static_cast<float>(kRadius));
             if (covOut <= 0.0f) continue;
             // 外圈：柔和的蓝灰描边（比之前淡一档，不要硬边）
-            putPx(buf, w, fullH, x, y, 0.62f, 0.72f, 0.90f, 0.55f * covOut);
+            putPx(buf, w, fullH, x, y, 0.55f, 0.66f, 0.86f, 0.85f * covOut);
             // 内圈：深底（往里缩 2px）
-            const float covIn = roundRectCoverage(x + 0.5f - 4.0f, y + 0.5f - 4.0f,
-                                                  static_cast<float>(w) - 8.0f,
-                                                  static_cast<float>(h) - 8.0f,
-                                                  static_cast<float>(kRadius) - 4.0f);
-            if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.11f, 0.13f, 0.19f, 0.90f * covIn);
+            // 描边宽度：外扩 7px（之前 4px，他说太细）
+            const float covIn = roundRectCoverage(x + 0.5f - 7.0f, y + 0.5f - 7.0f,
+                                                  static_cast<float>(w) - 14.0f,
+                                                  static_cast<float>(h) - 14.0f,
+                                                  static_cast<float>(kRadius) - 7.0f);
+            if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.07f, 0.09f, 0.14f, 0.94f * covIn);
         }
     }
     // 底下的小尖角（指向她的头）
@@ -161,8 +162,8 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             const int half = static_cast<int>(kTailW * 0.5f * t);
             for (int x = cx - half; x <= cx + half; ++x) {
                 const bool edge = (x <= cx - half + 1 || x >= cx + half - 1 || y == 0 || y == kTailH - 1);
-                if (edge) putPx(buf, w, fullH, x, h + y, 0.62f, 0.72f, 0.90f, 0.55f);
-                else      putPx(buf, w, fullH, x, h + y, 0.11f, 0.13f, 0.19f, 0.90f);
+                if (edge) putPx(buf, w, fullH, x, h + y, 0.55f, 0.66f, 0.86f, 0.85f);
+                else      putPx(buf, w, fullH, x, h + y, 0.07f, 0.09f, 0.14f, 0.94f);
             }
         }
     }
@@ -334,7 +335,7 @@ void draw(int winW, int winH) {
     // 她的头顶在窗口里大约 0.90 高处（framebuffer 坐标从底部算）
     // 窗口顶部只剩约 110 物理像素，气泡（含小尖角）大约 100 高 —— 所以下沿贴着
     // 她头顶往上一点点，上沿正好压到窗口边。再高就裁掉了。
-    const float by = static_cast<float>(winH) * 0.887f;   // 她的头顶在窗口 0.88 处，气泡底边贴着往上
+    const float by = static_cast<float>(winH) * 0.858f;   // 气泡底边在她头饰上方约 10px
     const float x0 = cx - bw * 0.5f, x1 = cx + bw * 0.5f;
     const float y0 = by, y1 = by + bh;
 
