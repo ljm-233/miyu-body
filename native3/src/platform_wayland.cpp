@@ -364,8 +364,15 @@ static void tapFire(int lx, int ly) {
             const std::string part = partId > 0 ? std::string(partapi::nameOf(partId)) : std::string();
             static int gLastPartId = 0;
             static double gLastPartT = -1e9;
+            // 二十六：双击判定。同一部位、间隔 0.18–0.45 秒之间算第二下。
+            // 下限用全局冷却（0.18）是因为更快的会被冷却吃掉，谈不上「第二下」。
+            const double sinceLast = now - gLastPartT;
+            const bool dbl = (partId > 0 && partId == gLastPartId &&
+                              sinceLast > 0.18 && sinceLast < 0.90);
+            partpoke::gDoubleTap = dbl;
+            // 双击要**绕开**同部位冷却，否则第二下被 0.55 秒冷却吃掉，永远进不来
             const bool samePart = (partId > 0 && partId == gLastPartId) &&
-                                  (now - gLastPartT < TAP_SAME_PART_S);
+                                  (sinceLast < TAP_SAME_PART_S) && !dbl;
             if (partId > 0 && partapi::hasAction(partId) && !samePart) {
                 gLastPartId = partId;
                 partpoke::gLastHitId = partId;

@@ -1821,12 +1821,20 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             }
             // 连击加剧：把这一下的冲量放大（partPokeStart 里按 gPokeBoost 乘）
             gPokeBoost = (gCombo >= 3) ? 1.6f : 1.0f;
+            // 二十六：双击 —— 同一个地方连着戳两下，她的反应不一样：
+            // 台词换成「啊」这种被打断的短音，冲量再放大 1.4 倍。
+            const bool dbl = partpoke::gDoubleTap;
+            if (dbl) {
+                gPokeBoost *= 1.4f;
+                log_("[tap] %s 双击", part.c_str());
+            }
             // 二十六：让身体自己说一句（parts.tsv 的 part 行第 5 列）。
             // 和外部推 {"say":...} 同一套：嘴型包络走 ctl，有缓存就出声。
             // 连点第 5 下（黑脸那下）改成「够了吧」，这比部位台词更像有脾气。
             if (const char* line = partapi::sayOf(curId)) {
                 if (*line) {
-                    const std::string s2 = (gCombo >= 5) ? std::string("够了吧") : std::string(line);
+                    std::string s2 = (gCombo >= 5) ? std::string("够了吧") : std::string(line);
+                    if (dbl && gCombo < 5) s2 = "啊";
                     ctl::say(s2, now);
                     web::setLastSay(s2);
                 }

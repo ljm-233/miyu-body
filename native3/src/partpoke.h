@@ -41,6 +41,7 @@ inline char gPart[32] = {0};   // 部位名（parts.tsv 里的名字）
 // 2026-11-10 23:0x：设置页「诊断」那组要显示「最近一次点击判成了哪个部位」。
 // 平台层写、main 每帧转给 web。存 u/v 是为了能看出「点的是哪儿、判的是哪儿」——
 // 今晚所有串位都是靠这两个数才定位出来的。
+inline bool  gDoubleTap = false;  // 二十六：这一下是不是「双击」（同一部位 0.4 秒内第二下）
 inline int   gLastHitId = 0;      // 0 = 还没点过
 inline float gLastHitU = 0.0f;
 inline float gLastHitV = 0.0f;
