@@ -279,13 +279,13 @@ void voicePlay(const std::string& text) {
         log_("[voice] index 里有 %s 但文件不在（静默）", key.c_str());
         return;
     }
-    if (gSink) {
-        sinkPlayFile(path);
-        const double sec0 = wavSeconds(path);
-        if (sec0 > 0.05) { gSayDur = sec0; gSayT0 = platTime(); gTalking = true; }
-        log_("[voice] 播 %s.wav（常驻流 %.2fs）: %s", key.c_str(), sec0, text.c_str());
-        return;
-    }
+    // 二十六（第三次修）：常驻流走不通 —— `pw-cat` 不认 stdin（sndfile 要求真文件），
+    // `pw-play -` 又从 stdin 读完整 wav 就退出，没法复用一条流。
+    // 但 `pw-play` 支持**一次念多个文件**，而且共用同一条流。所以每次播放都让它先念
+    // 一段 0.12 秒静音、紧接着念正文 —— 静音那段正好吃掉 pipewire 建流时丢样本的窗口，
+    // 用户听到的第一声就是正片。这样「牺牲品」这个位置就固定由静音来当。
+    const std::string sil = dir + "/silence.wav";
+    const bool useSil = (::access(sil.c_str(), R_OK) == 0);
     char volbuf[16];
     std::snprintf(volbuf, sizeof volbuf, "%.2f", gVol);
     const pid_t pid = ::fork();
@@ -296,7 +296,10 @@ void voicePlay(const std::string& text) {
         ::freopen("/dev/null", "w", stdout);
         ::freopen("/dev/null", "w", stderr);
         const std::string volarg = std::string("--volume=") + volbuf;
-        ::execlp("pw-play", "pw-play", volarg.c_str(), path.c_str(), (char*)nullptr);
+        if (useSil)
+            ::execlp("pw-play", "pw-play", volarg.c_str(), sil.c_str(), path.c_str(), (char*)nullptr);
+        else
+            ::execlp("pw-play", "pw-play", volarg.c_str(), path.c_str(), (char*)nullptr);
         ::_exit(127);                               // 没有 pw-play 就走这条，什么都不响
     }
     int st = 0;
