@@ -475,9 +475,11 @@ const char* kHtml = R"HTML(<!doctype html>
   var tabRestored = false;
   function buildPartCard(names){
     if (partCard) return;
-    partCard = document.createElement('div'); partCard.className = 'card';
-    var h = document.createElement('div'); h.className = 'gh'; h.textContent = '点击反应';
-    partCard.appendChild(h);
+    // 2026-11-10 23:0x：这里原来自己 createElement('div') 造了一张裸 card，
+    // 然后 `root.appendChild(partCard)` 直接塞进 #groups —— 它**不属于任何 section**，
+    // 于是切页时它永远显示。他说的「每一页都有点击反应」就是这个。
+    // 改成和其它组一样走 addSection，才会跟着标签页一起切换。
+    partCard = addSection('点击反应');
     // 二十五：这两个在我们这个模型里**参数没绑顶点**（509 个参数里只有 162 个
     // 会真的动画面，它们用的 key9 / key13 不在里面），选下去脸一点变化都没有。
     // 名字直接标出来，省得他以为设置没生效。
@@ -500,7 +502,7 @@ const char* kHtml = R"HTML(<!doctype html>
         vb.parentNode.insertBefore(t, vb.nextSibling);
       }
     });
-    root.appendChild(partCard);
+    // （addSection 已经把这张卡挂到自己的 section 上了）
   }
 
   function statusLine(s){
