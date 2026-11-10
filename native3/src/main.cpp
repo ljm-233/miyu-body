@@ -1800,9 +1800,10 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             static int    gComboPart = 0, gCombo = 0;
             static double gComboLast = -1e9;
             const int curId = partapi::indexOf(part);
-            if (curId == gComboPart && now - gComboLast < 1.5) ++gCombo;
+            if (!web::settings().combo) gCombo = 0;     // 开关关着：不计数，也不影响表情
+            else if (curId == gComboPart && now - gComboLast < 1.5) ++gCombo;
             else gCombo = 1;
-            gComboPart = curId;
+            if (web::settings().combo) gComboPart = curId;
             gComboLast = now;
             if (gCombo >= 3) log_("[combo] %s 连点第 %d 下", part.c_str(), gCombo);
 
