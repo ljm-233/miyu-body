@@ -29,6 +29,8 @@
 
 #pragma once
 
+#include "partapi.h"   // 部位数据的唯一来源（state/parts.tsv）；本文件只负责邮筒和兼容层
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -196,43 +198,17 @@ inline const Table& table() {
 }
 
 // 窗口归一化坐标（u = lx/窗口宽, v = ly/窗口高）→ 部位名；空白返回空串。
-// 优先用渲染层刷出来的格子图（模型自带分区）；还没刷出来时退回文件里的格子。
+//
+// Step 3（2026-11-10 22:xx）：判定逻辑整个搬到 partapi::classify，数据来自
+// state/parts.tsv（scope=any 的带 → 格子图 → 文件里的 Z 行兜底）。这里只做一件事：
+// 把每帧刷出来的格子图递过去。
+//   · 递指针而不是拷贝：gZoneCells 是渲染层每帧覆盖写的同一个 vector，但**可能重新分配**
+//     （尺寸变了会 assign），所以每次调用前都重新 set 一次，不缓存 data()。
+//   · 原来这里有两段硬编码：ear 的窄带硬判（v .198-.248 且 u<.425||u>.575）和文件 Z 行
+//     的半开区间兜底。前者现在是 parts.tsv 里两条 scope=any 的带，后者在 partapi 里。
 inline std::string classify(float u, float v) {
-    if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return std::string();
-    // 二十五：兽耳是硬判的，不看格子。
-    // 原因：耳朵和脸/头发是连着画的，右耳那一圈 drawable 常被判成 head，
-    // 他点上去弹的是「前倾」。补位置带也不管用 —— 「只填空格」填不到已经被 head
-    // 占掉的格子。耳朵的位置很固定（实测 u 0.346..0.663、v 0.206..0.235），
-    // 两侧这块窄带直接判 ear，中间那段（脸）不碰。
-    if (v >= 0.198f && v <= 0.248f && (u < 0.425f || u > 0.575f)) return std::string("ear");
-    int gu = static_cast<int>(u * static_cast<float>(gGridW));
-    int gv = static_cast<int>(v * static_cast<float>(gGridH));
-    if (gu >= gGridW) gu = gGridW - 1;
-    if (gv >= gGridH) gv = gGridH - 1;
-    if (gZoneCells.size() == static_cast<size_t>(gGridW) * static_cast<size_t>(gGridH)) {
-        const unsigned char c0 = gZoneCells[static_cast<size_t>(gv) * gGridW + gu];
-        if (c0 != 0 && c0 < kZoneCount) return std::string(kZoneNames[c0]);
-        // 二十五：边缘兜底。她腿的外轮廓、袜口那几圈半透明像素被判成 0，点下去就
-        // 落空（他试出来的 (195,760) 就是这么一条）。格子在剪影里已经补过，剩下这些
-        // 都是最外 1~2 格：在 5×5 邻域里找最近的非空格子，按曼哈顿距离取最近的。
-        // 再远就不猜了 —— 那可能是裙子底下的缝，硬猜会让她乱动。
-        int bestD = 99; unsigned char best = 0;
-        for (int dy = -2; dy <= 2; ++dy)
-            for (int dx = -2; dx <= 2; ++dx) {
-                const int x2 = gu + dx, y2 = gv + dy;
-                if (x2 < 0 || y2 < 0 || x2 >= gGridW || y2 >= gGridH) continue;
-                const unsigned char c = gZoneCells[static_cast<size_t>(y2) * gGridW + x2];
-                if (c == 0 || c >= kZoneCount) continue;
-                const int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
-                if (d < bestD) { bestD = d; best = c; }
-            }
-        if (best) return std::string(kZoneNames[best]);
-        return std::string();
-    }
-    const Table& t = table();
-    for (const Zone& z : t.zones)
-        if (gv >= z.v0 && gv < z.v1 && gu >= z.u0 && gu < z.u1) return z.part;
-    return std::string();
+    partapi::setGrid(gZoneCells.empty() ? nullptr : gZoneCells.data(), gGridW, gGridH);
+    return partapi::classify(u, v);
 }
 
 // 这个部位有没有活着的根参数（没有就别抢，让整套反应去播）

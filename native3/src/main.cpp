@@ -1060,33 +1060,24 @@ static PartZoneRig gZones;
 
 // 模型 part 的中文名 → 我们这十四个部位。名字是作者写的，按它分最不会错。
 static unsigned char zoneOfPartName(const char* nm) {
-    if (!nm || !*nm) return 0;
-    const std::string n(nm);
-    auto has = [&n](const char* k) { return n.find(k) != std::string::npos; };
-    // ── 二十四：新拆出来的六块，**必须排在下面那些 catch-all 前面** ─────────────
-    // 以前「眼/眉/嘴/耳」被 head 那条吃掉、「腰」被 chest 吃掉、「女仆发饰」被
-    // 「发」吃掉 —— 不是没素材，是全被并进大块里了。顺序错了就白改。
-    if (has("眼镜")) return 1;                                        // 眼镜是 head，不是眼睛
-    if (has("女仆发饰") || has("发饰")) return 13;                     // headwear（发饰，不是帽子）
-    if (has("耳朵") || has("兽耳")) return 11;                         // ear
-    if (has("眼眶") || has("眼球") || has("眼白") ||
-        has("左眼") || has("右眼") || has("圈圈眼") || has("爱心眼") ||
-        has("屑屑眼") || has("眼")) return 8;                          // eye
-    if (has("嘴") || has("口内") || has("牙") || has("舌")) return 9;    // mouth
-    if (has("眉毛") || has("眉")) return 10;                           // brow
-    if (has("腰部")) return 12;                                        // waist（腰带那一圈）
-    if (has("尾巴") || has("狗尾草")) return 6;                       // tail
-    if (has("腿") || has("脚") || has("膝")) return 5;                // leg
-    if (has("裙") || has("蝴蝶结") || has("缎带")) return 4;           // skirt
-    if (has("手臂") || has("大臂") || has("小臂") || has("手腕") ||
-        has("袖子") || has("举手") || has("竖食指") || has("手")) return 3;  // arm
-    if (has("胸") || has("上身") || has("领子") || has("肩膀") ||
-        has("腰")) return 2;                                          // chest（腰并进胸）
-    if (has("头") || has("脑") || has("发") || has("脸") || has("五官") ||
-        has("眼") || has("眉") || has("嘴") || has("鼻") || has("耳") ||
-        has("脖") || has("牙") || has("呆毛") || has("眼镜") || has("表情") ||
-        has("汗") || has("泪") || has("口内")) return 1;              // head
-    return 0;   // 「组 N」「文件夹」「图层…」这些是特效/过渡，不算部位
+    // Step 3（2026-11-10 22:xx）：drawable 的 part 名 → 部位，改成查 state/parts.tsv 的
+    // alias 记录。原来这 20 行 if 是**第三份部位名单**（另一份是 partpoke.h 的 kZoneNames、
+    // 还有 web.cpp 前端那份），顺序敏感（`眼镜` 必须先于 `眼`，`腰部` 必须先于 `腰`）。
+    // 现在顺序由 alias 行的先后决定，加部位不用改这里、也不用重编译。
+    // 边界：partpoke::kZoneNames 还是那张定长表（Step 7 才拆），所以 id 必须 < kZoneCount。
+    //   parts.tsv 里超过这个数的部位暂时无效 —— 报一次 WARN，别静默吞掉。
+    const int id = partapi::indexOfAlias(nm ? std::string(nm) : std::string());
+    if (id <= 0) return 0;
+    if (id >= partpoke::kZoneCount) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            log_("[zones] parts.tsv 里部位数超过 kZoneNames 的槽位（%d），第 %d 个部位暂时无效"
+                 "（Step 7 拆掉 kZoneNames 之后就解锁）", partpoke::kZoneCount, id);
+        }
+        return 0;
+    }
+    return static_cast<unsigned char>(id);
 }
 
 // 读 cdi3.json 的 Parts：把 "Part88" 这种 id 翻成中文名，再翻成部位编号。
@@ -1447,71 +1438,24 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         // 三条带**互不重叠**，都只压在剪影里（cellOk）。眉毛那条只到 0.207 ——
         // 眉毛抬起来时往上走，留在这条带里；它往下甩才会掉进眼睛那条，所以眉毛的
         // 方向固定成「往上」（见 partPokeStart 的 upOnly）。
-        // 二十五：部位判定带改成**读配置**（state/part-bands.tsv）。
-        // 原来这些矩形散在这一段十几处硬编码里（脸三块一组、头饰两块、头一条、
-        // 兽耳两块、腰一条），漏一条就出一个洞 —— 2026-11-10 飘带尖端被判成
-        // tail/leg 就是这么来的。现在统一成一张表：部位 + u0/u1/v0/v1，
-        // 以后要补一个地方，加一行就够，不用改代码、不用重编译。
-        // 规则没变：只填「剪影内(cellOk)且还没有标签」的格子。
+        // 二十五 → Step 3：判定带改成**从 partapi 读**（唯一一份 state/parts.tsv）。
+        //
+        // 原来这里有 70 行：自读 state/part-bands.tsv + 一份 9 条的内置兜底 kFallback。
+        // 那份兜底比文件少两条（缺 skirt 左右飘带尖端）—— 文件读不到时会被判成 leg/tail，
+        // 正是今天「飘带判成 leg」的一半来源（另一半是格子图把裙摆标成腿，已在 23.5 修掉）。
+        // 现在整段删掉：读不到表 = 空注册表 = 一条带都没有 = 点击回整套反应。
+        // 「用一份可能过期的表」换成「什么都不做」，这才是安全的降级。
+        //
+        // 规则没变：只填「剪影内(cellOk)且还没有标签」的格子；force 无条件盖；u/v 两端闭区间。
+        // scope=any 的那两条（兽耳硬判）不进格子图 —— 它们只在 classify 的第一步用，
+        // 所以这里应用的是 11 条，日志里能把这两个数分开看。
         {
-            struct Band { unsigned char id; float u0, u1, v0, v1; bool force; };
-            // 读不到文件时的兜底（内容和 state/part-bands.tsv 同步）
-            static const Band kFallback[] = {
-                {11, 0.330f, 0.405f, 0.195f, 0.245f, true},
-                {11, 0.595f, 0.680f, 0.195f, 0.245f, true},
-                { 8, 0.415f, 0.590f, 0.208f, 0.228f, true},
-                {10, 0.430f, 0.575f, 0.186f, 0.208f, true},
-                { 9, 0.450f, 0.560f, 0.236f, 0.282f, true},
-                {12, 0.358f, 0.592f, 0.432f, 0.506f, true},
-                {13, 0.395f, 0.470f, 0.118f, 0.178f, false},
-                {13, 0.535f, 0.610f, 0.118f, 0.178f, false},
-                { 1, 0.400f, 0.600f, 0.090f, 0.205f, false},
-            };
-            static std::vector<Band> bands;
-            static bool loaded = false;
-            if (!loaded) {
-                loaded = true;
-                std::ifstream fb("state/part-bands.tsv");
-                std::string line;
-                while (std::getline(fb, line)) {
-                    if (line.empty() || line[0] == '#') continue;
-                    std::vector<std::string> c;
-                    size_t p0 = 0;
-                    for (;;) {
-                        const size_t p1 = line.find('\t', p0);
-                        c.push_back(line.substr(p0, p1 == std::string::npos ? std::string::npos : p1 - p0));
-                        if (p1 == std::string::npos) break;
-                        p0 = p1 + 1;
-                    }
-                    if (c.size() < 5) continue;
-                    int id = -1;
-                    for (int k2 = 1; k2 < partpoke::kZoneCount; ++k2)
-                        if (c[0] == partpoke::kZoneNames[k2]) { id = k2; break; }
-                    if (id < 0) continue;
-                    Band b;
-                    b.id = static_cast<unsigned char>(id);
-                    b.u0 = float(atof(c[1].c_str())); b.u1 = float(atof(c[2].c_str()));
-                    b.v0 = float(atof(c[3].c_str())); b.v1 = float(atof(c[4].c_str()));
-                    b.force = (c.size() >= 6) && (atoi(c[5].c_str()) != 0);
-                    bands.push_back(b);
-                }
-                if (bands.empty()) {
-                    bands.assign(std::begin(kFallback), std::end(kFallback));
-                    log_("[zones] 读不到 state/part-bands.tsv，用内置的 %zu 条判定带", bands.size());
-                } else {
-                    log_("[zones] 判定带：从 state/part-bands.tsv 读了 %zu 条", bands.size());
-                }
-            }
-            for (const Band& b : bands) {
-                const int gy0 = static_cast<int>(b.v0 * GH), gy1 = static_cast<int>(b.v1 * GH);
-                const int gx0 = static_cast<int>(b.u0 * GW), gx1 = static_cast<int>(b.u1 * GW);
-                for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
-                    for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
-                        const size_t i = static_cast<size_t>(gy) * GW + gx;
-                        if (!gZones.cellOk[i]) continue;
-                        if (!b.force && gZones.grid[i]) continue;   // 补白模式：不抢已有标签
-                        gZones.grid[i] = b.id;
-                    }
+            const int applied = partapi::applyBands(gZones.grid, GW, GH, &gZones.cellOk);
+            static int lastApplied = -1;
+            if (applied != lastApplied) {
+                lastApplied = applied;
+                log_("[zones] 判定带：partapi 应用 %d 条（scope=body，剪影内、补白不抢已有标签）",
+                     applied);
             }
         }
         // 剪影里、但没有任何部位 drawable 盖到的格子（皮肤、缝隙、作者的「组 N」素材）

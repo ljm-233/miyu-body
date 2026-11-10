@@ -382,9 +382,12 @@ const char* kHtml = R"HTML(<!doctype html>
     var h = document.createElement('div'); h.className = 'gh'; h.textContent = title;
     card.appendChild(h); sec.appendChild(card);
     root.appendChild(sec);
+    var idx = sections.length;               // 先记下自己的下标
     sections.push({sec: sec, card: card});
     var a = document.createElement('a'); a.textContent = title;
-    a.addEventListener('click', function(){ showSection(sections.length - 1); });
+    // 2026-11-10 22:2x：这里原来写的是 `sections.length - 1`，闭包在点击那一刻求值，
+    // 于是**点任何一个标签都跳到最后一页**——他说的「其他标签点不了」就是这个。
+    a.addEventListener('click', function(){ showSection(idx); });
     navEl.appendChild(a);
     return card;
   }

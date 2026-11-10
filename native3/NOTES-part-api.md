@@ -287,10 +287,10 @@ follow	leg	PokeLeg	0.0625	1	ax
 ### 4.2 全部 36 行逐行翻译（不是示意图）
 
 现三张表实际条数：**13 行 param + 11 行 band + 12 行 expr = 36 行**，全部在下面。
-另外 14 条 `part` 行、13 条 `alias` 行、3 条 `follow` 行是**新增的元信息**
+另外 13 条 `part` 行、13 条 `alias` 行、3 条 `follow` 行是**新增的元信息**
 （`part`/`alias` 是今天散在 `main.cpp:1062` 和前端 JS 里的东西，`follow` 是 `legDragTick` 里的三个常量）。
 
-#### 4.2.1 part（14 个部位，顺序 = id）
+#### 4.2.1 part（13 个命名部位，顺序 = id；数组里共 14 个槽，0 号是空）
 
 ```
 part	head	头	5.0
@@ -316,7 +316,7 @@ part	headwear	头饰	5.0
 - 但**不翻 `label`**（给它 `其他`），且 `band/param/expr` 全空 —— 它存在的意义只是
   「这格有东西但认不出」，点上去 `hasAction=false` → 退回整套反应，和现在一样。
 
-列出 14 条正是为了让 **id 1..13 与现行 `kZoneNames` 完全同序**（这是迁移可逐位对账的前提）：
+这 13 条正是为了让 **id 1..13 与现行 `kZoneNames` 完全同序**（这是迁移可逐位对账的前提）：
 
 | id | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -537,7 +537,7 @@ tools/parts-migrate.py --out state/parts.tsv
 tools/parts-migrate.py --verify        # 反向 diff，不一致 exit 1
 ```
 
-**验证**：`--verify` 三张表全 `identical`；`wc -l state/parts.tsv` ≈ 14+13+13+13+12+3 ≈ 68 行数据。
+**验证**：`--verify` 三张表全 `identical`；`state/parts.tsv` 的数据行 = 13+13+13+13+12+3 = **67 行**（实测）。
 **这一步不接入任何代码**，`parts.tsv` 只是躺在那里。回滚 = 删文件。
 
 ### Step 2：写 `src/partapi.h`，**不接入**，只让它自检
@@ -550,7 +550,7 @@ MIYU_PARTS_DUMP=1 ./build/miyu-wayland 2>&1 | head -80    # 一次前台跑，�
 tools/parts-dump.py --expect state/parts.tsv              # python 侧独立解析，对账
 ```
 
-**验证**：两边输出逐条一致（部位 14 / band 13 / param 13 / expr 12 / follow 3，
+**验证**：两边输出逐条一致（部位 13 / band 13 / param 13 / expr 12 / follow 3，
 每个部位的 id 和名字一致）。**回滚**：删掉这十行 + 那个头文件，服务不受影响。
 
 ### Step 3：band + alias 接入（最危险的一步，先做）
@@ -683,3 +683,117 @@ tools/parts-dump.py --expect state/parts.tsv              # python 侧独立解�
 - 没有碰 `~/.dsh/plugins/`、`draginject`、`body/model/`、`body/voice/`。
 - 没有重新量坐标（4.2/Step 3 里的 11 个点用的是你给的那份，全局坐标由 `state/window.json`
   的 ox=186 / oy=74 换算，窗口 500×900）。
+
+---
+
+## 九、阶段一实测（Step 0–2，2026-11-10 21:5x–22:1x）
+
+**没碰 `web.cpp`**（ljm 当时在重做设置界面），也没碰 `build/`（他自己刚编过）。
+Step 2 的自检走**独立二进制**：`g++ … tools/parts-selftest.cc` → `/tmp/parts-selftest`，
+一条命令 1 秒，不起窗口、不建 layer surface、不动正在跑的服务。
+
+### 9.1 Step 0 备份与基线
+
+```
+state/bak-parts-2152/{part-bands,param-parts,part-react}.tsv   ← 原件
+state/bak-parts-2152/sha256.txt
+state/bak-parts-2152/baseline-journal.txt    ← 最后一次启动的 1003 行日志
+state/bak-parts-2152/baseline-geometry.txt    ← 12 个部位的 u/v 范围（改前）
+```
+
+工具侧基线（启动日志原文，改前 vs 改后要比的就是这几行）：
+
+```
+[zones] 判定带：从 state/part-bands.tsv 读了 11 条
+[web] 部位→表情：读进 12 条（state/part-react.tsv）
+[partpoke] 读到 509 个参数的范围
+[zones] drawable 715 个，挂了 part 的 712 个，认得出部位的 484 个（head:113 chest:77 arm:49 skirt:56 leg:42 tail:11 eye:91 mouth:19 brow:4 ear:12 waist:6 headwear:4）
+[plat-wl] input region: 881 条矩形 | 127912 px (28.4%) | bbox=[109,107 .. 446,837]
+```
+
+**⚠ 倍数基线缺一份**：`state/poke-check.json` 里只剩 head 一条（20:52 某次单点测试把
+12 部位的结果覆盖掉了），不能当基线。所以 **Step 3 开工前必须补跑一次**
+`tools/part-poke-check.py`（它会独占 layer surface，得先 `miyu-body-ctl stop`），
+存成 `state/poke-check-baseline.json`。24.7 节那张表可以当「大概范围」参考，但那是
+旧网格 + 旧参数的数，不能逐位比。
+
+### 9.2 Step 1 `tools/parts-migrate.py`（已跑通）
+
+```
+$ ./tools/parts-migrate.py --migrate --verify
+[ok] id 顺序：13 个部位与 src/partpoke.h kZoneNames[1..13] 逐位一致
+[ok] 写出 state/parts.tsv（67 行数据）
+[ok] state/part-bands.tsv       反向一致（11 行）
+[ok] state/param-parts.tsv      反向一致（13 行）
+[ok] state/part-react.tsv       反向一致（12 行）
+[ok] 反向 diff 全部通过
+```
+
+三处实现细节是踩过才知道的（脚本里都有注释）：
+
+1. **id 顺序是读源码比的**，不是脚本自己说了算：`kzone_names()` 正则抓
+   `src/partpoke.h` 的 `kZoneNames` 字面量，和脚本里的 `PARTS` 逐位比，对不上就 exit 1。
+   这样「id 不能重排」这条规矩由机器守，不靠人记。
+2. **说明列是第 7/6 列，不是行尾注释** —— 旧表里「说明」是 TAB 分隔的字段
+   （`部位 u0 u1 v0 v1 强制 说明`），第一次写成读行尾注释，diff 出来全是空。
+3. **param 反向要按文件原始顺序摊**，不能按 score —— 运行时才按 score 排，
+   表里的顺序是给人看的，两个混了 diff 一定红。
+
+### 9.3 Step 2 `src/partapi.h` + 双端对账（已跑通）
+
+```
+$ /tmp/parts-selftest --dump  > /tmp/dump.cpp.txt
+$ python3 tools/parts-dump.py > /tmp/dump.py.txt
+$ diff /tmp/dump.py.txt /tmp/dump.cpp.txt
+（无输出：115 行逐字节一致）
+```
+
+- C++ 侧 `stable_sort` 的稳定性和 python `list.sort` 的稳定性必须对得上 —— band 按
+  `prio` 降序、param 按 `score` 降序，**同分保留文件顺序**，两边一致才 diff 得出来。
+- 浮点格式定死：u/v `%.3f`、amp `%.3f`、gain `%.4f`、clamp `%.1f`、hold `%.1f`。
+
+自检 39 条结构断言全 `[ok]`（注册表 / 表情 / alias 11 例 / 带进格子 / 11 个真点）：
+
+```
+  [ok] 部位数 13 · id(head)=1 · id(headwear)=13 · id(other)=7
+  [ok] ear 4 条带（2 any + 2 body）· chest 0 条带 · head 0 个根参数（二十五拿掉的）
+  [ok] mouth → ＞＜（hold 5.0）· arm 不放表情 · head → 前倾
+  [ok] 女仆发饰A→13 · 眼镜框→1 · 左眼球→8 · 腰部衣服→12 · 短裙→4 · 组12→0
+  [ok] applyBands 应用 11 条 · 格(59,51)=eye · fill 带不抢已有标签
+  [ok] 11 个验证点全部判对（head/headwear/ear/eye/brow/mouth/chest/waist/skirt×2/leg）
+```
+
+**11 个点是拿文件里的 Z 行判的**，不是内存格子 —— 结果和真机日志里的判定完全一致，
+说明「带 + 别名 + id」这三样翻译没走样。
+
+### 9.4 三层兜底（已实测）
+
+| 场景 | 结果 |
+|---|---|
+| 文件不存在（`MIYU_PARTS_FILE=/tmp/nope.tsv`） | `parts=0`，一条 WARN，exit 1，不崩 |
+| 一行写错类型 + 两行引用未定义部位 | 好部位照读（2 个），坏行 3 条**逐条报行号和原文**，exit 0 |
+| 手改用空格分隔（没有 TAB） | 报「这一行没有 TAB（是不是用空格分隔了？）」—— 这是手改表最常见的错 |
+
+### 9.5 「加一个新部位只改配置」已经证明
+
+不改 C++、不重编译（同一个 `/tmp/parts-selftest` 二进制），只在表尾追加四行：
+
+```
+part	toe	脚趾	3.0
+band	toe	0.460	0.520	0.760	0.800	force	100
+param	toe	PokeLeg	70	0.500
+expr	toe	＞＜
+```
+
+```
+$ MIYU_PARTS_FILE=/tmp/parts-toe.tsv /tmp/parts-selftest --grid 0.490 0.780
+  指定点 u0.490 v0.780 → toe
+$ … --dump | grep '^PART 14'
+PART 14 toe 脚趾 hold=3.0 flags=-
+```
+
+这就是整个重构要的那一条性质，剩下的是把现有读点接过来（Step 3 往后）。
+
+### 9.6 下一步（等 ljm 说 web.cpp 弄完）
+
+Step 3 之前的准备工作只有一件：**补跑 `part-poke-check.py` 存基线**（见 9.1 的 ⚠）。

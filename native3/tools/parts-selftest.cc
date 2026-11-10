@@ -51,10 +51,42 @@ const Pt kPts[] = {
 
 int main(int argc, char** argv) {
     const bool dumpOnly = (argc > 1 && std::strcmp(argv[1], "--dump") == 0);
+    const bool gridOnly = (argc > 1 && std::strcmp(argv[1], "--grid") == 0);
 
     if (dumpOnly) {
         std::fputs(partapi::dump().c_str(), stdout);
         return partapi::reg().ok ? 0 : 1;
+    }
+
+    // --grid：只用判定带画一张格子图，再判 11 个点。
+    // 这条路径 = 渲染层「band 生效、drawable 光栅化缺席」时的样子，
+    // 也是「加一个新部位只改配置」能不能成立的最小证明（带画进去 → 点得到）。
+    if (gridOnly) {
+        const int gw = 120, gh = 240;
+        std::vector<unsigned char> grid(static_cast<size_t>(gw) * gh, 0);
+        std::vector<unsigned char> ok(grid.size(), 1);
+        const int n = partapi::applyBands(grid, gw, gh, &ok);
+        std::printf("带 %d 条画进 %dx%d 的格子\n", n, gw, gh);
+        for (const Pt& p : kPts) {
+            const float u = static_cast<float>(p.x) / 500.0f;
+            const float v = static_cast<float>(p.y) / 900.0f;
+            partapi::setGrid(grid.data(), gw, gh);
+            const std::string got = partapi::classify(u, v);
+            partapi::setGrid(nullptr, 0, 0);
+            std::printf("  %-6s (%3d,%3d) → %s\n", p.label, p.x, p.y,
+                        got.empty() ? "(带子没盖到)" : got.c_str());
+        }
+        // --grid U V：额外判一个指定点（调新带时用）
+        if (argc > 3) {
+            const float u = static_cast<float>(std::atof(argv[2]));
+            const float v = static_cast<float>(std::atof(argv[3]));
+            partapi::setGrid(grid.data(), gw, gh);
+            const std::string got = partapi::classify(u, v);
+            partapi::setGrid(nullptr, 0, 0);
+            std::printf("  指定点 u%.3f v%.3f → %s\n", u, v,
+                        got.empty() ? "(空白)" : got.c_str());
+        }
+        return 0;
     }
 
     std::printf("── 注册表 ─────────────────────────────────────────\n");
@@ -114,7 +146,7 @@ int main(int argc, char** argv) {
     {
         const int gw = 120, gh = 240;
         std::vector<unsigned char> grid(static_cast<size_t>(gw) * gh, 0);
-        std::vector<bool> ok(grid.size(), true);
+        std::vector<unsigned char> ok(grid.size(), 1);
         const int applied = partapi::applyBands(grid, gw, gh, &ok);
         checkEq(applied, 11, "应用了 11 条 body 带（any 那两条不进格子）");
         // 抽查几格：眼睛带 u .415-.590 / v .208-.228
@@ -125,7 +157,7 @@ int main(int argc, char** argv) {
         std::vector<unsigned char> g2(grid);
         const int hx = static_cast<int>(0.450f * gw), hy = static_cast<int>(0.120f * gh);
         g2[static_cast<size_t>(hy) * gw + static_cast<size_t>(hx)] = 6;   // tail
-        std::vector<bool> ok2(g2.size(), true);
+        std::vector<unsigned char> ok2(g2.size(), 1);
         partapi::applyBands(g2, gw, gh, &ok2);
         checkEq(static_cast<int>(g2[static_cast<size_t>(hy) * gw + static_cast<size_t>(hx)]), 6,
                 "fill 带不抢已有标签");

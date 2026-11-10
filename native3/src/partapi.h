@@ -260,6 +260,9 @@ inline void loadParts(Registry& r) {
             fo.clampv = toF(c[4]);
             fo.src = (c[5].size() > 1) ? c[5][1] : 'x';   // "ax" → 'x'
             r.follows.push_back(fo);
+        } else if (c.size() == 1) {
+            // 手改表最常见的错：用空格分隔。报一句人话，别让人对着「认不出记录类型」猜
+            note(r, ln, "这一行没有 TAB（是不是用空格分隔了？）", kind);
         } else {
             note(r, ln, "认不出记录类型", kind);
         }
@@ -450,7 +453,7 @@ inline std::string classify(float u, float v) {
 // ── 判定带应用到格子图（渲染层，每帧一次；alpha 白名单之后、泛洪补洞之前）──
 // 返回应用的条数（日志用）。ok 可以为 nullptr = 不做剪影限制（调试用）。
 inline int applyBands(std::vector<unsigned char>& grid, int gw, int gh,
-                      const std::vector<bool>* ok) {
+                      const std::vector<unsigned char>* ok) {
     const Registry& r = reg();
     if (gw <= 0 || gh <= 0 || grid.size() != static_cast<size_t>(gw) * static_cast<size_t>(gh))
         return 0;
@@ -466,7 +469,7 @@ inline int applyBands(std::vector<unsigned char>& grid, int gw, int gh,
                 if (gy < 0 || gx < 0) continue;
                 const size_t i = static_cast<size_t>(gy) * static_cast<size_t>(gw) +
                                  static_cast<size_t>(gx);
-                if (ok && i < ok->size() && !(*ok)[i]) continue;
+                if (ok && i < ok->size() && !(*ok)[i]) continue;   // 剪影外不动
                 if (!b.force && grid[i]) continue;    // 补白：不抢已有标签
                 grid[i] = b.id;
             }
