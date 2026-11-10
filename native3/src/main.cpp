@@ -1783,6 +1783,82 @@ static float herReactionScale() {
     return std::max(0.45f, std::min(1.45f, 1.0f - 0.55f * herTired() + 0.45f * herHappy()));
 }
 
+// ── 二十六：她自己会动 ────────────────────────────────────────────
+//
+// 2026-11-11 01:2x 他说「都是米鱼，去试试解决」。缺的第一条是：
+// **现在她动一下都要人推**，没人碰就只剩呼吸，那是摆设不是人。
+//
+// 这一段给她一个自己的时序：不靠外部定时器、不靠点击，按她**此刻的状态**
+// 决定什么时候动、动什么。
+//   · 累（tired 高）→ 很久才动一次，动的幅度也小，多半只是换个重心
+//   · 精神（happy 高）→ 动得勤，会换表情、会看过来
+//   · 正在播动作/计划/被人拖着 → 一律让位，别抢
+// 动作只用「微动」级别：换重心、偏头、扫一眼。不做大事 —— 她不是在表演。
+struct Autonomy {
+    double nextAt = -1.0;      // 下一次想动的时间
+    double lastAt = -1.0;
+    int    kind = 0;           // 上一次做了什么（避免连着重复）
+};
+static Autonomy gAuto;
+
+static void autonomyTick(Csm::CubismModel* model, Csm::CubismMotionManager* mm, double now) {
+    if (gAuto.nextAt < 0.0) {          // 第一次：定一个不太近的点
+        gAuto.nextAt = now + 45.0;
+        return;
+    }
+    if (now < gAuto.nextAt) return;
+    // 有动作在播 / 被人拖着 / 正在被戳 —— 都让位，别跟人抢
+    if (postureBusy(mm) || platIsDragging()) return;
+    if (gPartPoke.on) return;
+
+    // 累了就隔久一点，精神就勤一点
+    const float ty = herTired(), hp = herHappy();
+    double gap = 420.0 - 260.0 * hp + 300.0 * ty;   // 4.4 分钟（精神）~ 12 分钟（累）
+    if (gap < 120.0) gap = 120.0;
+    if (gap > 900.0) gap = 900.0;
+    gAuto.nextAt = now + gap;
+    gAuto.lastAt = now;
+
+    // 挑一件小事做。累的时候只剩「换重心」，精神时才换表情/说话
+    const int pick = static_cast<int>((gAuto.kind + 1 + (static_cast<int>(now) % 3)) % 4);
+    gAuto.kind = pick;
+    auto setP = [&](const char* name, float v) {
+        const Csm::csmInt32 i = model->GetParameterIndex(
+            Csm::CubismFramework::GetIdManager()->GetId(name));
+        if (i >= 0) model->SetParameterValue(i, v, 0.6f);
+    };
+    const char* what = "";
+    switch (pick) {
+        case 0:   // 换个重心
+            setP("ParamAngleZ", (ty > 0.6f ? 2.0f : 4.0f) * ((static_cast<int>(now) % 2) ? 1.0f : -1.0f));
+            what = "换个重心";
+            break;
+        case 1:   // 偏一下头
+            setP("ParamAngleX", (static_cast<int>(now) % 2 ? 6.0f : -6.0f));
+            setP("ParamAngleY", 3.0f);
+            what = "偏了下头";
+            break;
+        case 2:   // 换个表情（只在不太累时）
+            if (ty < 0.7f) {
+                const char* pool[] = {"＞＜", "圈圈眼", "爱心眼", "屑屑眼"};
+                exprPlay(pool[static_cast<int>(now) % 4]);
+                what = "换了个表情";
+            } else {
+                setP("ParamAngleZ", -2.0f);
+                what = "换了个重心（累，不想换表情）";
+            }
+            break;
+        default:  // 看过来一眼
+            setP("ParamAngleX", 0.0f);
+            setP("ParamAngleY", -2.0f);
+            what = "抬头看了一眼";
+            break;
+    }
+    log_("[auto] %s（累 %.0f / 开心 %.0f，下次 %.0f 秒后）", what, gHer.tired, gHer.happy, gap);
+}
+
+
+
 // 二十六：连击时放大冲量（partPokeTick 起手时设，partPokeStart 用）
 static float gPokeBoost = 1.0f;
 
@@ -3875,6 +3951,7 @@ int main() {
         probeTick(model, now);
         partPokeTick(model, now);
         herStateTick(now);
+        autonomyTick(model, motionManager, now);
         // 她的状态 → 姿态。连续量，不是开关：累了整个人往下沉、头低一点；
         // 开心的时候反过来。这是「身体反映她」最直接的一层。
         if (gHer.valid) {
