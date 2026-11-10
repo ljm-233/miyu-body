@@ -59,6 +59,7 @@ double gDur = 0.0;          // 这句话要挂多久（由 ctl 的嘴型时长�
 int    gTexW = 0, gTexH = 0;
 bool   gDirty = false;      // 文字变了、需要重画纹理
 double gNow = 0.0;          // 这一帧的时间（draw 里算动画要用）
+double gHold = 2.6;         // 这句话挂到什么时候（say 时按字数算）
 
 // ── 圆角矩形（画进 CPU 缓冲，不是 GL） ──────────────────────────
 // 用「到圆角圆心的距离」算覆盖率，简单可靠：角落平滑，不会有锯齿硬边。
@@ -239,6 +240,11 @@ void say(const char* text, double now) {
     gText = text;
     gT0 = now;
     gDirty = true;
+    // 挂多久：按字数估说话时长（每字 0.16s）+ 收尾停 1.4s。
+    // 之前写死 2.6 秒，十来个字的长句还没看完就没了。
+    int chars = 0;
+    for (unsigned char c : gText) if ((c & 0xC0) != 0x80) ++chars;
+    gHold = 1.4 + 0.16 * static_cast<double>(chars < 1 ? 1 : chars);
 }
 
 void clear() { gT0 = 0.0; gText.clear(); }
@@ -252,7 +258,7 @@ void tick(double now, double dt) {
         if (buildTexture(gText, 0.0)) gDirty = false;
     }
     // 一句最长挂 6 秒（防止某句话把气泡钉在那儿）
-    if (now - gT0 > 6.0) gT0 = 0.0;
+    if (now - gT0 > gHold + 1.5) gT0 = 0.0;
 }
 
 // 2026-11-11 01:4x：固定管线（glMatrixMode/glOrtho/glEnable(GL_TEXTURE_2D)）在这个
@@ -328,7 +334,7 @@ void draw(int winW, int winH) {
     float alpha = 1.0f;
     if (t < 0.0) alpha = 0.0f;
     else if (t < 0.16) alpha = static_cast<float>(t / 0.16);
-    else if (t > 2.6) alpha = static_cast<float>(std::max(0.0, 1.0 - (t - 2.6) / 0.35));
+    else if (t > gHold) alpha = static_cast<float>(std::max(0.0, 1.0 - (t - gHold) / 0.35));
 
     const float verts[] = {
         x0, y0, 0.0f, 1.0f,
