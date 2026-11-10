@@ -197,7 +197,7 @@ const char* kHtml = R"HTML(<!doctype html>
       {k:'alpha', t:'range', min:0.3, max:1.0, step:0.05, label:'透明度',
        d:'越低桌面从她身上透出来越多'},
       {k:'corner', t:'select', label:'吸角',
-       opts:[['free','自由'],['tl','左上'],['tr','右上'],['bl','左下'],['br','右下']],
+       opts:[['center','正中'],['free','自由'],['tl','左上'],['tr','右上'],['bl','左下'],['br','右下']],
        d:'吸到副屏哪个角，选完马上挪过去', show:pick(CORNER)}
     ]},
     {g:'外观', items:[
@@ -638,7 +638,7 @@ void loadSettings() {
         }
         else if (k == "corner" && v.t == VStr) {
             const std::string c = v.s;
-            if (c == "tl" || c == "tr" || c == "bl" || c == "br" || c == "free") gSet.corner = c;
+            if (c == "tl" || c == "tr" || c == "bl" || c == "br" || c == "center" || c == "free") gSet.corner = c;
         }
         // ── 第十七节：抗锯齿 + 后处理三件 ──────────────────────────
         else if (k == "shadow" && v.t == VNum) gSet.shadow = clampf(float(v.n), 0.0f, 1.0f);
@@ -879,7 +879,7 @@ std::string handleSet(const std::string& body, bool logIt) {
         }
         if (k == "corner" && v.t == VStr) {
             const std::string c = v.s;
-            if (c == "tl" || c == "tr" || c == "bl" || c == "br" || c == "free") {
+            if (c == "tl" || c == "tr" || c == "bl" || c == "br" || c == "center" || c == "free") {
                 if (c != gSet.corner) { gSet.corner = c; changed.push_back("corner"); }
             } else {
                 if (logIt) logw("POST /set corner=%s 不认识，忽略", c.c_str());

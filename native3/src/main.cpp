@@ -333,7 +333,7 @@ static bool probeMode();
 // PositionY 只驱动 physics（头发/裙摆），所以视觉上就是「被拎起来晃了一下」——
 // 这一条是他要的效果，不是妥协。
 struct Pulse { bool on; double t0; double dur; float aAngle; float aPosY; };
-static Pulse gGrab{false, 0, 0.42, -2.4f, 6.0f};   // 0.42s：微微上提 + 一点点后仰
+static Pulse gGrab{false, 0, 0.42, -6.0f, 14.0f};  // 0.42s：上提 + 后仰（原先 -2.4/6 他看不出变化，翻了一倍多）
 static Pulse gDoze{false, 0, 3.00, -1.5f, -7.0f};   // 3.00s：低头（和 点头.json 同一套参数）
 
 // 返回这个脉冲这一帧的 0…1 包络（缓入缓出），跑完自己关掉
@@ -1043,6 +1043,7 @@ struct PartZoneRig {
     int    clips = 0;
     std::vector<unsigned char> cellOk;   // 这个格子里有没有她（来自 alpha 读回）
     bool   cellOkReady = false;
+    int    lastFillIn = 0;               // 上一帧「剪影内补洞」填了多少格（只给日志看）
 
 };
 static PartZoneRig gZones;
@@ -1264,6 +1265,56 @@ static void partZoneClip(const unsigned char* rgba, int w, int h, int th) {
 }
 
 // 每帧（限流 ~20Hz）：顶点 → 格子。k/W/H 和渲染用的是同一套投影。
+// 二十五：补「内部的洞」。
+// 症状：腿上有几片点下去判空白（他试了两次都是膝上那段和袜口），因为那几行
+// 三角形没覆盖到，alpha 白名单又把边上的格子清掉了，中间就留下 3~10 格高的空条。
+// 做法：从窗口四边把空白泛洪标成"外面"，剩下的空白块是封闭洞，整块填成邻居里
+// 出现最多的那个部位。外面那一大片透明区连通到边界，永远不会被填。
+// 太大的块也不填（>1/8 张图）：那不是洞，是腿之间或裙子底下真的空着。
+static int zoneFillHoles(std::vector<unsigned char>& g, int GW, int GH) {
+    const size_t N = g.size();
+    if (N == 0) return 0;
+    std::vector<unsigned char> out(N, 0), done(N, 0);
+    std::vector<size_t> q;
+    auto pushOut = [&](int x, int y) {
+        if (x < 0 || y < 0 || x >= GW || y >= GH) return;
+        const size_t i = static_cast<size_t>(y) * GW + x;
+        if (g[i] || out[i]) return;
+        out[i] = 1; q.push_back(i);
+    };
+    for (int x = 0; x < GW; ++x) { pushOut(x, 0); pushOut(x, GH - 1); }
+    for (int y = 0; y < GH; ++y) { pushOut(0, y); pushOut(GW - 1, y); }
+    for (size_t h = 0; h < q.size(); ++h) {
+        const int x = static_cast<int>(q[h] % GW), y = static_cast<int>(q[h] / GW);
+        pushOut(x + 1, y); pushOut(x - 1, y); pushOut(x, y + 1); pushOut(x, y - 1);
+    }
+    const int nb[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    int filled = 0;
+    for (size_t s = 0; s < N; ++s) {
+        if (g[s] || out[s] || done[s]) continue;
+        std::vector<size_t> blob{s};
+        done[s] = 1;
+        int cnt[partpoke::kZoneCount] = {0};
+        for (size_t h = 0; h < blob.size(); ++h) {
+            const int x = static_cast<int>(blob[h] % GW), y = static_cast<int>(blob[h] / GW);
+            for (int k = 0; k < 4; ++k) {
+                const int nx = x + nb[k][1], ny = y + nb[k][0];
+                if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+                const size_t j = static_cast<size_t>(ny) * GW + nx;
+                if (g[j]) { if (g[j] < partpoke::kZoneCount) ++cnt[g[j]]; }
+                else if (!out[j] && !done[j]) { done[j] = 1; blob.push_back(j); }
+            }
+        }
+        if (blob.size() > N / 8) continue;
+        int best = 0, bn = 0;
+        for (int i = 1; i < partpoke::kZoneCount; ++i) if (cnt[i] > bn) { bn = cnt[i]; best = i; }
+        if (!best) continue;
+        for (size_t i : blob) g[i] = static_cast<unsigned char>(best);
+        filled += static_cast<int>(blob.size());
+    }
+    return filled;
+}
+
 static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double now) {
     if (!gZones.ready) { zoneInit(model); if (!gZones.ready) return; }
     if (now - gZones.lastBuild < 0.05) return;
@@ -1364,6 +1415,13 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     // 二十四：光栅化完、还没被 alpha 白名单和「借标签」动过的那一份，拿来对数
     static std::vector<unsigned char> dbgRaw;
     if (gZones.built < 20) dbgRaw = gZones.grid;
+    // 二十五：记一份「各部位光栅化出来的原始格数」。
+    // 补洞要靠它当闸门 —— 小部位（发饰只有 120 来格）一旦被允许向外借，
+    // 8 圈下来会把整个头顶的头发都染成 headwear，「头」就只剩半张脸（6.47 掉到 0.55 那次）。
+    int rawCnt[partpoke::kZoneCount] = {0};
+    for (size_t i = 0; i < gZones.grid.size(); ++i)
+        if (gZones.grid[i] && gZones.grid[i] < partpoke::kZoneCount) ++rawCnt[gZones.grid[i]];
+
     // 只留她身上的格子（alpha 白名单）
     if (gZones.cellOkReady && gZones.cellOk.size() == gZones.grid.size()) {
         for (size_t i = 0; i < gZones.grid.size(); ++i)
@@ -1403,15 +1461,28 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         // （u .486 v .162）被判成 head，而格子文件里那一格写的是 headwear。
         // 位置带把这块钉死：v .118..0.172、u .395..0.610 内一律算头饰。
         {
-            static const float kHwV0 = 0.118f, kHwV1 = 0.172f;
-            static const float kHwU0 = 0.395f, kHwU1 = 0.610f;
+            // 2026-11-10 20:0x：这条带子改过两次。
+            // ① 原来 v .118..0.172 一整条横带：把整个头顶的头发都写成了 headwear，
+            //    「头」的格子从 6.47 掉到 0.55（他说的那个回归）。
+            // ② 收成 v .120..0.150 还是盖住 173 格（raw 只有 120 格，带子比本体还大）。
+            // ③ 现在改成**左右两块**：发饰是头顶两侧那对白色蕾丝，中间那一撮是头发。
+            //    中间留给 head，两边钉成 headwear；每边 v 放到 .118..0.178 覆盖褶边。
+            struct HwBox { float u0, u1; };
+            static const HwBox kHw[2] = {{0.395f, 0.470f}, {0.535f, 0.610f}};
+            static const float kHwV0 = 0.120f, kHwV1 = 0.130f;   // 只留最上面那条褶边
             const int gy0 = static_cast<int>(kHwV0 * GH), gy1 = static_cast<int>(kHwV1 * GH);
-            const int gx0 = static_cast<int>(kHwU0 * GW), gx1 = static_cast<int>(kHwU1 * GW);
-            for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
-                for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
-                    const size_t i = static_cast<size_t>(gy) * GW + gx;
-                    if (gZones.cellOk[i]) gZones.grid[i] = 13;    // 13 = headwear
-                }
+            for (int k2 = 0; k2 < 2; ++k2) {
+                const int gx0 = static_cast<int>(kHw[k2].u0 * GW);
+                const int gx1 = static_cast<int>(kHw[k2].u1 * GW);
+                for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
+                    for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
+                        const size_t i = static_cast<size_t>(gy) * GW + gx;
+                        // 二十五：只在**还没有标签**的格子上补 — 原来是无条件写 13，
+                        // 结果发饰带把头顶的头发（本来是 head）整片吃掉了。
+                        // 现在只填空位：drawable 已经判成 head 的地方留给 head。
+                        if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 13;
+                    }
+            }
         }
         // 二十四：腰。模型里没有「腰」这个 part —— 只有「腰部衣服」，而且它被围裙和
         // 裙子压着，只剩两三个格子（实测 raw 2 格）。所以腰按**位置**画一条带子：
@@ -1451,6 +1522,46 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
                 depth[j] = static_cast<signed char>(depth[i] + 1);
                 q.push_back(j);
             }
+        }
+        // 二十五：剪影里**还剩下**的空白再借一次，这次最远 8 圈。
+        // 腿上那 11 行空条（袜口附近）两边都是 leg，两圈够不着，所以才漏；而第一遍
+        // 不敢放宽，是怕把裙子/手臂的轮廓往外撑。这一遍只走 cellOk（她身上），
+        // 剪影外一格都不动，口径正好。
+        {
+            std::vector<size_t> q2;
+            std::vector<signed char> d2(gZones.grid.size(), -1);
+            for (size_t i = 0; i < gZones.grid.size(); ++i)
+                if (gZones.grid[i]) { q2.push_back(i); d2[i] = 0; }
+            int filledIn = 0;
+            for (size_t h2 = 0; h2 < q2.size(); ++h2) {
+                const size_t i = q2[h2];
+                if (d2[i] >= 8) continue;
+                const int gy = static_cast<int>(i / GW), gx = static_cast<int>(i % GW);
+                const int nb[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+                for (int k = 0; k < 4; ++k) {
+                    const int ny = gy + nb[k][0], nx = gx + nb[k][1];
+                    if (ny < 0 || ny >= GH || nx < 0 || nx >= GW) continue;
+                    const size_t j = static_cast<size_t>(ny) * GW + nx;
+                    if (!gZones.cellOk[j]) continue;          // 只补剪影里
+                    if (gZones.grid[j] || d2[j] >= 0) continue;
+                    if (rawCnt[gZones.grid[i]] < 150) continue;   // 小部位不许向外借
+                    gZones.grid[j] = gZones.grid[i];
+                    d2[j] = static_cast<signed char>(d2[i] + 1);
+                    q2.push_back(j);
+                    ++filledIn;
+                }
+            }
+                    if (filledIn) gZones.lastFillIn = filledIn;
+        }
+    }
+    // 二十五：落盘/判定之前把内部空洞补上
+    {
+        const int filled = zoneFillHoles(gZones.grid, GW, GH);
+        // 降噪：这两个数每帧都在小幅变（她的呼吸），只在每 10 秒报一次
+        static double lastFillLog = -1e9;
+        if (now - lastFillLog > 10.0) {
+            lastFillLog = now;
+            log_("[zones] 补洞：封闭块 %d 格 / 剪影内 %d 格", filled, gZones.lastFillIn);
         }
     }
     // 交给平台层（同一个 inline 对象）
@@ -1691,12 +1802,61 @@ static float mouthPokeAmount(Csm::CubismModel* model) {
     return a > 1.0f ? 1.0f : a;
 }
 
+// 二十五：点部位出表情（他在 2026-11-10 20:1x 改的口径）。
+// 原先点头会让她的头转一下 + 头发甩一下，他的反应是「很奇怪」——
+// 头本来就在那儿，被点一下不该整块动，该是**脸色变了**。
+// 于是这八个部位改成「点一下换一个表情，2 秒后淡回默认」，只用情绪系表情，
+// 功能型的（裙子切换/脱鞋/尾巴开关/竖食指/眼镜/体型）一个都不碰。
+// 头是「被摸头」，所以给随机；其余每个部位固定一种，互不重复。
+static const char* tapExprFor(const std::string& part, unsigned seed) {
+    struct Row { const char* part; const char* e[4]; int n; };
+    static const Row kRows[] = {
+        // 2026-11-10 20:2x：「屑屑眼」从这张表里拿掉了 —— 点它、再回默认之后
+        // 她的眼睛一直闭着，重启才开。那个 exp3 只有 key3/key5/key6 三个 Add 参数，
+        // 回默认只把参数写回一帧就收工，盖不住。宁可用确定干净的三个。
+        {"head",     {"脸红", "兔牙", "＞＜"},            3},   // 被摸头：随机害羞系
+        {"headwear", {"流冷汗"},                         1},   // 碰到蕾丝发饰
+        {"ear",      {"＞＜"},                           1},   // 兽耳敏感
+        {"eye",      {"圈圈眼"},                         1},
+        {"brow",     {"黑脸"},                           1},
+        {"mouth",    {"兔牙"},                           1},
+        {"chest",    {"脸红"},                           1},
+        {"waist",    {"＞＜"},                           1},
+    };
+    for (const Row& r : kRows)
+        if (part == r.part) return r.e[seed % static_cast<unsigned>(r.n)];
+    return nullptr;
+}
+
+static double gTapExprUntil = 0.0;   // 表情留到什么时候
+static bool   gTapExprOn = false;
+
 static void partPokeTick(Csm::CubismModel* model, double now) {
     // ① 平台层点了新的部位
     if (partpoke::gGen != gPartPoke.lastGen) {
         gPartPoke.lastGen = partpoke::gGen;
         const std::string part(partpoke::gPart);
-        if (!part.empty() && web::settings().tapPart) partPokeStart(model, part, now);
+        if (!part.empty() && web::settings().tapPart) {
+            static unsigned gTapSeed = 0;
+            const char* ex = tapExprFor(part, gTapSeed++);
+            if (ex) {
+                // 只换脸，不动身体 —— 这就是他说「差不多」的那个效果
+                if (web::settings().expr) {
+                    exprPlay(ex);
+                    gTapExprUntil = now + 2.0;
+                    gTapExprOn = true;
+                    log_("[tap] 点 %s -> 表情「%s」（2 秒后回默认，不写身体参数）", part.c_str(), ex);
+                }
+            } else {
+                partPokeStart(model, part, now);
+            }
+        }
+    }
+    // 表情到点回默认
+    if (gTapExprOn && now > gTapExprUntil) {
+        gTapExprOn = false;
+        if (web::settings().expr) exprPlay("默认");
+        log_("[tap] 表情回默认");
     }
     partPokeEyeTick(model, now);
     if (!gPartPoke.on) return;
@@ -2949,6 +3109,53 @@ static std::vector<std::string> scanExpressions(const char* dir) {
     return out;
 }
 
+// 二十五：拖动时的腿。
+// 腿那条物理链（PhysicsSetting135）只吃 HipAngleX（权重 23）和 PositionZ（权重 100），
+// 而拖动/滑行只写 AngleX / AngleZ / PositionX / PositionY —— 腿一个输入都没喂到，
+// 所以他拎着她走的时候腿是死的，手和尾巴却在动。
+// 这里直接复用 swayTick 算好的那个「已有 0.05s 平滑 + 0.15s 衰减」的量（gSway.ax）：
+//   HipAngleX  管前后甩（探针实测这个参数动腿 9180px，是腿最吃的一口）
+//   PokeLeg    管张合（它那条链的输出是 LEGAngleZ2，腿往外张／内收）
+// 两个都写**绝对值**：待机和视线都不碰它们，读回来加会一帧一帧累积。
+// 放在 partPokeTick **之后**调：点腿的弹簧在跑时整段让给它，不然拖动会把它压掉。
+static void legDragTick(Csm::CubismModel* model, double now) {
+    static Csm::csmInt32 iHipX = -2, iHipZ = -2, iPokeLeg = -2;
+    if (iHipX == -2) {
+        Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+        iHipX   = model->GetParameterIndex(m->GetId("HipAngleX"));
+        iHipZ   = model->GetParameterIndex(m->GetId("HipAngleZ"));
+        iPokeLeg = model->GetParameterIndex(m->GetId("PokeLeg"));
+    }
+    if (iHipX < 0 && iHipZ < 0 && iPokeLeg < 0) return;
+    if (gPartPoke.on && gPartPoke.part == "leg") return;   // 点腿的弹簧优先
+
+    // 三个量都从 swayTick 已经平滑/衰减好的结果里取：
+    //   HipAngleX  前后甩（正视图里几乎看不出来，但腿的网格确实在动）
+    //   HipAngleZ  左右甩（**看得见的那个**：腿会往两边偏，像被拎着走）
+    //   PokeLeg    张合（那条链的输出是 LEGAngleZ2）
+    const float ax = gSway.ax, az = gSway.az;   // ±16 / ±10 量级
+    float hipX = ax * 0.6f;
+    float hipZ = az * 2.2f;
+    float pk   = ax / 16.0f;
+    if (hipX >  30.0f) hipX =  30.0f;
+    if (hipX < -30.0f) hipX = -30.0f;
+    if (hipZ >  30.0f) hipZ =  30.0f;
+    if (hipZ < -30.0f) hipZ = -30.0f;
+    if (pk >  1.0f) pk =  1.0f;
+    if (pk < -1.0f) pk = -1.0f;
+
+    if (iHipX >= 0)    model->SetParameterValue(iHipX, hipX, 1.0f);
+    if (iHipZ >= 0)    model->SetParameterValue(iHipZ, hipZ, 1.0f);
+    if (iPokeLeg >= 0) model->SetParameterValue(iPokeLeg, pk, 1.0f);
+
+    static double lastLog = -1e9;
+    if ((hipX != 0.0f || hipZ != 0.0f || pk != 0.0f) && now - lastLog > 1.0) {
+        lastLog = now;
+        log_("[legdrag] 拖动带腿：HipAngleX=%+.2f HipAngleZ=%+.2f PokeLeg=%+.2f（来源 ax=%+.2f az=%+.2f）",
+             hipX, hipZ, pk, ax, az);
+    }
+}
+
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
@@ -3334,12 +3541,20 @@ int main() {
         else if (kUseSine) idleTick(model, now);   // 计划在播时它自己只写呼吸（见 idleTick）
         if (gExprMgr) gExprMgr->UpdateMotion(model, dt);   // 表情在动作之后、眨眼之前
         if (gExprResetPending) {
-            gExprResetPending = false;
+            // 二十五：写**三帧**。原来只写一帧，而 exp3 里那些 Blend=Add 的参数
+            // （屑屑眼的 key3/key5/key6 就是）在下一帧又被加起来，盖不住 —— 表现是
+            // 点完那个表情、回默认之后她一直闭着眼，只有重启才好。
+            static int resetFrames = 0;
+            if (resetFrames == 0) resetFrames = 3;
             for (const auto& nm : gExprTouched) {
                 const Csm::csmInt32 idx = model->GetParameterIndex(Csm::CubismFramework::GetIdManager()->GetId(nm.c_str()));
-                if (idx >= 0) model->SetParameterValue(idx, model->GetParameterDefaultValue(idx));
+                if (idx >= 0) model->SetParameterValue(idx, model->GetParameterDefaultValue(idx), 1.0f);
             }
-            gExprTouched.clear();
+            if (--resetFrames <= 0) {
+                resetFrames = 0;
+                gExprResetPending = false;
+                gExprTouched.clear();
+            }
         }
         // 嘴：在表情之后写（表情要是不小心也写了 ParamMouthOpenY，说话优先），
         // 眨眼之前（眨眼只碰眼睛，顺序其实无所谓，就近放）。一律 Set —— 这个参数
@@ -3427,6 +3642,7 @@ int main() {
         // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
         probeTick(model, now);
         partPokeTick(model, now);
+        legDragTick(model, now);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。

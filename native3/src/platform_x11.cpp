@@ -160,3 +160,7 @@ bool platDragVelocity(float* vx, float* vy) {
     if (vy) *vy = 0.0f;
     return false;
 }
+
+void platFakeDrag(float vx, float vy, int dragMs) {   // X11 备胎不做手感，诊断口空着
+    (void)vx; (void)vy; (void)dragMs;
+}

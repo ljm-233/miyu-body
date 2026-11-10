@@ -127,5 +127,10 @@ void platSetDragFeel(bool grab, bool inertia, bool edgeSoft);
 // 只给水平方向也一起算：倾斜用 vx，轻微缩放用 |vy|。
 bool platDragVelocity(float* vx, float* vy);
 
+// 诊断：直接给弹簧一个初速度，模拟「正在拖」的那一下 —— 不用真鼠标。
+// 给手感参数（dragSway / dragSpring / 腿的跟随）做验收时全靠它：
+// 以前只能自己拿鼠标拖，一手拿不准、二还占着 ljm 的光标。
+void platFakeDrag(float vx, float vy, int dragMs);
+
 // 弹簧增益（设置页 dragSpring 0–2）：乘在 ω 上。0.5 更软更重、2 更硬更跟手。
 void platSetDragSpring(float gain);

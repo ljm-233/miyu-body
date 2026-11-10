@@ -25,7 +25,7 @@ struct Settings {
     bool        tap    = true;      // 单击反应（等价 MIYU_NO_TAP，运行时可变）
     bool        expr   = true;      // 表情切换（plan 里的 expr 也受它管）
     float       idle   = 1.0f;      // 0.0–3.0  待机幅度倍率（0 = 只留呼吸）
-    std::string corner = "free";    // tl/tr/bl/br/free
+    std::string corner = "center";  // center/tl/tr/bl/br/free
     bool        hide   = false;     // 整个隐藏（全透明 + 输入区清空，进程还在）
 
     // ── 第十六节新增 ──────────────────────────────────────────────

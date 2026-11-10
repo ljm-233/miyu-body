@@ -289,6 +289,25 @@ void handleLine(const std::string& raw, double now) {
         }
     }
 
+    // sway：诊断用 —— 直接给弹簧一个初速度，模拟「正在拖」，不碰真实鼠标。
+    // 用法：echo '{"sway":{"vx":-400,"vy":80}}' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/miyu-body.sock
+    {
+        const auto* ks = std::strstr(line.c_str(), "\"sway\"");
+        if (ks) {
+            const char* px = std::strstr(ks, "\"vx\"");
+            const char* py = std::strstr(ks, "\"vy\"");
+            if (px && py) {
+                any = true;
+                const float vx = static_cast<float>(std::atof(std::strchr(px, ':') + 1));
+                const float vy = static_cast<float>(std::atof(std::strchr(py, ':') + 1));
+                int ms = 0;
+                if (const char* pm = std::strstr(ks, "\"ms\"")) ms = std::atoi(std::strchr(pm, ':') + 1);
+                log_("[ctl] sway 诊断注入 vx=%.0f vy=%.0f ms=%d", vx, vy, ms);
+                platFakeDrag(vx, vy, ms);
+            }
+        }
+    }
+
     // expr（空串 / "默认" = 淡出回默认）
     std::string en;
     if (keyStr(line, "expr", en)) {

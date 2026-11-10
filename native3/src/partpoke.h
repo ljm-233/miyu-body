@@ -204,9 +204,24 @@ inline std::string classify(float u, float v) {
     if (gu >= gGridW) gu = gGridW - 1;
     if (gv >= gGridH) gv = gGridH - 1;
     if (gZoneCells.size() == static_cast<size_t>(gGridW) * static_cast<size_t>(gGridH)) {
-        const unsigned char c = gZoneCells[static_cast<size_t>(gv) * gGridW + gu];
-        if (c == 0 || c >= kZoneCount) return std::string();
-        return std::string(kZoneNames[c]);
+        const unsigned char c0 = gZoneCells[static_cast<size_t>(gv) * gGridW + gu];
+        if (c0 != 0 && c0 < kZoneCount) return std::string(kZoneNames[c0]);
+        // 二十五：边缘兜底。她腿的外轮廓、袜口那几圈半透明像素被判成 0，点下去就
+        // 落空（他试出来的 (195,760) 就是这么一条）。格子在剪影里已经补过，剩下这些
+        // 都是最外 1~2 格：在 5×5 邻域里找最近的非空格子，按曼哈顿距离取最近的。
+        // 再远就不猜了 —— 那可能是裙子底下的缝，硬猜会让她乱动。
+        int bestD = 99; unsigned char best = 0;
+        for (int dy = -2; dy <= 2; ++dy)
+            for (int dx = -2; dx <= 2; ++dx) {
+                const int x2 = gu + dx, y2 = gv + dy;
+                if (x2 < 0 || y2 < 0 || x2 >= gGridW || y2 >= gGridH) continue;
+                const unsigned char c = gZoneCells[static_cast<size_t>(y2) * gGridW + x2];
+                if (c == 0 || c >= kZoneCount) continue;
+                const int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+                if (d < bestD) { bestD = d; best = c; }
+            }
+        if (best) return std::string(kZoneNames[best]);
+        return std::string();
     }
     const Table& t = table();
     for (const Zone& z : t.zones)

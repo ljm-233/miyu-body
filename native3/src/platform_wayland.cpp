@@ -1328,7 +1328,26 @@ void platSetPosition(int x, int y) {
     apply_margin();
 }
 
-bool platIsDragging() { return W.dragging; }
+// 诊断口伪造的「拖动中」到什么时候（见 platFakeDrag）
+static double gFakeDragUntil = 0.0;
+
+bool platIsDragging() { return W.dragging || nowSec() < gFakeDragUntil; }
+
+// 诊断口：把弹簧的速度直接置上，目标位置设成当前位置 —— 之后它会像「松手滑行」
+// 那样自然衰减，platDragVelocity 这段时间一直返回这个速度。
+// 不动真实指针、不动光标、不碰合成器，纯粹给 swayTick/legDragTick 喂数据。
+void platFakeDrag(float vx, float vy, int dragMs) {
+    if (!W.inited) return;
+    if (dragMs > 0) gFakeDragUntil = nowSec() + dragMs / 1000.0;
+    W.sprPosX = W.posX;
+    W.sprPosY = W.posY;
+    W.sprTgtX = W.posX;
+    W.sprTgtY = W.posY;
+    W.sprVelX = vx;
+    W.sprVelY = vy;
+    W.sprActive = true;
+    LOG("诊断：注入拖动速度 vx=%.0f vy=%.0f / 拖动中 %d ms（之后按松手滑行衰减）", vx, vy, dragMs);
+}
 
 // 指针在哪（surface-local 逻辑 px）。只认 enter/leave 记的账：
 //   · 不在窗口内 → false，调用方把视线目标归零（她不看人）
@@ -1344,6 +1363,7 @@ bool platPointer(float* x, float* y) {
 
 // 最近一次输入区计算时得到的「她本人」包围盒（逻辑坐标），供视线跟随用
 static int gPcx = -1, gPcy = -1, gPhw = 0, gPhh = 0;
+static int gWantCenter = 0;   // 选了「正中」但还没按她本人的 bbox 精确落位
 
 bool platPersonBox(int* cx, int* cy, int* hw, int* hh) {
     if (gPcx < 0 || gPhw <= 0) return false;
@@ -1430,6 +1450,25 @@ void platSetTapEnabled(bool on) {
 //   · 顶部两角：y=0 —— TOP 会落在 exclusive zone（顶上的 bar，约 37 逻辑 px）下沿
 //   · 底部两角：y = 屏高 - 窗高 - bar 高度，否则窗口一多半跑到屏外（bar 把可见区整体下推）
 //     bar 高度默认 37（本机实测），MIYU_BAR_H 可覆盖，别的机器/关掉 bar 时自己调。
+// 2026-11-10 19:1x：把「窗口矩形 + 她本人的矩形」落到 state/window.json。
+// 原来只有 input region 重算时才写一次，于是吸角挪窗之后这份文件就成旧的了 ——
+// 第二支指针按旧矩形判断命中，点哪都错。吸角也必须写一次。
+// px/py 用最近一次 region 扫描出的 bbox；还没扫过就退回窗口原点。
+static void writeWindowRect() {
+    const OutInfo* oc = (W.curIdx >= 0 && W.curIdx < W.nouts) ? &W.outs[W.curIdx] : nullptr;
+    const int gx = oc ? oc->gx : 0, gy = oc ? oc->gy : 0;
+    int barH = 37;
+    if (const char* bh = getenv("MIYU_BAR_H")) barH = atoi(bh);
+    const int bx0 = (gPcx >= 0 && gPhw > 0) ? gPcx - gPhw : 0;
+    const int by0 = (gPcy >= 0 && gPhh > 0) ? gPcy - gPhh : 0;
+    if (FILE* fw = std::fopen("state/window.json", "wb")) {
+        std::fprintf(fw, "{\"ox\":%d,\"oy\":%d,\"w\":%d,\"h\":%d,\"px\":%d,\"py\":%d}\n",
+                     gx + W.posX, gy + barH + W.posY, W.reqW, W.reqH,
+                     gx + W.posX + bx0, gy + barH + W.posY + by0);
+        std::fclose(fw);
+    }
+}
+
 bool platSnapCorner(const char* corner) {
     if (!W.inited) { LOG("吸角：窗口还没起来"); return false; }
     if (!corner || !strcmp(corner, "free")) return true;      // free = 不动
@@ -1443,11 +1482,17 @@ bool platSnapCorner(const char* corner) {
     else if (!strcmp(corner, "tr")) { x = W_ - W.reqW;          y = 0; }
     else if (!strcmp(corner, "bl")) { x = 0;                    y = H_ - W.reqH - barH; }
     else if (!strcmp(corner, "br")) { x = W_ - W.reqW;          y = H_ - W.reqH - barH; }
+    else if (!strcmp(corner, "center")) {                        // 正中：可用区（bar 以下）里居中
+        x = (W_ - W.reqW) / 2;
+        y = barH + (H_ - barH - W.reqH) / 2;
+        gWantCenter = 1;    // 窗口里她只占右下一块，等 region 扫完按「她本人」再校一次
+    }
     else { LOG("吸角：不认识的角 %s", corner); return false; }
 
     LOG("吸角 %s：屏 %dx%d / 窗 %dx%d / bar %d -> margin (%d,%d)",
         corner, W_, H_, W.reqW, W.reqH, barH, x, y);
     platSetPosition(x, y);
+    writeWindowRect();
     return true;
 }
 
@@ -1661,7 +1706,24 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
                                  gx + W.posX + bx0, gy + barH + W.posY + by0);
                     std::fclose(fw);
                 }
-                LOG("[box] 全局：window=(%d,%d) output=(%+d,%+d) bar=%d 她=[%d,%d .. %d,%d]（%dx%d）",
+                if (gWantCenter && gPcx >= 0) {
+                // 她要的是「她本人」在屏幕正中，不是窗口居中：窗口 500x900 里
+                // 她只占右下 337x730 一块，容器居中会让她整体偏右下 20~70 px。
+                gWantCenter = 0;
+                int barH2 = 37;
+                if (const char* bh2 = getenv("MIYU_BAR_H")) barH2 = atoi(bh2);
+                const int targetX = (W.logicalW - 1) / 2;
+                const int targetY = barH2 + (W.logicalH - barH2 - 1) / 2;
+                // gPcx/gPcy 是**窗口内**坐标，targetX/targetY 是 output 内坐标，
+                // 所以 margin 直接 = 目标 - 她的偏移；y 还要再减 bar（targetY 已含它）。
+                const int nx = targetX - gPcx;
+                const int ny = targetY - barH2 - gPcy;
+                LOG("正中精校：她的中心 (%d,%d) -> 目标 (%d,%d)，margin (%d,%d) -> (%d,%d)",
+                    gPcx, gPcy, targetX, targetY, W.posX, W.posY, nx, ny);
+                platSetPosition(nx, ny);
+                writeWindowRect();
+            }
+            LOG("[box] 全局：window=(%d,%d) output=(%+d,%+d) bar=%d 她=[%d,%d .. %d,%d]（%dx%d）",
                     W.posX, W.posY, gx, gy, barH,
                     gx + W.posX + bx0, gy + barH + W.posY + by0,
                     gx + W.posX + bx1, gy + barH + W.posY + by1,
