@@ -368,6 +368,9 @@ static void tapFire(int lx, int ly) {
                                   (now - gLastPartT < TAP_SAME_PART_S);
             if (partId > 0 && partapi::hasAction(partId) && !samePart) {
                 gLastPartId = partId;
+                partpoke::gLastHitId = partId;
+                partpoke::gLastHitU  = u;
+                partpoke::gLastHitV  = v;
                 gLastPartT = now;
                 std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());
                 ++partpoke::gGen;

@@ -405,6 +405,24 @@ const char* kHtml = R"HTML(<!doctype html>
     sec.items.forEach(function(it){ addRow(card, it); });
   });
 
+  // 二十五：诊断组 —— 显示「最近一次点击判成了哪个部位、在哪个 u/v」。
+  // 今晚所有串位（耳朵判成头、飘带判成腿）都是靠这两个数定位的，
+  // 放进页面他就不用每次问我「这里算哪块」。
+  var diagCard = null, diagLine = null;
+  function buildDiag(){
+    if (diagCard) return;
+    diagCard = addSection('诊断');
+    diagLine = document.createElement('div');
+    diagLine.className = 'd';
+    diagLine.style.fontSize = '13px';
+    diagLine.style.color = 'var(--fg)';
+    diagLine.textContent = '还没点过她';
+    diagCard.appendChild(diagLine);
+    var tip = document.createElement('div'); tip.className = 'd';
+    tip.textContent = '点她身上任意一处，这里会显示判成了哪个部位、点在哪（u/v 是窗口归一化坐标）';
+    diagCard.appendChild(tip);
+  }
+
   // 二十五：两组新东西 —— 表情墙、动作墙。
   // 都是「点一下立刻发生」，用的是 POST /set 的 cmd 通道（cmd + arg），
   // 不写设置、不落盘，和改滑块是两回事。
@@ -509,6 +527,13 @@ const char* kHtml = R"HTML(<!doctype html>
       buildExprWall(s.exprNames);
     }
     if (s.planNames && s.planNames.length) buildPlanWall(s.planNames);
+    buildDiag();
+    if (diagLine && s.lastHit) {
+      var h = s.lastHit;
+      diagLine.textContent = h.id > 0
+        ? ('最近一次：' + h.name + '（id ' + h.id + '） u=' + Number(h.u).toFixed(3) + '  v=' + Number(h.v).toFixed(3))
+        : '还没点过她';
+    }
     if (!tabRestored) {
       tabRestored = true;
       var t0 = 0;
@@ -976,6 +1001,15 @@ std::string stateJson() {
     // display 里没写到的部位（新加的部位）追加到末尾 —— 加部位不用改这条 display 行
     for (int i = 1; i <= partapi::count(); ++i) if (!shown[static_cast<size_t>(i)]) emitPart(i);
     s += "]";
+    // 二十五：最近一次判定的部位（设置页「诊断」显示，定位串位用）
+    {
+        const int id = partpoke::gLastHitId;
+        s += ",\"lastHit\":{\"id\":" + std::to_string(id);
+        s += ",\"name\":\"";
+        s += (id > 0 && id < partpoke::kZoneMax) ? partapi::nameOf(id) : "";
+        s += "\",\"u\":" + std::to_string(float(partpoke::gLastHitU));
+        s += ",\"v\":" + std::to_string(float(partpoke::gLastHitV)) + "}";
+    }
     // 二十五：部位→表情（设置页那一组用它渲染下拉）
     {
         s += ",\"partExpr\":{";
