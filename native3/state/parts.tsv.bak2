@@ -16,19 +16,19 @@
 # 列的多余空白不重要，分隔一律是 TAB。「#」到行尾是注释，行尾注释可以放说明。
 # ────────────────────────────────────────────────────────────────────────────
 # ══ 部位（顺序即 id，1 起；不能换序）════════════════════════════════
-part	head	头	5.0
-part	chest	胸	5.0
-part	arm	手	5.0
-part	skirt	裙	5.0
-part	leg	腿	5.0
-part	tail	尾	5.0
+part	head	头	5.0	唔……
+part	chest	胸	5.0	别乱碰
+part	arm	手	5.0	拉我干嘛
+part	skirt	裙	5.0	裙子要掉了
+part	leg	腿	5.0	站不稳了
+part	tail	尾	5.0	尾巴不能摸
 part	other	其他	5.0
-part	eye	眼	5.0
-part	mouth	嘴	5.0
-part	brow	眉	5.0
-part	ear	兽耳	5.0
-part	waist	腰	5.0
-part	headwear	头饰	5.0
+part	eye	眼	5.0	戳眼睛会瞎的
+part	mouth	嘴	5.0	……干什么
+part	brow	眉	5.0	皱眉了
+part	ear	兽耳	5.0	呀
+part	waist	腰	5.0	痒
+part	headwear	头饰	5.0	别弄乱头发
 
 # ══ 设置页「点击反应」的显示顺序（和 id 无关；不写就按 id 排）══════════
 # 只影响页面怎么排，不影响判定 —— 改它不用重启（下次刷新页面就变了）。

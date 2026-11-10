@@ -496,8 +496,52 @@ float mouth(double now) {
         gTalking = false;
         return -1.0f;
     }
-    // 一张一合：0.5 + 0.5*sin(2π t / 0.22)
-    double v = 0.5 + 0.5 * std::sin(t * 2.0 * kPi / kMouthPeriod);
+    // 二十六：嘴型重做。
+    // 原来是一个**固定 0.22 秒周期**的正弦，和字数没关系 —— 说「嗯」（一个音）
+    // 和说「别弄乱头发」（五个音）嘴动得一样勤，看着就是「嘴在抖」不是「在说话」。
+    // 现在按**每个字一个开口**：
+    //   · 字的时长 = 这句话的总时长 / 字数（和 kPerChar 同一个量级）
+    //   · 每个字内部走一个 sin 半波（张开→合上），不是连续正弦
+    //   · 每个字的峰值在 0.45–1.0 之间按字序伪随机（同一句每次一样，不闪）
+    //   · 标点（，。…、？！）和空白当停顿：那一「字」不开口
+    const int chars = utf8Chars(gSayText);
+    double v = 0.0;
+    if (chars <= 0) {
+        v = 0.5 + 0.5 * std::sin(t * 2.0 * kPi / kMouthPeriod);
+    } else {
+        const double per = gSayDur / static_cast<double>(chars);
+        int idx = static_cast<int>(t / per);
+        if (idx < 0) idx = 0;
+        if (idx >= chars) idx = chars - 1;
+        const double inChar = (t - per * idx) / per;      // 0..1
+        // 这一「字」是不是停顿（标点/空白）→ 不开口
+        bool pause = false;
+        {
+            int k = 0;
+            for (size_t i = 0; i < gSayText.size() && k <= idx; ) {
+                const unsigned char c0 = static_cast<unsigned char>(gSayText[i]);
+                size_t len = 1;
+                if (c0 >= 0xF0) len = 4; else if (c0 >= 0xE0) len = 3; else if (c0 >= 0xC0) len = 2;
+                if (k == idx) {
+                    const std::string ch = gSayText.substr(i, len);
+                    pause = (ch == "，" || ch == "。" || ch == "…" || ch == "、" ||
+                             ch == "？" || ch == "！" || ch == " " || ch == "\t" ||
+                             ch == "\n" || ch == "；" || ch == "：");
+                    break;
+                }
+                i += len;
+                ++k;
+            }
+        }
+        if (!pause) {
+            // 每个字的峰值：按字序伪随机，落回同一个数（同一句每次听/看都一样）
+            unsigned h = static_cast<unsigned>(idx) * 2654435761u;
+            h ^= h >> 13;
+            const double peak = 0.45 + 0.55 * static_cast<double>(h & 0xFF) / 255.0;
+            v = peak * std::sin(kPi * inChar);      // 半波：张开再合上
+            if (v < 0.0) v = 0.0;
+        }
+    }
     // 整体淡入淡出（前 0.15 渐入、最后 0.2 渐出）
     double env = 1.0;
     if (t < kFadeIn) env = t / kFadeIn;
