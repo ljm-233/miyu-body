@@ -9,6 +9,7 @@ add_compile_definitions(CSM_TARGET_LINUX_GL)
 add_compile_options(-Wall -Wextra)
 
 find_package(PkgConfig REQUIRED)
+pkg_check_modules(FREETYPE REQUIRED freetype2)
 pkg_check_modules(GLFW REQUIRED glfw3)
 pkg_check_modules(GL REQUIRED gl glew)
 # Wayland 版要的：wayland-client（协议）+ wayland-egl（wl_egl_window）+ EGL
@@ -20,15 +21,15 @@ set_target_properties(Live2DCubismCore PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/Core/include)
 
 # ── 目标 1：miyu —— X11(XWayland) + GLFW。备胎，行为已和 native2 对齐。
-add_executable(miyu src/main.cpp src/ctl.cpp src/plan.cpp src/web.cpp src/platform_x11.cpp)
-target_include_directories(miyu PRIVATE
+add_executable(miyu src/main.cpp src/ctl.cpp src/plan.cpp src/web.cpp src/bubble.cpp src/platform_x11.cpp)
+target_include_directories(miyu PRIVATE ${FREETYPE_INCLUDE_DIRS}
   ${GLFW_INCLUDE_DIRS} ${GL_INCLUDE_DIRS}
   .)
 target_include_directories(miyu SYSTEM PRIVATE Framework/src Core/include stb)
 target_link_directories(miyu PRIVATE lib ${GLFW_LIBRARY_DIRS} ${GL_LIBRARY_DIRS})
 target_link_libraries(miyu PRIVATE
   Framework Live2DCubismCore
-  ${GLFW_LIBRARIES} ${GL_LIBRARIES} GLEW X11)
+  ${GLFW_LIBRARIES} ${GL_LIBRARIES} GLEW X11 ${FREETYPE_LIBRARIES})
 
 # ── 目标 2：miyu-wayland —— 原生 Wayland layer-shell + EGL 桌面 GL。
 # 正路：透明真生效、逐像素点击穿透（wl_surface.set_input_region）。
@@ -47,6 +48,7 @@ add_executable(miyu-wayland
   src/plan.cpp
   src/web.cpp
   src/platform_wayland.cpp
+  src/bubble.cpp
   src/layer-shell-protocol.c
   src/xdg-shell-protocol.c
   src/xdg-output-protocol.c
@@ -56,6 +58,8 @@ target_include_directories(miyu-wayland PRIVATE
   .)
 target_include_directories(miyu-wayland SYSTEM PRIVATE Framework/src Core/include stb)
 target_link_directories(miyu-wayland PRIVATE lib ${GL_LIBRARY_DIRS} ${WL_LIBRARY_DIRS})
+find_package(PkgConfig REQUIRED)
+target_include_directories(miyu-wayland PRIVATE ${FREETYPE_INCLUDE_DIRS})
 target_link_libraries(miyu-wayland PRIVATE
   Framework Live2DCubismCore
-  ${WL_LIBRARIES} ${GL_LIBRARIES} GLEW dl m)
+  ${WL_LIBRARIES} ${GL_LIBRARIES} GLEW dl m ${FREETYPE_LIBRARIES})

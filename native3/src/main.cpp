@@ -28,7 +28,8 @@
 #include <GL/glew.h>
 
 #include "platform.h"
-#include "ctl.h"    // 本地控制口：外面推「她在说什么/什么心情」，见第十一节
+#include "ctl.h"
+#include "bubble.h"
 #include "plan.h"   // 动作计划播放器：外面推一份时间线，她照着演，见第十二节
 #include "web.h"    // 本地设置页：127.0.0.1:8200，改完立刻生效，见第十四节
 #include "partpoke.h" // 二十一：部位级反应（平台层 ⇄ 渲染层的邮筒 + 参数表）
@@ -3617,6 +3618,7 @@ int main() {
     for (size_t i = 0; i < texs.size(); ++i)
         renderer->BindTexture(static_cast<Csm::csmUint32>(i), texs[i]);
     log_("[main] 渲染器就绪，%zu 张贴图", texs.size());
+    bubble::init();   // 说话气泡：载字体、建 quad
 
     const float canvasW = model->GetCanvasWidth();
     const float canvasH = model->GetCanvasHeight();
@@ -4256,6 +4258,21 @@ int main() {
                 lastRH = H;
             }
         }
+
+        // 二十六：说话气泡。她一开始说话就把这句交给气泡（只在换了新句时才重建纹理）
+        {
+            static std::string lastSaid;
+            const std::string& said = ctl::currentSay();
+            if (!said.empty() && said != lastSaid) {
+                lastSaid = said;
+                bubble::say(said.c_str(), now);
+            }
+        }
+        // 二十六：说话气泡。**在 swap 之前**画 —— 那时窗口 buffer 是最终的成品，
+        // 画在她上面、也画在后处理之上（后处理只处理后两者，不碰这里）。
+        bubble::setEnabled(ws.bubble);
+        bubble::tick(now, dt);
+        bubble::draw(W, H);
 
         {
             const double tG = platTime();

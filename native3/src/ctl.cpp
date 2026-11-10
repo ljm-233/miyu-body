@@ -711,6 +711,11 @@ const char* sockPath() { return gPath.empty() ? "(未建)" : gPath.c_str(); }
 // 二十六：预热。他报「先按腿才有声音，先按别的没声」—— 那是 pipewire 的
 // 输出节点第一次要唤醒（几十毫秒～几百毫秒），第一声正好丢在这个窗口里。
 // 启动时先播一段 0.12 秒的静音，把流建起来，后面就都正常。
+const std::string& currentSay() {
+    static const std::string kEmpty;
+    return gTalking ? gSayText : kEmpty;
+}
+
 void voiceWarmUp() {
     // 二十六（第四修）：根因是 pipewire 的 sink **空闲时会 suspend**，被唤醒的头几百
     // 毫秒丢样本 —— 所以「第一声没声音」每次换一个牺牲品（先是腿，后来是裙子）。

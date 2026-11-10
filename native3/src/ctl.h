@@ -43,6 +43,8 @@ void setMouthScale(float s);
 // 嘴型包络 + 有缓存就出声。now 由调用方给（main 的帧时间）。
 void say(const std::string& text, double now);
 void voiceWarmUp();
+// 二十六：现在说的这句（气泡要显示它）。没在说话就是空串。
+const std::string& currentSay();
 // 二十六：走路目标（由 ctl 的命令写、main 的 walkTick 读）
 extern bool  gWalkWanted;
 extern float gWalkTargetX, gWalkTargetY;
