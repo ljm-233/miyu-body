@@ -1672,6 +1672,20 @@ static void herStateTick(double now) {
     if (!t.empty()) parseMoodJson(t);
 }
 
+// 二十六：动作要**排他**。
+// 2026-11-11 01:0x 他说「不要同时播放两个动作呀」—— 我让她飘过去的同时又播「脱捕」，
+// 而脱捕自己也写 AngleX/Y/Z、PositionX/Y/Z，两边抢同一批参数，画面就是在打架。
+//
+// 规则（优先级从高到低）：
+//   motion（举手/竖手指/脱捕） > plan（点头/害羞） > 走路 > 待机
+// 位置（窗口在哪）和姿态（身体怎么写）是两件事：走路时**位置照走**，
+// 但姿态让给正在播的 motion/plan。
+static bool postureBusy(Csm::CubismMotionManager* mm) {
+    if (mm && !mm->IsFinished()) return true;      // 有 motion 在播
+    if (plan::active()) return true;               // 有计划动作在播
+    return false;
+}
+
 // ── 二十六：走路 ────────────────────────────────────────────────
 //
 // 2026-11-11 00:4x：「她还不可以走路呢，能不能去做走路，就是移动」。
@@ -1685,7 +1699,7 @@ static void herStateTick(double now) {
 //
 // 到点容差 2px，到了就停，停在原地呼吸。
 static const float kWalkSpeed = 110.0f;     // px/s
-static void walkTick(Csm::CubismModel* model, double now, float dt) {
+static void walkTick(Csm::CubismModel* model, Csm::CubismMotionManager* mm, double now, float dt) {
     static double lastLog = -1e9;
     if (!ctl::gWalkWanted) return;
 
@@ -1730,6 +1744,15 @@ static void walkTick(Csm::CubismModel* model, double now, float dt) {
     const float lean  = 5.0f + std::sin(ph) * 1.2f;      // 前倾（常量 + 微动）
     const float faceX = (dx > 0 ? 1.0f : -1.0f) * std::min(1.0f, std::fabs(dx) / 60.0f);
 
+    // 姿态让位：有 motion/plan 在写身子时，这边只负责「位置在动」，不去抢参数
+    if (postureBusy(mm)) {
+        static double lastBusyLog = -1e9;
+        if (now - lastBusyLog > 2.0) {
+            lastBusyLog = now;
+            log_("[walk] 有动作在播 —— 只移动，不写姿态");
+        }
+        return;
+    }
     auto setP = [&](const char* name, float v) {
         const Csm::csmInt32 i = model->GetParameterIndex(
             Csm::CubismFramework::GetIdManager()->GetId(name));
@@ -3903,7 +3926,7 @@ int main() {
         // 走路放在 followTick **之后**：follow 里有一条 `follow leg PokeLeg`，
         // 它在拖动的每一帧都会把 PokeLeg 写掉 —— 走路写在这之前等于白写，
         // 他看到的「脚和腿根本没动」就是这个。
-        walkTick(model, now, dt);
+        walkTick(model, motionManager, now, dt);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。

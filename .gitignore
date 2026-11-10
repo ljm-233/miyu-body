@@ -49,3 +49,6 @@ input-probe/test_region
 alpha-probe/bg
 input-probe/clicker
 input-probe/input-probe
+
+# 模型源文件（PSD 131MB + 清单），本机用，不进仓
+model-src/
