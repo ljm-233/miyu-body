@@ -228,7 +228,7 @@ const char* kHtml = R"HTML(<!doctype html>
       {k:'tap', t:'bool', label:'点击',
        d:'戳她一下有反应；关掉只剩拖动'},
       {k:'tapPart', t:'bool', label:'点哪动哪',
-       d:'戳哪个部位只让那一块动（0.6 秒弹一下）；关掉就回到整套反应。点空白处仍然播整套'}
+       d:'戳哪个部位只让那一块动；关掉就回到整套反应。点空白处仍然播整套'},
       {k:'expr', t:'bool', label:'表情',
        d:'所有表情切换的总开关'},
       {k:'exprHold', t:'range', min:0.2, max:5, step:0.1, label:'表情停留',
