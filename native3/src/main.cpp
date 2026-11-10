@@ -4261,12 +4261,11 @@ int main() {
 
         // 二十六：说话气泡。她一开始说话就把这句交给气泡（只在换了新句时才重建纹理）
         {
-            static std::string lastSaid;
+            // 每帧都把「她现在说的这句」交给气泡，去重由 bubble 自己做 ——
+            // 之前用 lastSaid 在外面判，结果某一次状态没对上就整段失效，
+            // 而且失效时一点痕迹都没有（日志里什么都看不到）。
             const std::string& said = ctl::currentSay();
-            if (!said.empty() && said != lastSaid) {
-                lastSaid = said;
-                bubble::say(said.c_str(), now);
-            }
+            if (!said.empty()) bubble::say(said.c_str(), now);
         }
         // 二十六：说话气泡。**在 swap 之前**画 —— 那时窗口 buffer 是最终的成品，
         // 画在她上面、也画在后处理之上（后处理只处理后两者，不碰这里）。

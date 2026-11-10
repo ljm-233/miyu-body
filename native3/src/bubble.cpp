@@ -30,18 +30,18 @@ namespace {
 // 撑成 44px，必糊。现在整张图按**物理像素**做：字号 44、内边距圆角全部 ×2，
 // 贴的时候 1:1 不动，字就是渲染器原生的清晰度。
 const int   kFontPx     = 44;      // 字号（物理像素，对应逻辑 22）
-const int   kPadX       = 36;      // 左右内边距
-const int   kPadY       = 22;      // 上下内边距
-const int   kRadius     = 32;      // 圆角半径
-const int   kTailW      = 32;      // 底下小尖角的宽度
-const int   kTailH      = 18;      // 小尖角高度
+const int   kPadX       = 40;      // 左右内边距
+const int   kPadY       = 24;      // 上下内边距
+const int   kRadius     = 46;      // 圆角半径 —— 大一点更软，不再像标签
+const int   kTailW      = 34;      // 底下小尖角的宽度
+const int   kTailH      = 20;      // 小尖角高度
 const float kInDur      = 0.16f;   // 淡入 + 放大
 const float kOutDur     = 0.25f;   // 淡出 + 上浮
 const float kHoldExtra  = 0.9f;    // 说完之后再挂这么久才淡出
 const float kMaxWidthPx = 1120.0f; // 单行最宽（物理像素；超了就压字距，不换行）
 
 const char* kFontPaths[] = {
-    "/usr/share/fonts/adobe-source-han-sans/SourceHanSansCN-Medium.otf",
+    "/usr/share/fonts/adobe-source-han-sans/SourceHanSansCN-Bold.otf",
     "/usr/share/fonts/adobe-source-han-sans/SourceHanSansCN-Regular.otf",
     "/usr/share/fonts/adobe-source-han-sans/SourceHanSansCN-Light.otf",
     "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
@@ -143,14 +143,14 @@ bool buildTexture(const std::string& text, double lastSeconds) {
                                                    static_cast<float>(w), static_cast<float>(h),
                                                    static_cast<float>(kRadius));
             if (covOut <= 0.0f) continue;
-            // 外圈：亮蓝灰（描边）
-            putPx(buf, w, fullH, x, y, 0.55f, 0.66f, 0.86f, 0.85f * covOut);
+            // 外圈：柔和的蓝灰描边（比之前淡一档，不要硬边）
+            putPx(buf, w, fullH, x, y, 0.62f, 0.72f, 0.90f, 0.55f * covOut);
             // 内圈：深底（往里缩 2px）
             const float covIn = roundRectCoverage(x + 0.5f - 4.0f, y + 0.5f - 4.0f,
                                                   static_cast<float>(w) - 8.0f,
                                                   static_cast<float>(h) - 8.0f,
                                                   static_cast<float>(kRadius) - 4.0f);
-            if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.07f, 0.09f, 0.14f, 0.94f * covIn);
+            if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.11f, 0.13f, 0.19f, 0.90f * covIn);
         }
     }
     // 底下的小尖角（指向她的头）
@@ -161,8 +161,8 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             const int half = static_cast<int>(kTailW * 0.5f * t);
             for (int x = cx - half; x <= cx + half; ++x) {
                 const bool edge = (x <= cx - half + 1 || x >= cx + half - 1 || y == 0 || y == kTailH - 1);
-                if (edge) putPx(buf, w, fullH, x, h + y, 0.55f, 0.66f, 0.86f, 0.85f);
-                else      putPx(buf, w, fullH, x, h + y, 0.07f, 0.09f, 0.14f, 0.94f);
+                if (edge) putPx(buf, w, fullH, x, h + y, 0.62f, 0.72f, 0.90f, 0.55f);
+                else      putPx(buf, w, fullH, x, h + y, 0.11f, 0.13f, 0.19f, 0.90f);
             }
         }
     }
@@ -181,8 +181,12 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             for (unsigned int col = 0; col < sl->bitmap.width; ++col) {
                 const unsigned char v = sl->bitmap.buffer[row * sl->bitmap.pitch + col];
                 if (!v) continue;
-                putPx(buf, w, fullH, gx + static_cast<int>(col), by + static_cast<int>(row),
-                      0.97f, 0.98f, 1.0f, static_cast<float>(v) / 255.0f);
+                const int px = gx + static_cast<int>(col), py = by + static_cast<int>(row);
+                // 先铺一层几乎透明的黑在下方 2px，字就有了「压在上面」的厚度
+                putPx(buf, w, fullH, px, py + 2, 0.0f, 0.0f, 0.0f,
+                      0.35f * static_cast<float>(v) / 255.0f);
+                putPx(buf, w, fullH, px, py, 1.0f, 1.0f, 1.0f,
+                      static_cast<float>(v) / 255.0f);
             }
         }
     }
@@ -241,6 +245,7 @@ void init() {
 
 void say(const char* text, double now) {
     if (!text || !*text) return;
+    if (gT0 > 0.0 && gText == text) return;      // 同一句还在挂：不重置计时
     gText = text;
     gT0 = now;
     gDirty = true;

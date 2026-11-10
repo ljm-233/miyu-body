@@ -12,6 +12,7 @@
 //     免得两个文件都去碰 Cubism 的类型。
 
 #include "ctl.h"
+#include "bubble.h"   // 二十六：说话时把这句话交给头顶气泡（直接调，不绕 main）
 #include "platform.h"
 
 #include <sys/socket.h>
@@ -350,6 +351,11 @@ void handleLine(const std::string& raw, double now) {
             // 只报告实际会动多久，mouth() 里乘同一个系数。
             log_("[ctl] say %.1fs（×%.2f -> 嘴动 %.1fs）: %s",
                  dur, gMouthScale, dur * gMouthScale, say.c_str());
+            // 2026-11-11 02:0x：气泡交给这里是**因为绕了一大圈都不生效** ——
+            // main 每帧读 ctl::currentSay() 再转给 bubble，读到的永远是空
+            //（gTalking 在 main 那一侧看不到，查了很久没查出来）。
+            // 与其继续追那个分层，不如在「知道这句话」的地方直接给气泡。
+            bubble::say(say.c_str(), now);
             if (gVoiceOn) voicePlay(say);
         }
     }
@@ -713,6 +719,7 @@ const char* sockPath() { return gPath.empty() ? "(未建)" : gPath.c_str(); }
 // 启动时先播一段 0.12 秒的静音，把流建起来，后面就都正常。
 const std::string& currentSay() {
     static const std::string kEmpty;
+    // 调试用（已收工）：只在 talking 变化时记。想再看就打开下面这段。
     return gTalking ? gSayText : kEmpty;
 }
 
