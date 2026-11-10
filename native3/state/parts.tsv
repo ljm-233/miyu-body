@@ -112,9 +112,3 @@ expr	waist	圈圈眼
 follow	leg	HipAngleX	0.6	30	ax
 follow	leg	HipAngleZ	2.2	30	az
 follow	leg	PokeLeg	0.0625	1	ax
-
-part	toe	脚趾	3.0
-alias	toe	脚趾
-band	toe	0.540	0.580	0.640	0.680	force	100
-param	toe	PokeLeg	70	0.500
-expr	toe	＞＜

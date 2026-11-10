@@ -360,22 +360,6 @@ static void tapFire(int lx, int ly) {
             //   · 有没有反应用 partapi::hasAction(id)（= 有参数 **或** 有非空表情），
             //     不再现场 `partpoke::hasParams(part) || web::settings().partExpr[...]`
             //     那套拼装 —— 那是「两处各有一份数据」的最后一个现场
-            {
-                // 临时诊断（Step 7 调试，验完删）：平台层看到的格子图到底是不是渲染层那份
-                static bool dbgOnce = false;
-                if (!dbgOnce) {
-                    dbgOnce = true;
-                    int gx = static_cast<int>(u * partpoke::gGridW);
-                    int gy = static_cast<int>(v * partpoke::gGridH);
-                    const unsigned char cell =
-                        partpoke::gZoneCells.empty() ? 255
-                        : partpoke::gZoneCells[static_cast<size_t>(gy) * partpoke::gGridW +
-                                               static_cast<size_t>(gx)];
-                    LOG("[tap-dbg] gZoneCells=%zu（%dx%d）格(%d,%d)=%d",
-                        partpoke::gZoneCells.size(), partpoke::gGridW, partpoke::gGridH,
-                        gx, gy, static_cast<int>(cell));
-                }
-            }
             const int partId = partapi::classifyId(u, v);
             const std::string part = partId > 0 ? std::string(partapi::nameOf(partId)) : std::string();
             static int gLastPartId = 0;

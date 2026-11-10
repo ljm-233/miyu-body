@@ -1030,3 +1030,76 @@ POST {"legSway":0.5} → settings.json 里 legSway = 0.5
 **回归**
 
 点胸 / 腰 / 头饰各一次：部位、id、表情、根输入全对；`认得出部位的 484 个` 不变。
+
+### 9.10 Step 7：拆掉最后两份名单（`kZoneNames` 和前端 `PARTS`）
+
+2026-11-10 22:4x–22:5x。这是整个重构的目的所在：**加一个可点部位只改 state/parts.tsv**。
+
+**① `partpoke.h` 的 `kZoneNames[14]` / `kZoneCount` 没了**
+
+```cpp
+inline constexpr int kZoneMax = 256;              // 只剩一个编译期上限，给数组用
+inline const char* zoneName(int id) { return partapi::nameOf(id); }
+```
+
+为什么还留一个常量：`main.cpp` 里有几处按部位下标的统计数组
+（`int rawCnt[kZoneMax]`、`float dbgBB[kZoneMax][4]`…），数组大小必须编译期定。
+选 **256** 是因为格子图的值类型是 `unsigned char` —— 上限要盖住它的全部取值，
+否则 `g[j]` 拿来当下标会越界。真正的部位数看 `partapi::count()`。
+
+`main.cpp` 里 22 处引用全部替换：`kZoneNames[i]` → `partpoke::zoneName(i)`、
+`kZoneCount` → `kZoneMax`（循环多走几百次，每帧一次的统计，量级可忽略）。
+
+**② `display` 记录：设置页的显示顺序独立于 id**
+
+`web.cpp` 的 `PARTS` 原来有固定顺序（头/头饰/兽耳/眼/眉/嘴/胸/腰/手/裙/腿/尾），
+而 id 顺序是另一回事（head/chest/arm/skirt/leg/tail/other/…）。两者不能混，否则
+要么页面乱、要么 id 变。
+
+所以在 parts.tsv 里加一条记录：
+
+```
+display	head	headwear	ear	eye	brow	mouth	chest	waist	arm	skirt	leg	tail
+```
+
+一行列完。只影响页面怎么排，不影响判定。不写这行就按 id 排。
+`display` 里没写到的部位（新加的部位）**追加到末尾** —— 加部位不用回来改这一行。
+
+**③ 后端下发 `partNames`，前端不再写死**
+
+```cpp
+s += ",\"partNames\":[";   // [[name, label], ...]，只下发 hasAction(i) 的部位
+```
+
+前端：
+
+```js
+var PARTS = [];                       // Step 7：由 /state 的 partNames 填
+...
+if (s.partNames && s.partNames.length) PARTS = s.partNames;
+```
+
+过滤掉 `other`（没参数没表情的纯占位），所以还是 12 行。
+
+**④ 终验：加一个 `toe` 部位，不重编译**
+
+表尾追加五行（`part` / `alias` / `band` / `param` / `expr`），只 `miyu-body-ctl restart`：
+
+```
+[partapi] …：部位 14 / 带 14 / 参数 14 / 表情 13 / 跟随 3
+[zones] 判定带：partapi 应用 12 条
+→ /state 的 partNames 变成 13 条，最后一条是 ['toe','脚趾']
+→ 点 (280,595)：[tap] → 部位 toe（id=14）→ PokeLeg(±0.50) → 表情「＞＜」
+```
+
+连点 6 次全部判 `toe`。验完把 toe 撤掉（`state/parts.tsv` 回到 12 部位）。
+
+**踩到的两个点**
+
+1. **display 变成白名单**：第一版只下发 display 里的部位，于是新加的 toe 不出现。
+   改成「display 优先 + 其余追加」，这才是「加部位不用改页面」。
+2. **第一次点 toe 判成 leg，不是 bug**：toe 的带当时在 `u .600-.640 / v .700-.740`，
+   而我点的是 `(280,595)` = `u .560 v .661`，**根本不在带内**。加了一条临时诊断日志
+   （`[tap-dbg] gZoneCells=28800（120x240）格(67,158)=14`）确认平台层拿到的就是渲染层那份
+   格子、而且那格确实是 toe，然后删掉日志。教训：**点之前先确认坐标落在带里**，
+   别拿「判错了」当 bug 查半天。
