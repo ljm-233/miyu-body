@@ -355,30 +355,31 @@ static void tapFire(int lx, int ly) {
         if (lw > 0 && lh > 0) {
             const float u = float(lx) / float(lw);
             const float v = float(ly) / float(lh);
-            const std::string part = partpoke::classify(u, v);
-            // 同一部位连点才吃冷却；换部位立刻响应
-            static std::string gLastPart;
+            // Step 5：判定结果直接用 **id**（0 = 空白）。
+            //   · 冷却按 id 比 —— 比的是「同一块身体」；名字只是显示用的字符串，以后可能改
+            //   · 有没有反应用 partapi::hasAction(id)（= 有参数 **或** 有非空表情），
+            //     不再现场 `partpoke::hasParams(part) || web::settings().partExpr[...]`
+            //     那套拼装 —— 那是「两处各有一份数据」的最后一个现场
+            const int partId = partapi::classifyId(u, v);
+            const std::string part = partId > 0 ? std::string(partapi::nameOf(partId)) : std::string();
+            static int gLastPartId = 0;
             static double gLastPartT = -1e9;
-            const bool samePart = (part == gLastPart) && (now - gLastPartT < TAP_SAME_PART_S);
-            // 二十五：判定条件从「有动作参数」放宽成「有动作**或**配了表情」。
-            // 头整组动作参数已经拿掉（点它不该整块转），但它配了表情「前倾」——
-            // 只判 hasParams 的话它被当成「没有可拨的根」，退回整套反应，
-            // 表情也跟着不播（这正是他点了头没反应的那个）。
-            const auto& pe = web::settings().partExpr;
-            const bool hasExpr = (pe.find(part) != pe.end()) && !pe.at(part).empty();
-            if (!part.empty() && (partpoke::hasParams(part) || hasExpr) && !samePart) {
-                gLastPart = part;
+            const bool samePart = (partId > 0 && partId == gLastPartId) &&
+                                  (now - gLastPartT < TAP_SAME_PART_S);
+            if (partId > 0 && partapi::hasAction(partId) && !samePart) {
+                gLastPartId = partId;
                 gLastPartT = now;
                 std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());
                 ++partpoke::gGen;
                 gTapCoolUntil = now + TAP_COOL_S;
-                LOG("[tap] 第 %d 次点击 local=(%d,%d) → 部位 %s（u=%.3f v=%.3f，只动这一块）",
-                    gTapN, lx, ly, part.c_str(), u, v);
+                LOG("[tap] 第 %d 次点击 local=(%d,%d) → 部位 %s（id=%d，u=%.3f v=%.3f，只动这一块）",
+                    gTapN, lx, ly, part.c_str(), partId, u, v);
                 return;
             }
             LOG("[tap] 第 %d 次点击 local=(%d,%d)（u=%.3f v=%.3f）%s，退回整套反应",
                 gTapN, lx, ly, u, v,
-                part.empty() ? "落在空白（她身上没有部位）" : ("部位 " + part + " 没有可拨的根").c_str());
+                partId == 0 ? "落在空白（她身上没有部位）"
+                            : ("部位 " + part + " 既没有参数也没有表情").c_str());
         }
     }
 

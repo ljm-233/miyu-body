@@ -30,6 +30,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <iterator>
+#include <map>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -375,14 +378,25 @@ inline int indexOfAlias(const std::string& partName) {
     return 0;
 }
 
-// 「点下去有反应」的唯一判据：有动作参数**或**有表情（现在 main.cpp 里是 hasParams || hasExpr）
-inline bool hasAction(int id) {
+// 这个部位有没有动作参数（0..N 条 param）
+inline bool hasParams(int id) {
     if (id <= 0) return false;
-    const Registry& r = reg();
-    for (const Param& p : r.params) if (p.id == id) return true;
-    for (const Expr& e : r.exprs) if (e.id == id && !e.pick.empty()) return true;
+    for (const Param& p : reg().params) if (p.id == id) return true;
     return false;
 }
+inline bool hasParams(const std::string& name) { return hasParams(indexOf(name)); }
+
+// 这个部位有没有非空表情（expr 行第二列不是空）
+inline bool hasExpr(int id) {
+    if (id <= 0) return false;
+    for (const Expr& e : reg().exprs) if (e.id == id && !e.pick.empty()) return true;
+    return false;
+}
+inline bool hasExpr(const std::string& name) { return hasExpr(indexOf(name)); }
+
+// 「点下去有反应」的唯一判据：有动作参数**或**有表情。
+// 取代 platform_wayland.cpp 里那段 `hasParams(part) || hasExpr(part)` 的现场拼装（Step 5 换过去）。
+inline bool hasAction(int id) { return hasParams(id) || hasExpr(id); }
 
 inline bool hasAction(const std::string& name) { return hasAction(indexOf(name)); }
 
@@ -405,15 +419,17 @@ inline std::vector<Band> bandsOf(int id) {
 }
 
 // ── 判定：部位名（唯一入口，平台层调）────────────────────────────────
-inline std::string classify(float u, float v) {
-    if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return std::string();
+// 判定：返回**部位 id**（0 = 空白）。这是真正的入口 —— 冷却、hasAction、
+// 日志全都按 id，名字只在打日志时用（Step 5：名字以后可能改，id 不会）。
+inline int classifyId(float u, float v) {
+    if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return 0;
     const Registry& r = reg();
 
     // ① scope=any 的带先判（原文是 classify 第一步的 ear 硬判，无视剪影）
     for (const Band& b : r.bands) {
         if (!b.any) continue;
         if (v >= b.v0 && v <= b.v1 && u >= b.u0 && u <= b.u1)
-            return std::string(nameOf(b.id));
+            return static_cast<int>(b.id);
     }
 
     // ② 渲染层每帧刷出来的格子图
@@ -423,7 +439,7 @@ inline std::string classify(float u, float v) {
         if (gu >= gGridW) gu = gGridW - 1;
         if (gv >= gGridH) gv = gGridH - 1;
         const unsigned char c0 = gGrid[static_cast<size_t>(gv) * gGridW + gu];
-        if (c0 != 0) return std::string(nameOf(c0));
+        if (c0 != 0) return static_cast<int>(c0);
         // 边缘兜底：5×5 邻域里最近的已标格（照抄 partpoke.h:215-230）
         int bestD = 99;
         unsigned char best = 0;
@@ -436,8 +452,8 @@ inline std::string classify(float u, float v) {
                 const int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
                 if (d < bestD) { bestD = d; best = c; }
             }
-        if (best) return std::string(nameOf(best));
-        return std::string();
+        if (best) return static_cast<int>(best);
+        return 0;
     }
 
     // ③ 文件里的 Z 行（半开区间）。真机上走不到这里 —— 只有自检/工具没有内存格子图时才用
@@ -446,8 +462,14 @@ inline std::string classify(float u, float v) {
     const int gv = static_cast<int>(v * static_cast<float>(gh));
     for (const Zone& z : r.zones)
         if (gv >= z.v0 && gv < z.v1 && gu >= z.u0 && gu < z.u1)
-            return std::string(nameOf(z.id));
-    return std::string();
+            return static_cast<int>(z.id);
+    return 0;
+}
+
+// 兼容壳：名字版（日志、调试、旧调用点用）
+inline std::string classify(float u, float v) {
+    const int id = classifyId(u, v);
+    return id > 0 ? std::string(nameOf(id)) : std::string();
 }
 
 // ── 判定带应用到格子图（渲染层，每帧一次；alpha 白名单之后、泛洪补洞之前）──
@@ -481,11 +503,65 @@ inline int applyBands(std::vector<unsigned char>& grid, int gw, int gh,
 // ── 表情（热的那一项）──────────────────────────────────────────────
 // pick 里 `/` 分隔 = 每次随机抽一个；同一部位多条 expr 行 = 合并成候选池。
 // hold = expr 行自己的值（>0）否则用 part 行的 hold。
+// ── 表情覆盖层（Step 5）─────────────────────────────────────────────
+// 为什么要有这一层：网页改一个部位的表情要**立刻生效**，不能等重启。
+//   · 文件（parts.tsv 的 expr 段）是唯一真源，重启后的事实
+//   · 这层 map 只在「本次进程里被网页改过的部位」上有值，生命周期 = 进程
+//   · 落盘和覆盖同时写同一个值，所以重启前后一致
+// 这样就不会出现「文件一份、内存一份、谁先谁后」的老问题 —— 覆盖层是**同一份数据
+// 的未落盘版本**，不是第二份数据。
+inline std::map<unsigned char, std::string>& exprOverlay() {
+    static std::map<unsigned char, std::string> m;
+    return m;
+}
+
+inline void setExprOverride(int id, const std::string& val) {
+    if (id <= 0) return;
+    // 空串是**显式**的「这个部位不放表情」，不是「删掉覆盖、回落到文件里的值」——
+    // 网页上把下拉选回「无」必须真的把 parts.tsv 那行写成空，否则清不掉。
+    // （踩过：早先 erase 掉覆盖，结果落回注册表里文件原有的值，删不掉）
+    exprOverlay()[static_cast<unsigned char>(id)] = val;
+}
+
+inline void clearExprOverlay() { exprOverlay().clear(); }
+
+// 某个部位当前该播什么（覆盖层优先，否则合并注册表里的所有 expr 行，用 `/` 连接）
+inline std::string exprValueOf(int id) {
+    if (id <= 0) return std::string();
+    const auto it = exprOverlay().find(static_cast<unsigned char>(id));
+    if (it != exprOverlay().end()) return it->second;
+    std::string out;
+    for (const Expr& e : reg().exprs) {
+        if (e.id != id || e.pick.empty()) continue;
+        if (!out.empty()) out += '/';
+        out += e.pick;
+    }
+    return out;
+}
+
 inline bool pickExpr(int id, unsigned seed, std::string* out, double* holdOut) {
     if (id <= 0) return false;
     const Registry& r = reg();
     std::vector<std::string> pool;
     double hold = holdOf(id);
+    // 覆盖层：网页改过的值直接当候选池（可能还是 a/b/c 的形态）
+    const auto ov = exprOverlay().find(static_cast<unsigned char>(id));
+    if (ov != exprOverlay().end()) {
+        const std::string& val = ov->second;
+        if (val.empty()) return false;
+        size_t p0 = 0;
+        for (;;) {
+            const size_t p1 = val.find('/', p0);
+            const std::string one = val.substr(p0, p1 == std::string::npos ? std::string::npos : p1 - p0);
+            if (!one.empty()) pool.push_back(one);
+            if (p1 == std::string::npos) break;
+            p0 = p1 + 1;
+        }
+        if (pool.empty()) return false;
+        if (out) *out = pool[seed % pool.size()];
+        if (holdOut) *holdOut = hold;
+        return true;
+    }
     for (const Expr& e : r.exprs) {
         if (e.id != id) continue;
         if (e.hold > 0) hold = e.hold;
@@ -502,6 +578,139 @@ inline bool pickExpr(int id, unsigned seed, std::string* out, double* holdOut) {
     if (pool.empty()) return false;
     if (out) *out = pool[seed % pool.size()];
     if (holdOut) *holdOut = hold;
+    return true;
+}
+
+// ── 落盘：只重写 expr 段（全套里唯一有写入风险的路径）──────────────
+// 四条规矩，少一条就会吃掉别人手写的配置：
+//   ① 非 expr 行**逐字节原样保留**（注释、空行、行尾空白、\r 都算）
+//   ② 新 expr 行写回原位置（原来按什么顺序排就还什么顺序，新部位追加到末尾）
+//   ③ 先写 .tmp，再**逐行 diff 断言**：两边去掉 expr 行后必须完全相等，且新 expr 行
+//      每一行的部位名都在注册表里、值里没有 TAB
+//   ④ 断言通过才 rename；不通过删 tmp、原文件一个字节都没动、返回 false
+inline std::vector<std::string> readLinesRaw(const std::string& path, bool* ok) {
+    std::vector<std::string> out;
+    std::ifstream f(path, std::ios::binary);
+    if (!f) { if (ok) *ok = false; return out; }
+    const std::string all((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    size_t p = 0;
+    while (p < all.size()) {
+        const size_t q = all.find('\n', p);
+        if (q == std::string::npos) { out.push_back(all.substr(p)); break; }
+        out.push_back(all.substr(p, q - p + 1));      // 含 '\n'
+        p = q + 1;
+    }
+    if (ok) *ok = true;
+    return out;
+}
+
+inline bool isExprLine(const std::string& line) {
+    return line.compare(0, 5, "expr\t") == 0;
+}
+
+// "expr\t<部位>\t<值>\n" → 部位名（不含 TAB 之前/之后的东西）
+inline std::string exprLinePart(const std::string& line) {
+    const size_t a = line.find('\t');
+    if (a == std::string::npos) return std::string();
+    const size_t b = line.find('\t', a + 1);
+    std::string s = line.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1);
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n')) s.pop_back();
+    return s;
+}
+
+inline bool saveExprRows(const std::string& path, std::string* err) {
+    auto fail = [&](const char* why) {
+        if (err) *err = why;
+        return false;
+    };
+    const Registry& r = reg();
+    if (!r.ok) return fail("注册表没读到部位，拒绝写（免得把文件写成空的）");
+
+    bool ok = false;
+    const std::vector<std::string> oldLines = readLinesRaw(path, &ok);
+    if (!ok) return fail("读不到原文件");
+
+    // ① 找出原 expr 行的位置和顺序
+    size_t firstExpr = std::string::npos;
+    std::vector<std::string> order;
+    for (size_t i = 0; i < oldLines.size(); ++i) {
+        if (!isExprLine(oldLines[i])) continue;
+        if (firstExpr == std::string::npos) firstExpr = i;
+        const std::string nm = exprLinePart(oldLines[i]);
+        if (!nm.empty()) order.push_back(nm);
+    }
+    // 原顺序 + 注册表里还没出现过的部位（新部位追加到末尾）
+    std::vector<int> ids;
+    for (const std::string& nm : order) {
+        const int id = idOf(r, nm);
+        if (id > 0) ids.push_back(id);
+    }
+    for (size_t i = 0; i < r.parts.size(); ++i) {
+        const int id = static_cast<int>(i) + 1;
+        bool seen = false;
+        for (int x : ids) if (x == id) { seen = true; break; }
+        if (seen) continue;
+        // 原来没有 expr 行、现在也没有值的部位，不凭空造一行空 expr
+        // （否则每写一次文件就多 13 行空行，diff 全花，幂等也破了）
+        if (exprValueOf(id).empty()) continue;
+        ids.push_back(id);
+    }
+
+    // ② 生成新 expr 行
+    std::vector<std::string> newExpr;
+    for (int id : ids) {
+        const std::string val = exprValueOf(id);
+        if (val.find('\t') != std::string::npos) return fail("表情名里有 TAB，拒绝写");
+        newExpr.push_back("expr\t" + std::string(nameOf(id)) + "\t" + val + "\n");
+    }
+
+    // ③ 拼新文件：非 expr 行原样，expr 块写回原位置
+    std::vector<std::string> out;
+    bool inserted = false;
+    for (size_t i = 0; i < oldLines.size(); ++i) {
+        if (isExprLine(oldLines[i])) {
+            if (!inserted) {
+                for (const std::string& l : newExpr) out.push_back(l);
+                inserted = true;
+            }
+            continue;                       // 原 expr 行全部丢掉（已由 newExpr 取代）
+        }
+        out.push_back(oldLines[i]);
+    }
+    if (!inserted) {
+        // 原来一条 expr 行都没有：追加到末尾（保证前一行以 '\n' 结尾）
+        if (!out.empty() && (out.back().empty() || out.back().back() != '\n')) out.back() += '\n';
+        for (const std::string& l : newExpr) out.push_back(l);
+    }
+
+    // ④ 逐行 diff 断言：去掉 expr 行后，新旧必须完全相等
+    std::vector<std::string> a, b;
+    for (const std::string& l : oldLines) if (!isExprLine(l)) a.push_back(l);
+    for (const std::string& l : out)      if (!isExprLine(l)) b.push_back(l);
+    if (a != b) return fail("非 expr 行被动了，拒绝写");
+
+    // ⑤ 写 tmp → 校验 → rename
+    const std::string tmp = path + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+        if (!f) return fail("建不了 tmp");
+        for (const std::string& l : out) f.write(l.data(), static_cast<std::streamsize>(l.size()));
+        f.flush();
+        if (!f) { std::remove(tmp.c_str()); return fail("写 tmp 失败"); }
+    }
+    // 读回来再断言一次（防写到一半被截断）
+    bool ok2 = false;
+    const std::vector<std::string> back = readLinesRaw(tmp, &ok2);
+    if (!ok2 || back.size() != out.size()) { std::remove(tmp.c_str()); return fail("tmp 读回来行数不对"); }
+    std::vector<std::string> c;
+    for (const std::string& l : back) if (!isExprLine(l)) c.push_back(l);
+    if (a != c) { std::remove(tmp.c_str()); return fail("tmp 的非 expr 行和原件不一致"); }
+
+    std::remove(path.c_str());
+    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+        std::rename(tmp.c_str(), path.c_str());     // 再来一次（同分区几乎不会失败）
+        return fail("rename 失败（原文件已删，tmp 还在）");
+    }
     return true;
 }
 

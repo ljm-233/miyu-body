@@ -1,0 +1,40 @@
+{
+ "head": {
+  "own": 5,
+  "others": {
+   "head": 5,
+   "chest": 42,
+   "arm": 21,
+   "skirt": 75,
+   "leg": 6,
+   "tail": 18,
+   "eye": 3,
+   "mouth": 2,
+   "brow": 0,
+   "ear": 1,
+   "waist": 0,
+   "headwear": 2
+  },
+  "ratio": 0.07,
+  "hit": "部位 head 没有可拨的根"
+ },
+ "headwear": {
+  "own": 854,
+  "others": {
+   "head": 22,
+   "chest": 79,
+   "arm": 64,
+   "skirt": 139,
+   "leg": 7,
+   "tail": 25,
+   "eye": 121,
+   "mouth": 2,
+   "brow": 58,
+   "ear": 1,
+   "waist": 0,
+   "headwear": 854
+  },
+  "ratio": 6.14,
+  "hit": "点中部位 headwear -> 1 个根输入：PokeHeadWear(-1.00)"
+ }
+}

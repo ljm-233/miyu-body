@@ -1437,7 +1437,7 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         //   嘴（开）      u .490..0.510  v .240..0.251
         // 三条带**互不重叠**，都只压在剪影里（cellOk）。眉毛那条只到 0.207 ——
         // 眉毛抬起来时往上走，留在这条带里；它往下甩才会掉进眼睛那条，所以眉毛的
-        // 方向固定成「往上」（见 partPokeStart 的 upOnly）。
+        // 方向固定成「往上」（见 state/parts.tsv 里 PokeBrow 的 up 标记）。
         // 二十五 → Step 3：判定带改成**从 partapi 读**（唯一一份 state/parts.tsv）。
         //
         // 原来这里有 70 行：自读 state/part-bands.tsv + 一份 9 条的内置兜底 kFallback。
@@ -1639,9 +1639,11 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
     // 二十四：嘴和眉毛例外，固定往正方向 —— 嘴只能往上开（ParamMouthOpenY 是 0..1，
     // 往下压等于闭着，点了没反应）；眉毛那几格只有十几像素高，往下甩会甩进眼睛的
     // 格子（实测 79px 落眼睛 / 62px 落眉毛），抬起来才是它自己的动作。
-    const bool upOnly = (part == "mouth" || part == "brow");
-    const float dir = upOnly ? 1.0f : ((partpoke::gGen & 1) ? -1.0f : 1.0f);
+    // Step 4：这个「例外」从 `part == "mouth" || part == "brow"` 的现场判断，改成
+    // 读 **param 行自己的 up 标记**（state/parts.tsv 里 PokeMouth / PokeBrow 带 up）。
+    // 好处是一个部位有多个根、方向要求不同时，每个参数各算各的，不再共用同一个 dir。
     for (const partpoke::PartParam& p : ps) {
+        const float dir = p.up ? 1.0f : ((partpoke::gGen & 1) ? -1.0f : 1.0f);
         const Csm::csmInt32 idx = model->GetParameterIndex(
             Csm::CubismFramework::GetIdManager()->GetId(p.name.c_str()));
         if (idx < 0) continue;
@@ -1766,28 +1768,17 @@ static float mouthPokeAmount(Csm::CubismModel* model) {
 // 于是这八个部位改成「点一下换一个表情，2 秒后淡回默认」，只用情绪系表情，
 // 功能型的（裙子切换/脱鞋/尾巴开关/竖食指/眼镜/体型）一个都不碰。
 // 头是「被摸头」，所以给随机；其余每个部位固定一种，互不重复。
+// Step 5：表情从 **partapi** 读（parts.tsv 的 expr 段 + 网页覆盖层），
+// 不再读 `web::settings().partExpr` —— 那份是 part-react.tsv 的镜像。
+// 斜杠 `a/b/c` = 每次随机抽一个的语义留在 partapi::pickExpr 里，这里只拿结果。
+// hold 也一起从表里来（expr 行没写就用 part 行的 hold，默认 5.0，和原来写死的 5 一致）。
+static double gTapExprHold = 5.0;
+
 static const char* tapExprFor(const std::string& part, unsigned seed) {
-    // 二十五：不再写死表 —— 从设置里读（state/part-react.tsv，网页「点击反应」那一组管它）。
-    // 值是 "脸红" 或 "脸红/兔牙/＞＜"（斜杠分隔 = 每次随机抽一个）。
-    // 空串或没有这一条 = 这个部位只放自身动作，不放表情。
-    const auto& m = web::settings().partExpr;
-    auto it = m.find(part);
-    if (it == m.end() || it->second.empty()) return nullptr;
     static std::string pick;
-    const std::string& val = it->second;
-    const size_t slash = val.find('/');
-    if (slash == std::string::npos) { pick = val; }
-    else {
-        std::vector<std::string> all;
-        size_t p0 = 0;
-        while (p0 <= val.size()) {
-            const size_t p1 = val.find('/', p0);
-            all.push_back(val.substr(p0, p1 == std::string::npos ? std::string::npos : p1 - p0));
-            if (p1 == std::string::npos) break;
-            p0 = p1 + 1;
-        }
-        pick = all.empty() ? std::string() : all[seed % all.size()];
-    }
+    double hold = 5.0;
+    if (!partapi::pickExpr(partapi::indexOf(part), seed, &pick, &hold)) return nullptr;
+    gTapExprHold = hold;
     return pick.empty() ? nullptr : pick.c_str();
 }
 
@@ -1805,7 +1796,7 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             const char* ex = tapExprFor(part, gTapSeed++);
             if (ex && web::settings().expr) {
                 exprPlay(ex);
-                gTapExprUntil = now + 5.0;   // 他 2026-11-10 21:2x 定的：五秒
+                gTapExprUntil = now + gTapExprHold;   // 表里：part 行的 hold × expr 行的覆盖，默认 5.0
                 gTapExprOn = true;
                 log_("[tap] 点 %s -> 表情「%s」", part.c_str(), ex);
             }

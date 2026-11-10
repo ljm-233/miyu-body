@@ -54,6 +54,23 @@ int main(int argc, char** argv) {
     const bool gridOnly = (argc > 1 && std::strcmp(argv[1], "--grid") == 0);
     const bool gridDump = (argc > 1 && std::strcmp(argv[1], "--grid-dump") == 0);
 
+    // --save-expr <file> <部位> <值>：单独测 saveExprRows（不接网页之前先在副本上证明它不吃别的行）
+    // 注意注册表读的是 MIYU_PARTS_FILE（默认 state/parts.tsv），所以测试要
+    //   MIYU_PARTS_FILE=/tmp/parts-test.tsv /tmp/parts-selftest --save-expr /tmp/parts-test.tsv chest 兔牙
+    if (argc > 4 && std::strcmp(argv[1], "--save-expr") == 0) {
+        const char* path = argv[2];
+        const int id = partapi::indexOf(argv[3]);
+        if (id <= 0) { std::fprintf(stderr, "没有部位 %s\n", argv[3]); return 2; }
+        partapi::setExprOverride(id, argv[4]);
+        std::string err;
+        if (!partapi::saveExprRows(path, &err)) {
+            std::fprintf(stderr, "saveExprRows 失败：%s\n", err.c_str());
+            return 1;
+        }
+        std::printf("ok: %s → 「%s」写进 %s（expr 覆盖层 + 落盘）\n", argv[3], argv[4], path);
+        return 0;
+    }
+
     // --grid-dump：把判定带画进一张空格子图，按 RLE 打出来（和旧算法逐格对账用）
     if (gridDump) {
         const int gw = 120, gh = 240;

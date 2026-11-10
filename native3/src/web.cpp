@@ -13,6 +13,8 @@
 // 路径优先级：MIYU_STATE_DIR → <exe>/../state（build/miyu-wayland ↔ native3/state）
 
 #include "web.h"
+#include "partapi.h"   // 二十五：部位→表情的真源在 parts.tsv
+#include "partpoke.h"  // kZoneNames / kZoneCount（部位名表）
 
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -736,31 +738,28 @@ Conn gConn[kMaxConn];
 static const char* kPartReactPath = "state/part-react.tsv";
 
 void loadPartReact() {
-    std::ifstream f(kPartReactPath);
-    if (!f) return;
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        const size_t t = line.find('\t');
-        if (t == std::string::npos) continue;
-        std::string part = line.substr(0, t), ex = line.substr(t + 1);
-        while (!ex.empty() && (ex.back() == '\r' || ex.back() == ' ')) ex.pop_back();
-        if (!part.empty()) gSet.partExpr[part] = ex;
+    // 二十五：真源换成 state/parts.tsv 的 expr 段（partapi 在启动时读进来）。
+    // 这里只把初值填进内存 map 给设置页显示用；**真正生效的是 partapi**。
+    // part-react.tsv 从 2026-11-10 22:2x 起退休（挪到 state/legacy/），
+    // 留着它就是「两处各有一份数据」，今晚所有串位都是这个病因。
+    int n = 0;
+    for (int id = 1; id < partpoke::kZoneCount; ++id) {
+        const std::string v = partapi::exprValueOf(id);
+        if (!v.empty()) {
+            gSet.partExpr[partpoke::kZoneNames[id]] = v;
+            ++n;
+        }
     }
-    if (!gSet.partExpr.empty())
-        logw("部位→表情：读进 %zu 条（%s）", gSet.partExpr.size(), kPartReactPath);
+    logw("部位→表情：从 parts.tsv 读进 %d 条", n);
 }
 
 void savePartReact() {
-    const std::string tmp = std::string(kPartReactPath) + ".tmp";
-    {
-        std::ofstream f(tmp, std::ios::trunc);
-        if (!f) { logw("部位→表情存不下来：%s", tmp.c_str()); return; }
-        f << "# 部位\t表情名（空 = 这个部位只放自身动作，不放表情）\n";
-        for (const auto& [part, ex] : gSet.partExpr) f << part << '\t' << ex << '\n';
-    }
-    if (std::rename(tmp.c_str(), kPartReactPath) != 0)
-        logw("部位→表情存不下来（rename）：%s", kPartReactPath);
+    // 二十五：写回 state/parts.tsv 的 expr 段。saveExprRows 内部是
+    // 「非 expr 行原样保留 → 写 .tmp → 重解析校验 → 通过才 rename」，
+    // 校验不过不落盘（子代理那边单独测过：非 expr 的 98 行 sha256 一字节不差）。
+    std::string err;
+    if (!partapi::saveExprRows("state/parts.tsv", &err))
+        logw("部位→表情存不下来：%s", err.c_str());
 }
 
 void saveSettings() {
@@ -1103,6 +1102,9 @@ std::string handleSet(const std::string& body, bool logIt) {
             const std::string part = k.substr(6);
             if (!part.empty() && gSet.partExpr[part] != v.s) {
                 gSet.partExpr[part] = v.s;
+                // 二十五：立刻让人生效（覆盖层），再落盘。少了这行，设置页改表情
+                // 就只是「改了一张没人读的表」——今晚 22:2x 验出来就是这个。
+                partapi::setExprOverride(partapi::indexOf(part), v.s);
                 savePartReact();
                 changed.push_back(k);
                 logw("部位→表情：%s = 「%s」", part.c_str(), v.s.empty() ? "(无)" : v.s.c_str());

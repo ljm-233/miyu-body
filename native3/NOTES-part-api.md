@@ -797,3 +797,145 @@ PART 14 toe 脚趾 hold=3.0 flags=-
 ### 9.6 下一步（等 ljm 说 web.cpp 弄完）
 
 Step 3 之前的准备工作只有一件：**补跑 `part-poke-check.py` 存基线**（见 9.1 的 ⚠）。
+
+### 9.7 headwear 判定带：fill → force（Step 3 落地后立刻修的第一处配置）
+
+2026-11-10 22:0x。11 点真点击（第二支指针）里**头饰那一点偶发判成 head**：同一坐标
+`(215,140)` 两次点击给出两个结果。复测五个点，带内中间三点对、上下两点判 head。
+
+根因不是 Step 3（28800 格逐格一致已证），是**配置和文档从 24.2 那天起就不一致**：
+
+- `NOTES.md` 24.2 原话：「头饰也改成位置带：`v .118..0.172、u .395..0.610` 内**一律算头饰**」
+- 但 `part-bands.tsv` 那两条写的是 `0`（补白 / fill），注释还写着「补白，不抢头发」
+
+发饰是画在**头发上面**的白色蕾丝边，点它应该永远是发饰；fill 让呼吸说了算 —— 头发
+drawable 压下来的那几帧，格子已经被 head 占掉，带子补不进去。
+
+改法（只动配置，不动代码）：
+
+```
+band	headwear	0.395	0.470	0.118	0.178	force	100	# 女仆发饰左（force：发饰在头发上面）
+band	headwear	0.535	0.610	0.118	0.178	force	100	# 女仆发饰右
+```
+
+`state/part-bands.tsv`（归档那份）同步改成 `1`，`tools/parts-migrate.py --verify` 仍然全绿。
+
+**验证（第二支指针，连点三次同一坐标 `(215,140)` 全局 `(897,226)`，间隔 1.15s）**
+
+```
+[tap] 第 3 次点击 local=(215,140) → 部位 headwear（u=0.430 v=0.156，只动这一块）
+[tap] 第 4 次点击 local=(215,140) → 部位 headwear（u=0.430 v=0.156，只动这一块）
+[tap] 第 5 次点击 local=(215,140) → 部位 headwear（u=0.430 v=0.156，只动这一块）
+（服务重启后又点一次：第 1 次 → headwear）
+```
+三次全对。改前是三次里一次 head、一次 headwear（第 2 / 第 12 次）。
+
+**倍数（`tools/part-poke-check.py head headwear`）**
+
+| 部位 | 改前 own / 倍数 | 改后 own / 倍数 |
+|---|---|---|
+| head | 5 px / 0.05 | 5 px / 0.07 |
+| headwear | 686 px / 3.52 | **854 px / 6.14** |
+
+headwear 涨是因为抢回了被头发占掉的那几块格子（自己 686→854，别的最大从 head 195 掉到 skirt 139）。
+**head 几乎没变**（5 px 是「没有可拨的根」，只有表情），说明这两小块本来也不归它。
+`state/poke-check-baseline.json` 里这两条已按新值更新，其余 10 个部位未动。
+
+**教训**：注释会骗人。「补白，不抢头发」这句注释和设计意图（一律算头饰）是反的，
+而 `NOTES.md` 24.2 记的是设计意图。两份数据打架的时候，**信行为**（同一坐标两次不同结果）
+和**信原话**（一律），别信注释。
+
+### 9.8 Step 5 前三步：分发按 id、表情从表里读、saveExprRows 单独验过
+
+2026-11-10 22:1x–22:2x。`web.cpp` **一行没动**（等 ljm 的设置页回执）。
+
+**① `partapi::classifyId()` 成为判定入口**
+
+`classify()`（返回名字）改成 `classifyId()` 的壳。判定链没变（any 带 → 格子图 → Z 行），
+只是返回 id 而不是拼字符串。
+
+**② `platform_wayland.cpp` 的分发删掉现场拼装**
+
+```cpp
+const int partId = partapi::classifyId(u, v);
+static int gLastPartId = 0;                       // 冷却按 id，不按名字
+const bool samePart = (partId == gLastPartId) && (now - gLastPartT < TAP_SAME_PART_S);
+if (partId > 0 && partapi::hasAction(partId) && !samePart) { ... }
+```
+删掉的三行是今天最后一个「两处各有一份数据」的现场：`partpoke::hasParams(part) ||
+web::settings().partExpr[part]` —— 一半数据来自 parts.tsv、一半来自 part-react.tsv。
+
+**③ `main.cpp` 的 `tapExprFor` 改从 partapi 读**
+
+```cpp
+if (!partapi::pickExpr(partapi::indexOf(part), seed, &pick, &hold)) return nullptr;
+gTapExprHold = hold;
+```
+停留时间也跟着从表里来（`gTapExprUntil = now + gTapExprHold`，原来是写死的 `5.0`）。
+expr 行没写 hold 就落 part 行的 5.0，行为不变。
+
+**④ 表情覆盖层 + `saveExprRows`（唯一有写入风险的路径）**
+
+语义定死：覆盖层是**同一份数据的未落盘版本**，不是第二份数据。
+
+```
+state/parts.tsv 的 expr 段   ← 唯一真源（重启后的事实）
+        ↓ 启动读一次
+partapi::reg().exprs          ← 只读
+        ↑ 覆盖（只在网页改过的部位上有值，生命周期 = 进程）
+```
+
+`saveExprRows()` 的四条规矩（少一条就会吃掉别人手写的配置）：
+
+1. 非 expr 行**逐字节原样保留**（注释、空行、行尾空白、`\r` 都算）
+2. 新 expr 行写回**原位置**（原来按什么顺序排就还什么顺序；新部位追加到末尾）
+3. 先写 `.tmp`，再**逐行 diff 断言**：两边去掉 expr 行后必须完全相等；读回来再断言一次
+4. 断言不过就删 tmp、原文件一个字节不动、返回 false
+
+**踩到的两个坑**
+
+- **凭空造空行**：第一版把「注册表里有、原文件没有 expr 行」的部位也写出来，
+  于是 `other` 每次多一行 `expr other `。改成「原来没有、现在也没值 → 不写」，幂等才成立
+- **清空删不掉**：第一版 `setExprOverride(id, "")` 是 `erase` 覆盖层，结果落回注册表里
+  文件原有的值 —— 网页上把下拉选回「无」，文件里那行不变。改成**空串也存**（显式清空）
+
+**单独测（不接网页，在副本上）**
+
+```
+cp state/parts.tsv /tmp/parts-test.tsv
+MIYU_PARTS_FILE=/tmp/parts-test.tsv /tmp/parts-selftest --save-expr /tmp/parts-test.tsv chest 兔牙
+```
+
+| 用例 | 结果 |
+|---|---|
+| 写回原值（幂等） | `cmp` **逐字节完全相同**；`parts-migrate.py --verify` 全绿（band/param/part-react 三表反向一致） |
+| 改成「兔牙」 | `diff` 只差一行（`expr chest 脸红` → `兔牙`） |
+| 清空 | 变成 `expr\tchest\t`（行还在，值为空） |
+| 文件不存在 | `saveExprRows 失败：读不到原文件`，不崩 |
+| 非 expr 行 | 98 行去掉 expr 后 sha256 与原件一致（`c9e36458…`） |
+
+**服务侧验证（第二支指针，12 部位全覆盖 + 胸 ×3）**
+
+```
+第 1 次 (247,150) → head（id=1）          → 表情「前倾」
+第 2 次 (215,140) → headwear（id=13）     → 表情「流泪」
+第 3 次 (180,205) → ear（id=11）          → PokeEarL(-1.00) PokeEarR(-1.00)  表情「＞＜」
+第 4 次 (247,193) → eye（id=8）           → PokeEye(+1.00)   表情「爱心眼」
+第 5 次 (252,174) → brow（id=10）         → PokeBrow(+1.00)  表情「黑脸」
+第 6 次 (252,230) → mouth（id=9）         → PokeMouth(+1.00) 表情「＞＜」
+第 7 次 (247,294) → chest（id=2）         → PokeChest(-1.00) 表情「脸红」
+第 8 次 (235,414) → waist（id=12）        → PokeWaist(+1.00) 表情「圈圈眼」
+第 9 次 (370,535) → skirt（id=4）         → PokeSkirt(-1.00)（无表情，空行）
+第 10 次 (175,535) → skirt（id=4）        → PokeSkirt(+1.00)
+第 11 次 (240,650) → leg（id=5）          → PokeLeg(-1.00)（无表情）
+第 12 次 (395,620) → tail（id=6）         → PokeTail(+1.00)（无表情）
+第 13/14/15 次胸 → 表情「脸红」×3
+第 16 次 (147,376) → arm（id=3）          → PokeArmL(+1.00) PokeArmR(+1.00)
+```
+
+12 个部位全中，参数名与前两轮一致，胸三次表情都在。
+`认得出部位的 484 个`、`input region 881 / 127912 px / 28.4%` 都没变。
+
+**还没做的**：`web.cpp` 三处（`loadPartReact` / `savePartReact` / `handleSet` 的 pexpr 分支）。
+在那之前，`part-react.tsv` 仍会被 web 加载成 `web::settings().partExpr` —— 但**已经没有任何
+代码读那个 map** 了，所以它现在是「死加载 + 死数据」，等 web.cpp 改完才清干净。
