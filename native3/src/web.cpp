@@ -246,7 +246,7 @@ const char* kHtml = R"HTML(<!doctype html>
       {k:'swayIdle', t:'bool', label:'静止轻摆',
        d:'不动的时候极慢地歪一点点（15 秒一个来回，0.3°）；只在「活泼」待机风格下生效'},
       {k:'chestSway', t:'range', min:0, max:2, step:0.1, label:'胸晃',
-       d:'点胸口时晃多大。0 不晃，1 原样，2 晃一倍（过大胸会变形）'},
+       d:'点胸口时晃多大。0 最轻（干脆利落），2 最大（软、晃得久）'},
       {k:'dragSpring', t:'range', min:0, max:2, step:0.1, label:'拖动弹簧',
        d:'拖动不是刚性跟随：她有一点点「重」，弹簧追你，快速拖能看到落后十几到几十像素。0.5 更软更沉，2 更跟手'},
       {k:'swayTilt', t:'range', min:0, max:4.5, step:0.5, label:'整体倾斜',

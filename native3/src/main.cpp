@@ -1486,7 +1486,9 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
     // 冲量给多大都撞界，实测 0/0.6/1.2/2.0 四档位移一模一样（5662/5469/4878/5153）。
     // 刚度不同 → 冲出去的速度、回弹的快慢都不同，这才看得出档位。
     float swayK = 1.0f;
-    if (gPartPoke.part == "chest") swayK = 0.25f + 0.75f * web::settings().chestSway;
+    // 2026-11-10 13:5x：他说「0 是最大档、2 是最小档」，方向反了——
+    // K 越大弹簧越硬、同样冲量下位移越小。所以档位越大 K 越小（越软、晃得越大）。
+    if (gPartPoke.part == "chest") swayK = 1.75f - 0.75f * web::settings().chestSway;
     const float K = 68.0f * swayK, C = 11.2f * swayK;
     static double lastSwayLog = -1e9;
     if (gPartPoke.part == "chest" && now - lastSwayLog > 0.5) {
