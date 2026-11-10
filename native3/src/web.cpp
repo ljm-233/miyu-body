@@ -245,6 +245,8 @@ const char* kHtml = R"HTML(<!doctype html>
        d:'拖她的时候整个人会真的歪过去（动的是投影，不是参数——参数她身上看不见）。1 = 拖得越快歪得越多，松手回弹'},
       {k:'swayIdle', t:'bool', label:'静止轻摆',
        d:'不动的时候极慢地歪一点点（15 秒一个来回，0.3°）；只在「活泼」待机风格下生效'},
+      {k:'chestSway', t:'range', min:0, max:2, step:0.1, label:'胸晃',
+       d:'点胸口时晃多大。0 不晃，1 原样，2 晃一倍（过大胸会变形）'},
       {k:'dragSpring', t:'range', min:0, max:2, step:0.1, label:'拖动弹簧',
        d:'拖动不是刚性跟随：她有一点点「重」，弹簧追你，快速拖能看到落后十几到几十像素。0.5 更软更沉，2 更跟手'},
       {k:'swayTilt', t:'range', min:0, max:4.5, step:0.5, label:'整体倾斜',
@@ -594,6 +596,7 @@ void saveSettings() {
           << ",\"dragSway\":" << gSet.dragSway
           << ",\"swayIdle\":" << (gSet.swayIdle ? "true" : "false")
           << ",\"swayTilt\":" << gSet.swayTilt
+          << ",\"chestSway\":" << gSet.chestSway
           << ",\"dragSpring\":" << gSet.dragSpring
           << ",\"tapPart\":" << (gSet.tapPart ? "true" : "false") << "}\n";
     }
@@ -648,6 +651,7 @@ void loadSettings() {
         else if (k == "dragSway" && v.t == VNum) gSet.dragSway = clampf(float(v.n), 0.0f, 2.0f);
         else if (k == "swayIdle" && v.t == VBool) gSet.swayIdle = v.b;
         else if (k == "swayTilt" && v.t == VNum) gSet.swayTilt = clampf(float(v.n), 0.0f, 4.5f);
+        else if (k == "chestSway" && v.t == VNum) gSet.chestSway = clampf(float(v.n), 0.0f, 2.0f);
         else if (k == "dragSpring" && v.t == VNum) gSet.dragSpring = clampf(float(v.n), 0.0f, 2.0f);
         // 二十一：点哪动哪
         else if (k == "tapPart" && v.t == VBool) gSet.tapPart = v.b;
@@ -763,6 +767,7 @@ std::string stateJson() {
     s += ",\"dragSway\":" + std::to_string(gSet.dragSway);
     s += ",\"swayIdle\":" + std::string(gSet.swayIdle ? "true" : "false");
     s += ",\"swayTilt\":" + std::to_string(gSet.swayTilt);
+    s += ",\"chestSway\":" + std::to_string(gSet.chestSway);
     s += ",\"dragSpring\":" + std::to_string(gSet.dragSpring);
     s += ",\"tapPart\":" + std::string(gSet.tapPart ? "true" : "false");
     s += ",\"fps_now\":" + (gFps < 0.0 ? std::string("null") : std::to_string(gFps));
