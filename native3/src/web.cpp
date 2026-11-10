@@ -349,8 +349,15 @@ const char* kHtml = R"HTML(<!doctype html>
     partCard = document.createElement('div'); partCard.className = 'card';
     var h = document.createElement('div'); h.className = 'gh'; h.textContent = '点击反应';
     partCard.appendChild(h);
+    // 二十五：这两个在我们这个模型里**参数没绑顶点**（509 个参数里只有 162 个
+    // 会真的动画面，它们用的 key9 / key13 不在里面），选下去脸一点变化都没有。
+    // 名字直接标出来，省得他以为设置没生效。
+    //   来源：state/param-map.json（param-probe 逐个按死 min/max 量的）
+    var DEAD = {'兔牙':1, '流冷汗':1};
     var opts = [['','无（只放自身动作）']];
-    names.forEach(function(n){ opts.push([n, n]); });
+    names.forEach(function(n){
+      opts.push([n, DEAD[n] ? (n + '（模型里没绑，选了没反应）') : n]);
+    });
     PARTS.forEach(function(p){
       addRow(partCard, {k:'pexpr.'+p[0], t:'select', label:p[1], opts:opts,
         d:'点这个部位时播哪个表情。选「无」就只放它自己的动作。'});
