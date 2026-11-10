@@ -30,6 +30,10 @@ part	ear	兽耳	5.0
 part	waist	腰	5.0
 part	headwear	头饰	5.0
 
+# ══ 设置页「点击反应」的显示顺序（和 id 无关；不写就按 id 排）══════════
+# 只影响页面怎么排，不影响判定 —— 改它不用重启（下次刷新页面就变了）。
+display	head	headwear	ear	eye	brow	mouth	chest	waist	arm	skirt	leg	tail
+
 # ══ drawable 的 part 名 → 部位（子串匹配，先出现的赢）══════════════════
 # 来源：src/main.cpp:1062 zoneOfPartName（原样搬，顺序有意义）
 alias	head	眼镜
@@ -108,3 +112,9 @@ expr	waist	圈圈眼
 follow	leg	HipAngleX	0.6	30	ax
 follow	leg	HipAngleZ	2.2	30	az
 follow	leg	PokeLeg	0.0625	1	ax
+
+part	toe	脚趾	3.0
+alias	toe	脚趾
+band	toe	0.540	0.580	0.640	0.680	force	100
+param	toe	PokeLeg	70	0.500
+expr	toe	＞＜

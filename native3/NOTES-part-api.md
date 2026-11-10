@@ -939,3 +939,94 @@ MIYU_PARTS_FILE=/tmp/parts-test.tsv /tmp/parts-selftest --save-expr /tmp/parts-t
 **还没做的**：`web.cpp` 三处（`loadPartReact` / `savePartReact` / `handleSet` 的 pexpr 分支）。
 在那之前，`part-react.tsv` 仍会被 web 加载成 `web::settings().partExpr` —— 但**已经没有任何
 代码读那个 map** 了，所以它现在是「死加载 + 死数据」，等 web.cpp 改完才清干净。
+
+### 9.9 Step 5 收尾 + Step 6：part-react 退休、follow 通用化、legSway 落盘
+
+2026-11-10 22:3x–22:4x。
+
+**① `part-react.tsv` 退休**
+
+`state/part-react.tsv` → `state/legacy/part-react.tsv`。代码侧：
+
+- `web.cpp` 的 `kPartReactPath` 常量和那段「单独一个文件的原因」注释删掉
+- `loadPartReact()` 的注释改成「数据在 parts.tsv 的 expr 段，这个 map 只是设置页镜像」
+- `web.h:79` 的字段注释同步改
+- `tools/parts-migrate.py`：`REACT` 指向 `state/legacy/`，且**从反向 diff 的必过项里摘掉**
+  （它现在是历史快照，之后只有 parts.tsv 会被写，两边不再同步）。
+  想单独看那份快照和当前 expr 段的差异：`MIYU_VERIFY_LEGACY=1 tools/parts-migrate.py --verify`
+
+启动日志现在是：
+
+```
+[web] 部位→表情：从 parts.tsv 读进 8 条
+```
+
+「读进 12 条」那种字样没了（12 是旧表条数含 4 条空行，8 是非空的）。
+
+**② `follow` 通用化（`legDragTick` → `followTick`）**
+
+原来 55 行里硬编码三个乘数、并且用 `gPartPoke.part == "leg"` 认名字让位。
+现在整段由 `state/parts.tsv` 的 `follow` 行驱动：
+
+```
+follow	leg	HipAngleX	0.6	30	ax
+follow	leg	HipAngleZ	2.2	30	az
+follow	leg	PokeLeg	0.0625	1	ax
+```
+
+```cpp
+for (const partapi::Follow& f : fs) {
+    if (pokingId > 0 && f.id == pokingId) continue;   // 自己的弹簧活着 → 让位（按 id）
+    const float src = (f.src=='z') ? gSway.az : (f.src=='y') ? gSway.py : gSway.ax;
+    float v = clamp(src * f.gain, ±f.clampv);
+    model->SetParameterValue(idxOf(f.name), v, 1.0f);
+}
+```
+
+参数索引改成 `map<string, idx>` 惰性缓存（原来三个 static 变量）。
+
+**数值对账（同一套 sway 注入，改前 vs 改后）**
+
+改前（`[legdrag]` 那条）：`HipAngleX=+3.28 HipAngleZ=-7.51 PokeLeg=+0.34（ax=+5.46 az=-3.41）`
+→ X/ax = 0.6007、Z/az = 2.2023、pick/ax = 0.06227
+
+改后（`[follow]`，四个不同幅度样本）：
+
+| (ax, az) | X/ax | Z/az | pick/ax |
+|---|---|---|---|
+| (7.82, -4.89) | 0.5997 | 2.1984 | 0.06266 |
+| (5.18, -3.24) | 0.6004 | 2.1975 | 0.06178 |
+| (2.00, -1.25) | 0.6000 | 2.2000 | 0.06500 |
+| (5.56, -3.48) | 0.6007 | 2.1983 | 0.06295 |
+
+理论 0.6000 / 2.2000 / 0.0625。**系数一致**（差异是两位小数的舍入）。
+
+**通用性证明（给 chest 临时加一条 follow）**
+
+```
+follow	chest	PokeChest	0.25	0.6	az
+```
+
+注入后日志：
+
+```
+[follow] 拖动跟随：HipAngleX=+1.20 HipAngleZ=-2.76 PokeLeg=+0.13 PokeChest=-0.31（来源 ax=+2.00 az=-1.25）
+```
+
+`PokeChest = -1.25 × 0.25 = -0.3125` ✓。验证完撤掉（拖动时胸侧摆是行为改变，不该留着）。
+
+**③ `legSway` 落盘**
+
+`web.h` 有字段、页面有滑块、`handleSet` 也认，就是 `saveSettings()` / `loadSettings()`
+两处都没写 —— 重启回 1.0。补上后：
+
+```
+POST {"legSway":0.5} → settings.json 里 legSway = 0.5
+重启 → /state 里 legSway = 0.5，启动日志 legSway=0.50
+```
+
+测完改回 1.0（默认手感）。
+
+**回归**
+
+点胸 / 腰 / 头饰各一次：部位、id、表情、根输入全对；`认得出部位的 484 个` 不变。

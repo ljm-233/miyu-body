@@ -76,9 +76,10 @@ struct Settings {
     bool        tapPart = true;     // 部位级反应（关掉 = 老的一套 plan 照播）
 
     // 二十五：每个部位点下去播哪个表情。空串 = 只有动作、不放表情。
-    // 存在 state/part-react.tsv（不是一个字段一个字段塞 settings.json，
-    // 那玩意儿是定长结构，逐部位的东西塞进去只会越来越难维护）。
-    // 网页设置页「点击反应」那一组直接读写它。
+    // Step 5 之后**不再是数据源**，只是设置页的镜像：
+    // 真源是 state/parts.tsv 的 expr 段（partapi），网页改的时候
+    // 同时写 partapi 的覆盖层（立刻生效）+ saveExprRows（落盘）。
+    // 保留这个 map 是因为 stateJson 要把它序列化给前端填下拉框。
     std::map<std::string, std::string> partExpr;
 };
 

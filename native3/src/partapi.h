@@ -100,6 +100,9 @@ struct Registry {
     std::vector<Expr>   exprs;
     std::vector<Follow> follows;
     std::vector<Zone>   zones;
+    // 设置页的显示顺序（display 记录，一行列完）。空 = 按 id 顺序。
+    // 它只是「页面上怎么排」，和 id / 格子里存的数字毫无关系 —— 改它不影响判定。
+    std::vector<unsigned char> display;
     int zoneGw = 120, zoneGh = 240;   // part-zones.tsv 的 #grid（没有那行就用这个默认）
 };
 
@@ -252,6 +255,14 @@ inline void loadParts(Registry& r) {
             while (!e.pick.empty() && (e.pick.back() == ' ' || e.pick.back() == '\r')) e.pick.pop_back();
             e.hold = (c.size() > 3 && !c[3].empty()) ? std::atof(c[3].c_str()) : 0.0;
             r.exprs.push_back(e);
+        } else if (kind == "display") {
+            // display<TAB>部位1<TAB>部位2…（顺序 = 设置页从上到下）
+            for (size_t i = 1; i < c.size(); ++i) {
+                if (c[i].empty()) continue;
+                const int id = idOf(r, c[i]);
+                if (id < 0) { note(r, ln, "display 引用了未定义部位", c[i]); continue; }
+                r.display.push_back(static_cast<unsigned char>(id));
+            }
         } else if (kind == "follow") {
             if (c.size() < 6) { note(r, ln, "follow 列数不够", s); continue; }
             const int id = idOf(r, c[1]);
@@ -729,6 +740,11 @@ inline std::string dump() {
         std::snprintf(buf, sizeof buf, "PART %zu %s %s hold=%.1f flags=%s\n", i + 1,
                       p.name.c_str(), p.label.c_str(), p.hold, p.dragOnly ? "dragonly" : "-");
         s += buf;
+    }
+    if (!r.display.empty()) {
+        s += "DISPLAY";
+        for (unsigned char d : r.display) { s += " "; s += nameOf(d); }
+        s += "\n";
     }
     for (const Alias& a : r.aliases) {
         std::snprintf(buf, sizeof buf, "ALIAS %d %s %s\n", static_cast<int>(a.id),

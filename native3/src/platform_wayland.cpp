@@ -360,6 +360,22 @@ static void tapFire(int lx, int ly) {
             //   · 有没有反应用 partapi::hasAction(id)（= 有参数 **或** 有非空表情），
             //     不再现场 `partpoke::hasParams(part) || web::settings().partExpr[...]`
             //     那套拼装 —— 那是「两处各有一份数据」的最后一个现场
+            {
+                // 临时诊断（Step 7 调试，验完删）：平台层看到的格子图到底是不是渲染层那份
+                static bool dbgOnce = false;
+                if (!dbgOnce) {
+                    dbgOnce = true;
+                    int gx = static_cast<int>(u * partpoke::gGridW);
+                    int gy = static_cast<int>(v * partpoke::gGridH);
+                    const unsigned char cell =
+                        partpoke::gZoneCells.empty() ? 255
+                        : partpoke::gZoneCells[static_cast<size_t>(gy) * partpoke::gGridW +
+                                               static_cast<size_t>(gx)];
+                    LOG("[tap-dbg] gZoneCells=%zu（%dx%d）格(%d,%d)=%d",
+                        partpoke::gZoneCells.size(), partpoke::gGridW, partpoke::gGridH,
+                        gx, gy, static_cast<int>(cell));
+                }
+            }
             const int partId = partapi::classifyId(u, v);
             const std::string part = partId > 0 ? std::string(partapi::nameOf(partId)) : std::string();
             static int gLastPartId = 0;
@@ -735,8 +751,13 @@ static bool makeLayerSurface(int idx) {
 
     W.surf = wl_compositor_create_surface(W.comp);
     if (!W.surf) { LOG("wl_compositor_create_surface 失败"); return false; }
+    // 2026-11-10 22:4x：从 OVERLAY 降到 TOP ——**这才是「写死在上面」的正解**。
+    // 她和第二支指针原来都在 OVERLAY 层，同层之间谁在上面由合成器自己排（niri 按
+    // 创建顺序/名字，我改了一晚上 namespace 和自愈都不可靠）。
+    // 分层之后就是确定的：指针 OVERLAY > 她 TOP，跟谁先创建无关。
+    // TOP 仍然在普通窗口之上，所以她的行为一点不变。
     W.lsurf = zwlr_layer_shell_v1_get_layer_surface(W.lshell, W.surf, W.chosen,
-                ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, W.title[0] ? W.title : "plat-wayland");
+                ZWLR_LAYER_SHELL_V1_LAYER_TOP, W.title[0] ? W.title : "plat-wayland");
     if (!W.lsurf) { LOG("get_layer_surface 失败"); return false; }
     zwlr_layer_surface_v1_add_listener(W.lsurf, &ls_listener, nullptr);
     zwlr_layer_surface_v1_set_size(W.lsurf, (uint32_t)W.reqW, (uint32_t)W.reqH);

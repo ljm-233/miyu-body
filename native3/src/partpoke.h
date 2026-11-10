@@ -46,14 +46,19 @@ inline char gPart[32] = {0};   // 部位名（parts.tsv 里的名字）
 inline int gGridW = 120;
 inline int gGridH = 240;
 
-// 二十四（2026-11-10）：8 → 14。脸拆成眼睛 / 嘴 / 眉毛，另加兽耳 / 腰 / 头饰。
-// 下标**必须**和 state/parts.tsv 里 part 行的顺序一致 —— tools/parts-migrate.py 会
-// 正则读这个数组和表逐位比，对不上就 exit 1。Step 7 之后这张表会被 partapi::nameOf()
-// 取代，在那之前 main.cpp 里十几处日志/调试还按它取名字。
-inline const char* const kZoneNames[14] = {
-    "", "head", "chest", "arm", "skirt", "leg", "tail", "other",
-    "eye", "mouth", "brow", "ear", "waist", "headwear"};
-inline const int kZoneCount = 14;
+// Step 7（2026-11-10 22:4x）：**部位名单不再写在这里**。
+// 名字的唯一来源是 state/parts.tsv 的 part 行，由 partapi 提供：
+//   partapi::count()        现在有几个部位
+//   partapi::nameOf(id)     名字（id 从 1 起，0 = 空白）
+//   partapi::labelOf(id)    中文标签
+// 加一个部位 = 表里加几行，这里和 main.cpp 都不用动。
+//
+// 只留一个**编译期上限**给数组用（main.cpp 里有几处按部位下标的统计数组）。
+// 选 256 是因为格子图的值类型是 unsigned char —— 上限必须盖住它的全部取值，
+// 否则 g[j] 拿来当下标会越界。真正的部位数看 partapi::count()。
+inline constexpr int kZoneMax = 256;
+
+inline const char* zoneName(int id) { return partapi::nameOf(id); }
 
 // 值的下标：0 = 空白（她身上没东西）。渲染层每帧刷，平台层只读。
 inline std::vector<unsigned char> gZoneCells;

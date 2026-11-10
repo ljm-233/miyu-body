@@ -14,7 +14,7 @@
 
 #include "web.h"
 #include "partapi.h"   // 二十五：部位→表情的真源在 parts.tsv
-#include "partpoke.h"  // kZoneNames / kZoneCount（部位名表）
+#include "partpoke.h"  // 部位名单（Step 7 之后由 partapi 从 parts.tsv 提供）
 
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -448,12 +448,11 @@ const char* kHtml = R"HTML(<!doctype html>
     planCard.appendChild(tip);
   }
 
-  // 二十五：点击反应 —— 每个部位点下去播哪个表情。
-  // 这一组是**动态的**：部位固定十二个，但表情列表来自 /state 的 exprNames，
-  // 加了新 exp3 文件不用改这一页。空值 = 该部位只放自身动作。
-  var PARTS = [['head','头'],['headwear','头饰'],['ear','兽耳'],['eye','眼'],
-               ['brow','眉'],['mouth','嘴'],['chest','胸'],['waist','腰'],
-               ['arm','手'],['skirt','裙'],['leg','腿'],['tail','尾']];
+  // 二十五 → Step 7：点击反应 —— 每个部位点下去播哪个表情。
+  // 部位列表**不再写死**：由 /state 的 partNames（后端从 state/parts.tsv 取，顺序 = id）
+  // 填进来。加一个部位只要改表，这里一行代码都不用动。
+  // 表情列表还是来自 exprNames（加了新 exp3 不用改页面）。空值 = 只放自身动作。
+  var PARTS = [];
   var partCard = null;
   var tabRestored = false;
   function buildPartCard(names){
@@ -497,6 +496,8 @@ const char* kHtml = R"HTML(<!doctype html>
   }
   function fill(s){
     statusLine(s);
+    // Step 7：部位列表从后端来（顺序 = parts.tsv 里 part 行的顺序 = id）
+    if (s.partNames && s.partNames.length) PARTS = s.partNames;
     // 十九：查找表没读到 / shader 编不过 → 下拉里不留 smaa（选了也不会生效）
     var aaSel = els.aa && els.aa.el;
     if (aaSel && s.smaa_ok === false) {
@@ -731,22 +732,23 @@ constexpr int kMaxConn = 4;
 Conn gConn[kMaxConn];
 
 // ── 落盘 ────────────────────────────────────────────────────────────
-// ── 二十五：部位 → 表情 的配置文件 ────────────────────────────────
-// state/part-react.tsv，一行一个部位：`部位<TAB>表情名`（表情名为空 = 只放动作）。
-// 单独一个文件的原因：这是「逐部位」的键值表，塞进定长的 settings.json 里
-// 每加一个部位都要动结构体、动保存、动读取，得不偿失。
-static const char* kPartReactPath = "state/part-react.tsv";
-
+// ── 二十五 → Step 5：部位 → 表情 ──────────────────────────────────
+// 数据在 **state/parts.tsv 的 expr 段**（唯一真源）。原来还有一个
+// state/part-react.tsv，2026-11-10 挪去 state/legacy/ 退休了 —— 两份数据
+// 就是今晚所有串位的病因。
+//
+// 这个 map 不再是数据源，只是**设置页的镜像**：启动时从 partapi 取初值，
+// handleSet 改的时候同时调 partapi::setExprOverride（内存立刻生效）+ saveExprRows（落盘）。
 void loadPartReact() {
     // 二十五：真源换成 state/parts.tsv 的 expr 段（partapi 在启动时读进来）。
     // 这里只把初值填进内存 map 给设置页显示用；**真正生效的是 partapi**。
     // part-react.tsv 从 2026-11-10 22:2x 起退休（挪到 state/legacy/），
     // 留着它就是「两处各有一份数据」，今晚所有串位都是这个病因。
     int n = 0;
-    for (int id = 1; id < partpoke::kZoneCount; ++id) {
+    for (int id = 1; id <= partapi::count(); ++id) {
         const std::string v = partapi::exprValueOf(id);
         if (!v.empty()) {
-            gSet.partExpr[partpoke::kZoneNames[id]] = v;
+            gSet.partExpr[partapi::nameOf(id)] = v;
             ++n;
         }
     }
@@ -798,6 +800,9 @@ void saveSettings() {
           << ",\"swayIdle\":" << (gSet.swayIdle ? "true" : "false")
           << ",\"swayTilt\":" << gSet.swayTilt
           << ",\"chestSway\":" << gSet.chestSway
+          // 2026-11-10 22:3x：legSway 一直漏在这儿 —— web.h 有字段、页面有滑块、
+          // handleSet 也认，就是没落盘，重启回 1.0。补上。
+          << ",\"legSway\":" << gSet.legSway
           << ",\"dragSpring\":" << gSet.dragSpring
           << ",\"tapPart\":" << (gSet.tapPart ? "true" : "false") << "}\n";
     }
@@ -853,6 +858,7 @@ void loadSettings() {
         else if (k == "swayIdle" && v.t == VBool) gSet.swayIdle = v.b;
         else if (k == "swayTilt" && v.t == VNum) gSet.swayTilt = clampf(float(v.n), 0.0f, 4.5f);
         else if (k == "chestSway" && v.t == VNum) gSet.chestSway = clampf(float(v.n), 0.0f, 3.0f);
+        else if (k == "legSway" && v.t == VNum) gSet.legSway = clampf(float(v.n), 0.0f, 3.0f);
         else if (k == "dragSpring" && v.t == VNum) gSet.dragSpring = clampf(float(v.n), 0.0f, 2.0f);
         // 二十一：点哪动哪
         else if (k == "tapPart" && v.t == VBool) gSet.tapPart = v.b;
@@ -871,12 +877,12 @@ void loadSettings() {
     }
     logw("读回 %s：scale=%.2f alpha=%.2f tap=%d expr=%d idle=%.2f(%s) corner=%s hide=%d "
          "look=%.2f/%d blink=%.2f mouth=%.2f exprHold=%.2f fps=%d voice=%d vol=%.2f "
-         "aa=%s shadow=%.2f rim=%.2f particles=%.2f",
+         "aa=%s shadow=%.2f rim=%.2f particles=%.2f legSway=%.2f",
          gPath.c_str(), gSet.scale, gSet.alpha, int(gSet.tap), int(gSet.expr),
          gSet.idle, gSet.idleStyle.c_str(), gSet.corner.c_str(), int(gSet.hide),
          gSet.look, int(gSet.lookOn), gSet.blink, gSet.mouth, gSet.exprHold,
          gSet.fps, int(gSet.voice), gSet.vol,
-         gSet.aa.c_str(), gSet.shadow, gSet.rim, gSet.particles);
+         gSet.aa.c_str(), gSet.shadow, gSet.rim, gSet.particles, gSet.legSway);
 }
 
 // ── 往 ctl 的 socket 推一条（说一句话 / 切个表情）────────────────────
@@ -952,6 +958,24 @@ std::string stateJson() {
     s += ",\"voice\":" + std::string(gSet.voice ? "true" : "false");
     s += ",\"vol\":" + std::to_string(gSet.vol);
     s += ",\"corner\":\"" + gSet.corner + "\"";
+    // Step 7：部位列表（name + 中文标签，顺序 = id），前端拿它生成「点击反应」那组。
+    // 加一个部位 = state/parts.tsv 加几行，这个数组自动变长。
+    s += ",\"partNames\":[";
+    bool firstPart = true;
+    // 顺序：有 display 记录就按它（设置页从上到下），否则按 id。
+    // 过滤：只下发「点得出反应」的部位 —— `other` 这种纯占位（没参数没表情）不该出现在页面上。
+    auto emitPart = [&](int i) {
+        if (!partapi::hasAction(i)) return;
+        if (!firstPart) s += ",";
+        firstPart = false;
+        s += "[\"" + std::string(partapi::nameOf(i)) + "\",\"" +
+             std::string(partapi::labelOf(i)) + "\"]";
+    };
+    std::vector<char> shown(static_cast<size_t>(partapi::count()) + 1, 0);
+    for (unsigned char d : partapi::reg().display) { emitPart(static_cast<int>(d)); shown[d] = 1; }
+    // display 里没写到的部位（新加的部位）追加到末尾 —— 加部位不用改这条 display 行
+    for (int i = 1; i <= partapi::count(); ++i) if (!shown[static_cast<size_t>(i)]) emitPart(i);
+    s += "]";
     // 二十五：部位→表情（设置页那一组用它渲染下拉）
     {
         s += ",\"partExpr\":{";
@@ -1413,7 +1437,7 @@ void init(ApplyFn apply, CmdFn cmd) {
     gCmd   = cmd;
     gPath  = resolveStatePath();
     loadSettings();
-    loadPartReact();          // 二十五：部位→表情（和 settings.json 分开存）
+    loadPartReact();          // 二十五：部位→表情（从 parts.tsv 的 expr 段取初值）
 
     // 端口：MIYU_WEB_PORT 覆盖，默认 8200
     int want = 8200;

@@ -35,7 +35,9 @@ STATE = os.path.join(ROOT, "state")
 
 BANDS = os.path.join(STATE, "part-bands.tsv")
 PARAMS = os.path.join(STATE, "param-parts.tsv")
-REACT = os.path.join(STATE, "part-react.tsv")
+# 2026-11-10 22:3x：part-react.tsv 已退休（挪到 state/legacy/），
+# 这里指向归档路径 —— --verify 是「迁移时行为没丢」的历史证明，还要能跑。
+REACT = os.path.join(STATE, "legacy", "part-react.tsv")
 OUT = os.path.join(STATE, "parts.tsv")
 PART_H = os.path.join(ROOT, "src", "partpoke.h")
 
@@ -155,13 +157,23 @@ def kzone_names():
 
 
 def check_id_order():
-    """id 逐位对齐：parts 的顺序 == kZoneNames 去掉第 0 项。对不上就别往下生成。"""
-    names = kzone_names()[1:]          # [0] 是 ""（空白）
+    """id 逐位对齐：parts 的顺序 == kZoneNames 去掉第 0 项。对不上就别往下生成。
+
+    Step 7（2026-11-10 22:4x）之后 partpoke.h 里的 kZoneNames 已经删了（名字改由
+    partapi 从 parts.tsv 提供），这里抓不到就跳过 —— 那份数组不存在了，
+    「id 逐位对齐」这件事从 Step 7 起由 parts.tsv 自己保证（part 行顺序 = id）。
+    """
+    try:
+        raw = kzone_names()[1:]        # [0] 是 ""（空白）
+    except SystemExit:
+        print("[skip] partpoke.h 里没有 kZoneNames 了（Step 7 已拆），跳过源码比对")
+        return
+    names = raw
     mine = [p[0] for p in PARTS]
     if names != mine:
         sys.exit("id 顺序对不上，迁移中止\n  kZoneNames[1..] = %s\n  脚本 PARTS      = %s"
                  % (names, mine))
-    print("[ok] id 顺序：13 个部位与 src/partpoke.h kZoneNames[1..13] 逐位一致")
+    print("[ok] id 顺序：%d 个部位与 src/partpoke.h kZoneNames 逐位一致" % len(mine))
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -404,12 +416,19 @@ def cmd_verify(path):
         return 1
 
     new_b, new_p, new_e = emit_legacy(reg)
+    # 2026-11-10 22:3x：part-react.tsv 退休（挪到 state/legacy/）。它现在是**历史快照**，
+    # 之后只有 parts.tsv 的 expr 段会被写，两边不再同步 —— 所以不参与反向 diff。
+    # 想单独看那份快照和当前 expr 段的差异，用 --verify-legacy。
     pairs = [("state/part-bands.tsv", BANDS, new_b),
-             ("state/param-parts.tsv", PARAMS, new_p),
-             ("state/part-react.tsv", REACT, new_e)]
+             ("state/param-parts.tsv", PARAMS, new_p)]
+    if os.environ.get("MIYU_VERIFY_LEGACY"):
+        pairs.append(("state/legacy/part-react.tsv", REACT, new_e))
 
     ok = True
     for label, old_path, new_text in pairs:
+        if not os.path.exists(old_path):
+            print("[skip] %-24s 不存在（已退休归档），跳过" % label)
+            continue
         old = strip_comments(open(old_path, encoding="utf-8").read())
         new = strip_comments(new_text)
         if old == new:

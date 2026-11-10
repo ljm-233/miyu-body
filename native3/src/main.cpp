@@ -1064,19 +1064,10 @@ static unsigned char zoneOfPartName(const char* nm) {
     // alias 记录。原来这 20 行 if 是**第三份部位名单**（另一份是 partpoke.h 的 kZoneNames、
     // 还有 web.cpp 前端那份），顺序敏感（`眼镜` 必须先于 `眼`，`腰部` 必须先于 `腰`）。
     // 现在顺序由 alias 行的先后决定，加部位不用改这里、也不用重编译。
-    // 边界：partpoke::kZoneNames 还是那张定长表（Step 7 才拆），所以 id 必须 < kZoneCount。
-    //   parts.tsv 里超过这个数的部位暂时无效 —— 报一次 WARN，别静默吞掉。
+    // 边界：id 的值域是格子图的 unsigned char（1..255）。Step 7 之后部位数由
+    // partapi::count() 决定，没有「槽位」了 —— 表里写多少个部位就有多少个。
     const int id = partapi::indexOfAlias(nm ? std::string(nm) : std::string());
-    if (id <= 0) return 0;
-    if (id >= partpoke::kZoneCount) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            log_("[zones] parts.tsv 里部位数超过 kZoneNames 的槽位（%d），第 %d 个部位暂时无效"
-                 "（Step 7 拆掉 kZoneNames 之后就解锁）", partpoke::kZoneCount, id);
-        }
-        return 0;
-    }
+    if (id <= 0 || id > 255) return 0;
     return static_cast<unsigned char>(id);
 }
 
@@ -1195,7 +1186,7 @@ static void zoneInit(Csm::CubismModel* model) {
     std::string s2;
     for (const auto& kv : per) {
         char b[64];
-        std::snprintf(b, sizeof b, "%s:%d ", partpoke::kZoneNames[kv.first], kv.second);
+        std::snprintf(b, sizeof b, "%s:%d ", partpoke::zoneName(kv.first), kv.second);
         s2 += b;
     }
     log_("[zones] drawable %d 个，挂了 part 的 %d 个，认得出部位的 %d 个（%s）",
@@ -1295,20 +1286,20 @@ static int zoneFillHoles(std::vector<unsigned char>& g, int GW, int GH) {
         if (g[s] || out[s] || done[s]) continue;
         std::vector<size_t> blob{s};
         done[s] = 1;
-        int cnt[partpoke::kZoneCount] = {0};
+        int cnt[partpoke::kZoneMax] = {0};
         for (size_t h = 0; h < blob.size(); ++h) {
             const int x = static_cast<int>(blob[h] % GW), y = static_cast<int>(blob[h] / GW);
             for (int k = 0; k < 4; ++k) {
                 const int nx = x + nb[k][1], ny = y + nb[k][0];
                 if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
                 const size_t j = static_cast<size_t>(ny) * GW + nx;
-                if (g[j]) { if (g[j] < partpoke::kZoneCount) ++cnt[g[j]]; }
+                if (g[j]) { if (g[j] < partpoke::kZoneMax) ++cnt[g[j]]; }
                 else if (!out[j] && !done[j]) { done[j] = 1; blob.push_back(j); }
             }
         }
         if (blob.size() > N / 8) continue;
         int best = 0, bn = 0;
-        for (int i = 1; i < partpoke::kZoneCount; ++i) if (cnt[i] > bn) { bn = cnt[i]; best = i; }
+        for (int i = 1; i < partpoke::kZoneMax; ++i) if (cnt[i] > bn) { bn = cnt[i]; best = i; }
         if (!best) continue;
         for (size_t i : blob) g[i] = static_cast<unsigned char>(best);
         filled += static_cast<int>(blob.size());
@@ -1326,10 +1317,10 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     // 二十四：每 20 帧打一次「每个部位这次画进格子多少、被哪道闸挡掉多少」。
     // 没有这行就只能看到「eye: 91 个 drawable」却一个格子都没有，猜不出是看不见、
     // 全透明、还是被后画的盖掉 —— 这一轮就是靠它定位的。
-    int dbgTri[partpoke::kZoneCount] = {0}, dbgHide[partpoke::kZoneCount] = {0},
-        dbgOpa[partpoke::kZoneCount] = {0}, dbgAlpha[partpoke::kZoneCount] = {0};
-    float dbgBB[partpoke::kZoneCount][4];   // u0,v0,u1,v1（顶点坐标范围，验「三角形在不在画里」）
-    for (int i = 0; i < partpoke::kZoneCount; ++i) {
+    int dbgTri[partpoke::kZoneMax] = {0}, dbgHide[partpoke::kZoneMax] = {0},
+        dbgOpa[partpoke::kZoneMax] = {0}, dbgAlpha[partpoke::kZoneMax] = {0};
+    float dbgBB[partpoke::kZoneMax][4];   // u0,v0,u1,v1（顶点坐标范围，验「三角形在不在画里」）
+    for (int i = 0; i < partpoke::kZoneMax; ++i) {
         dbgBB[i][0] = 9; dbgBB[i][1] = 9; dbgBB[i][2] = -9; dbgBB[i][3] = -9;
     }
     // 二十四：**必须按 renderOrder 排，不能按下标**。旧注释说「drawable 下标就是
@@ -1365,7 +1356,7 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         const Csm::csmInt32 d = byOrder[od];
         if (d < 0 || static_cast<size_t>(d) >= gZones.lut.size()) continue;
         const unsigned char lab = gZones.lut[static_cast<size_t>(d)];
-        if (lab == 0 || lab >= partpoke::kZoneCount) continue;
+        if (lab == 0 || lab >= partpoke::kZoneMax) continue;
         if (lab < lo || lab > hi) continue;          // 这一遍只画自己那一段标签
         if (!model->GetDrawableDynamicFlagIsVisible(d)) { ++dbgHide[lab]; continue; }
         if (model->GetDrawableOpacity(d) < 0.02f) { ++dbgOpa[lab]; continue; }
@@ -1419,9 +1410,9 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     // 二十五：记一份「各部位光栅化出来的原始格数」。
     // 补洞要靠它当闸门 —— 小部位（发饰只有 120 来格）一旦被允许向外借，
     // 8 圈下来会把整个头顶的头发都染成 headwear，「头」就只剩半张脸（6.47 掉到 0.55 那次）。
-    int rawCnt[partpoke::kZoneCount] = {0};
+    int rawCnt[partpoke::kZoneMax] = {0};
     for (size_t i = 0; i < gZones.grid.size(); ++i)
-        if (gZones.grid[i] && gZones.grid[i] < partpoke::kZoneCount) ++rawCnt[gZones.grid[i]];
+        if (gZones.grid[i] && gZones.grid[i] < partpoke::kZoneMax) ++rawCnt[gZones.grid[i]];
 
     // 只留她身上的格子（alpha 白名单）
     if (gZones.cellOkReady && gZones.cellOk.size() == gZones.grid.size()) {
@@ -1529,34 +1520,34 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     ++partpoke::gZoneStamp;
     ++gZones.built;
     if (gZones.built == 20) {   // 二十帧后打一次各部位的实际范围，验「格子贴不贴身体」
-        int rawN[partpoke::kZoneCount] = {0}, finN[partpoke::kZoneCount] = {0};
+        int rawN[partpoke::kZoneMax] = {0}, finN[partpoke::kZoneMax] = {0};
         if (dbgRaw.size() == gZones.grid.size())
             for (size_t i = 0; i < dbgRaw.size(); ++i)
-                if (dbgRaw[i] && dbgRaw[i] < partpoke::kZoneCount) ++rawN[dbgRaw[i]];
+                if (dbgRaw[i] && dbgRaw[i] < partpoke::kZoneMax) ++rawN[dbgRaw[i]];
         for (size_t i = 0; i < gZones.grid.size(); ++i)
-            if (gZones.grid[i] && gZones.grid[i] < partpoke::kZoneCount) ++finN[gZones.grid[i]];
-        for (int i = 1; i < partpoke::kZoneCount; ++i)
+            if (gZones.grid[i] && gZones.grid[i] < partpoke::kZoneMax) ++finN[gZones.grid[i]];
+        for (int i = 1; i < partpoke::kZoneMax; ++i)
             if (dbgTri[i] || dbgHide[i] || dbgOpa[i] || dbgAlpha[i])
                 log_("[zones] %-8s 画进 %d 个三角形，挡掉：不可见 %d / 透明 %d / 纹理全透 %d ｜ 格子 %d → %d ｜ 画到 u %.3f..%.3f v %.3f..%.3f",
-                     partpoke::kZoneNames[i], dbgTri[i], dbgHide[i], dbgOpa[i], dbgAlpha[i],
+                     partpoke::zoneName(i), dbgTri[i], dbgHide[i], dbgOpa[i], dbgAlpha[i],
                      rawN[i], finN[i], dbgBB[i][0], dbgBB[i][2], dbgBB[i][1], dbgBB[i][3]);
-        float bb[partpoke::kZoneCount][4];
-        for (int i = 0; i < partpoke::kZoneCount; ++i) {
+        float bb[partpoke::kZoneMax][4];
+        for (int i = 0; i < partpoke::kZoneMax; ++i) {
             bb[i][0] = 2; bb[i][1] = 2; bb[i][2] = -2; bb[i][3] = -2;
         }
         for (int gy = 0; gy < GH; ++gy)
             for (int gx = 0; gx < GW; ++gx) {
                 const unsigned char c = gZones.grid[static_cast<size_t>(gy) * GW + gx];
-                if (!c || c >= partpoke::kZoneCount) continue;
+                if (!c || c >= partpoke::kZoneMax) continue;
                 const float u = (gx + 0.5f) / GW, v = (gy + 0.5f) / GH;
                 if (u < bb[c][0]) bb[c][0] = u;
                 if (v < bb[c][1]) bb[c][1] = v;
                 if (u > bb[c][2]) bb[c][2] = u;
                 if (v > bb[c][3]) bb[c][3] = v;
             }
-        for (int i = 1; i < partpoke::kZoneCount; ++i)
+        for (int i = 1; i < partpoke::kZoneMax; ++i)
             if (bb[i][2] > bb[i][0])
-                log_("[zones] %s: u %.3f..%.3f  v %.3f..%.3f", partpoke::kZoneNames[i],
+                log_("[zones] %s: u %.3f..%.3f  v %.3f..%.3f", partpoke::zoneName(i),
                      bb[i][0], bb[i][2], bb[i][1], bb[i][3]);
     }
     // 二十四：**先等 alpha 白名单算出来再落盘**（built≥30，约 0.5 秒后）。
@@ -1584,7 +1575,7 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
                         const unsigned char a = gZones.grid[static_cast<size_t>(gy) * GW + run];
                         if (gx == GW || gZones.grid[static_cast<size_t>(gy) * GW + gx] != a) {
                             if (a) std::fprintf(fz, "Z\t%d\t%d\t%d\t%d\t%s\n", gy, gy + 1, run, gx,
-                                                partpoke::kZoneNames[a]);
+                                                partpoke::zoneName(a));
                             run = gx;
                         }
                     }
@@ -1769,7 +1760,7 @@ static float mouthPokeAmount(Csm::CubismModel* model) {
 // 功能型的（裙子切换/脱鞋/尾巴开关/竖食指/眼镜/体型）一个都不碰。
 // 头是「被摸头」，所以给随机；其余每个部位固定一种，互不重复。
 // Step 5：表情从 **partapi** 读（parts.tsv 的 expr 段 + 网页覆盖层），
-// 不再读 `web::settings().partExpr` —— 那份是 part-react.tsv 的镜像。
+// 不再读 `web::settings().partExpr` —— 那份只是设置页的镜像（part-react.tsv 已退休）。
 // 斜杠 `a/b/c` = 每次随机抽一个的语义留在 partapi::pickExpr 里，这里只拿结果。
 // hold 也一起从表里来（expr 行没写就用 part 行的 hold，默认 5.0，和原来写死的 5 一致）。
 static double gTapExprHold = 5.0;
@@ -3097,52 +3088,54 @@ static std::vector<std::string> scanExpressions(const char* dir) {
     return out;
 }
 
-// 二十五：拖动时的腿。
-// 腿那条物理链（PhysicsSetting135）只吃 HipAngleX（权重 23）和 PositionZ（权重 100），
+// 二十五 → Step 6：拖动跟随通用化。
+//
+// 原来这里只给**腿**写了三个常量（HipAngleX = ax*0.6 / HipAngleZ = az*2.2 /
+// PokeLeg = ax/16），别处要跟随就得再写一份 C++。现在数据在 state/parts.tsv 的
+// `follow` 行：`follow <部位> <参数> <系数> <上限> ax|az|ay`，加一处跟随不用改代码。
+//
+// 为什么腿需要这个：腿那条物理链（PhysicsSetting135）只吃 HipAngleX 和 PositionZ，
 // 而拖动/滑行只写 AngleX / AngleZ / PositionX / PositionY —— 腿一个输入都没喂到，
-// 所以他拎着她走的时候腿是死的，手和尾巴却在动。
-// 这里直接复用 swayTick 算好的那个「已有 0.05s 平滑 + 0.15s 衰减」的量（gSway.ax）：
-//   HipAngleX  管前后甩（探针实测这个参数动腿 9180px，是腿最吃的一口）
-//   PokeLeg    管张合（它那条链的输出是 LEGAngleZ2，腿往外张／内收）
-// 两个都写**绝对值**：待机和视线都不碰它们，读回来加会一帧一帧累积。
-// 放在 partPokeTick **之后**调：点腿的弹簧在跑时整段让给它，不然拖动会把它压掉。
-static void legDragTick(Csm::CubismModel* model, double now) {
-    static Csm::csmInt32 iHipX = -2, iHipZ = -2, iPokeLeg = -2;
-    if (iHipX == -2) {
-        Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
-        iHipX   = model->GetParameterIndex(m->GetId("HipAngleX"));
-        iHipZ   = model->GetParameterIndex(m->GetId("HipAngleZ"));
-        iPokeLeg = model->GetParameterIndex(m->GetId("PokeLeg"));
+// 他拎着她走的时候腿是死的，手和尾巴却在动。
+//
+// 三个量都从 swayTick 已经平滑/衰减好的结果里取（`gSway.ax` / `.az`，±16 / ±10 量级），
+// 写**绝对值**：待机和视线都不碰它们，读回来加会一帧一帧累积。
+//
+// 让位规则**通用**：正在被点的那个部位，它自己的 follow 整段跳过 ——
+// 点腿的弹簧在跑时不该被拖动压掉。原来是 `gPartPoke.part == "leg"` 认名字，现在按 id。
+// 放在 partPokeTick **之后**调（顺序不能换）。
+static void followTick(Csm::CubismModel* model, double now) {
+    const auto& fs = partapi::reg().follows;
+    if (fs.empty()) return;
+    const int pokingId = gPartPoke.on ? partapi::indexOf(gPartPoke.part) : 0;
+
+    static std::map<std::string, Csm::csmInt32> idxCache;   // 参数 id → 索引（查一次就够）
+    std::string line;
+    char buf[160];
+    for (const partapi::Follow& f : fs) {
+        if (pokingId > 0 && static_cast<int>(f.id) == pokingId) continue;   // 自己的弹簧活着 → 让位
+        auto it = idxCache.find(f.name);
+        if (it == idxCache.end()) {
+            const Csm::csmInt32 idx = model->GetParameterIndex(
+                Csm::CubismFramework::GetIdManager()->GetId(f.name.c_str()));
+            it = idxCache.emplace(f.name, idx).first;
+        }
+        const float src = (f.src == 'z') ? gSway.az : (f.src == 'y') ? gSway.py : gSway.ax;
+        float v = src * f.gain;
+        if (v >  f.clampv) v =  f.clampv;
+        if (v < -f.clampv) v = -f.clampv;
+        if (it->second >= 0) model->SetParameterValue(it->second, v, 1.0f);
+        std::snprintf(buf, sizeof buf, "%s=%+.2f ", f.name.c_str(), v);
+        line += buf;
     }
-    if (iHipX < 0 && iHipZ < 0 && iPokeLeg < 0) return;
-    if (gPartPoke.on && gPartPoke.part == "leg") return;   // 点腿的弹簧优先
-
-    // 三个量都从 swayTick 已经平滑/衰减好的结果里取：
-    //   HipAngleX  前后甩（正视图里几乎看不出来，但腿的网格确实在动）
-    //   HipAngleZ  左右甩（**看得见的那个**：腿会往两边偏，像被拎着走）
-    //   PokeLeg    张合（那条链的输出是 LEGAngleZ2）
-    const float ax = gSway.ax, az = gSway.az;   // ±16 / ±10 量级
-    float hipX = ax * 0.6f;
-    float hipZ = az * 2.2f;
-    float pk   = ax / 16.0f;
-    if (hipX >  30.0f) hipX =  30.0f;
-    if (hipX < -30.0f) hipX = -30.0f;
-    if (hipZ >  30.0f) hipZ =  30.0f;
-    if (hipZ < -30.0f) hipZ = -30.0f;
-    if (pk >  1.0f) pk =  1.0f;
-    if (pk < -1.0f) pk = -1.0f;
-
-    if (iHipX >= 0)    model->SetParameterValue(iHipX, hipX, 1.0f);
-    if (iHipZ >= 0)    model->SetParameterValue(iHipZ, hipZ, 1.0f);
-    if (iPokeLeg >= 0) model->SetParameterValue(iPokeLeg, pk, 1.0f);
 
     static double lastLog = -1e9;
-    if ((hipX != 0.0f || hipZ != 0.0f || pk != 0.0f) && now - lastLog > 1.0) {
+    if ((std::fabs(gSway.ax) > 0.02f || std::fabs(gSway.az) > 0.02f) && now - lastLog > 1.0) {
         lastLog = now;
-        log_("[legdrag] 拖动带腿：HipAngleX=%+.2f HipAngleZ=%+.2f PokeLeg=%+.2f（来源 ax=%+.2f az=%+.2f）",
-             hipX, hipZ, pk, ax, az);
+        log_("[follow] 拖动跟随：%s（来源 ax=%+.2f az=%+.2f）", line.c_str(), gSway.ax, gSway.az);
     }
 }
+
 
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
@@ -3646,7 +3639,7 @@ int main() {
         // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
         probeTick(model, now);
         partPokeTick(model, now);
-        legDragTick(model, now);
+        followTick(model, now);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。
