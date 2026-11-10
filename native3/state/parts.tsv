@@ -81,7 +81,7 @@ param	chest	PokeChest	90	1.000	# 胸X 的局部版；ChestX1/2/3/BS 同 Destinat
 param	arm	PokeArmL	85	1.000	# 左臂的局部版；LArm/LForearm/LWrist
 param	arm	PokeArmR	84	1.000	# 右臂的局部版；RArm/RForearm/RWrist
 param	skirt	PokeSkirt	80	1.000	# 裙子X 摆动的局部版；SkirtX1..4/SkirtSpecial/2
-param	leg	PokeLeg	88	1.000	# 双腿 Z 的局部版；LEGAngleZ2（原来拨 HipAngleX 会先拽裙）
+param	leg	PokeLeg	88	0.600	# 双腿 Z 的局部版；2026-11-10 22:5x 幅度 1.0→0.6（满值张得太开，像劈叉不像被碰）
 param	tail	PokeTail	92	1.000	# 尾巴的局部版；Param_Angle_Rotation84..89 + Param52
 param	eye	PokeEye	95	1.000	# 眼睛：眼珠被物理带走 + 点一下眨一次（0.24s 包络）
 param	mouth	PokeMouth	94	1.000	up	# 嘴：ParamMouthOpenY 自己拼的一条链
@@ -112,3 +112,7 @@ expr	waist	圈圈眼
 follow	leg	HipAngleX	0.6	30	ax
 follow	leg	HipAngleZ	2.2	30	az
 follow	leg	PokeLeg	0.0625	1	ax
+# 2026-11-10 22:5x：拖动跟随从「只有腿」扩到胸和尾巴。follow 通用化之后加两行就够。
+# 胸用 PokeChest（幅度 0.25、上限 0.6），尾巴用 PokeTail（0.3、上限 0.8），都跟左右摆动 az。
+follow	chest	PokeChest	0.25	0.6	az
+follow	tail	PokeTail	0.3	0.8	az
