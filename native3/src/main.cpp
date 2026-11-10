@@ -3104,12 +3104,19 @@ static std::vector<std::string> scanExpressions(const char* dir) {
 // 让位规则**通用**：正在被点的那个部位，它自己的 follow 整段跳过 ——
 // 点腿的弹簧在跑时不该被拖动压掉。原来是 `gPartPoke.part == "leg"` 认名字，现在按 id。
 // 放在 partPokeTick **之后**调（顺序不能换）。
-static void followTick(Csm::CubismModel* model, double now) {
+static void followTick(Csm::CubismModel* model, double now, float dt) {
     const auto& fs = partapi::reg().follows;
     if (fs.empty()) return;
     const int pokingId = gPartPoke.on ? partapi::indexOf(gPartPoke.part) : 0;
 
     static std::map<std::string, Csm::csmInt32> idxCache;   // 参数 id → 索引（查一次就够）
+    // 2026-11-10 23:2x：他两次说「拖动时腿不够灵动」。
+    // 原来这里是 `写 = 源 × 系数`，**跟上身完全同步** —— 上身摆多少腿立刻摆多少，
+    // 看起来像焊在一起。真人被拎着走，腿是**追不上、会过冲、松手还在晃**的。
+    // 改成每个参数自己挂一个弹簧去追目标：ω≈13 rad/s、ζ≈0.42，
+    // 于是腿比上身晚半拍、甩过去会回来一点、停下再收住。
+    struct Spr { float x = 0.0f, v = 0.0f; };
+    static std::map<std::string, Spr> spr;
     std::string line;
     char buf[160];
     for (const partapi::Follow& f : fs) {
@@ -3121,11 +3128,23 @@ static void followTick(Csm::CubismModel* model, double now) {
             it = idxCache.emplace(f.name, idx).first;
         }
         const float src = (f.src == 'z') ? gSway.az : (f.src == 'y') ? gSway.py : gSway.ax;
-        float v = src * f.gain;
-        if (v >  f.clampv) v =  f.clampv;
-        if (v < -f.clampv) v = -f.clampv;
-        if (it->second >= 0) model->SetParameterValue(it->second, v, 1.0f);
-        std::snprintf(buf, sizeof buf, "%s=%+.2f ", f.name.c_str(), v);
+        float tgt = src * f.gain;
+        if (tgt >  f.clampv) tgt =  f.clampv;
+        if (tgt < -f.clampv) tgt = -f.clampv;
+
+        Spr& sp = spr[f.name];
+        const float K = 170.0f, C = 10.5f;      // ω≈13 rad/s、ζ≈0.40：有滞后、甩过去会回一点
+        float h = dt;
+        if (h > 0.02f) h = 0.02f;               // 卡帧别炸
+        const int sub = 4;                      // 4 次子步，低帧率也稳
+        const float hh = h / sub;
+        for (int k = 0; k < sub; ++k) {
+            const float a = -K * (sp.x - tgt) - C * sp.v;
+            sp.v += a * hh;
+            sp.x += sp.v * hh;
+        }
+        if (it->second >= 0) model->SetParameterValue(it->second, sp.x, 1.0f);
+        std::snprintf(buf, sizeof buf, "%s=%+.2f ", f.name.c_str(), sp.x);
         line += buf;
     }
 
@@ -3639,7 +3658,7 @@ int main() {
         // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
         probeTick(model, now);
         partPokeTick(model, now);
-        followTick(model, now);
+        followTick(model, now, dt);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。
