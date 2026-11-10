@@ -274,7 +274,9 @@ const char* kHtml = R"HTML(<!doctype html>
        d:'2 = 眨得很勤，0 = 一直睁着'},
       {k:'tap', t:'bool', label:'点击',
        d:'戳她一下有反应；关掉只剩拖动'},
-            {k:'combo', t:'bool', label:'连点脾气',
+            {k:'dblTap', t:'bool', label:'双击反应',
+       d:'同一处 0.9 秒内点两下，改说一声「啊」。默认关（这句的音频还没做好）'},
+      {k:'combo', t:'bool', label:'连点脾气',
        d:'连着点同一个地方：第 3 下动作变大，第 5 下起换成黑脸。关掉就每一下反应一样'},
       {k:'tapPart', t:'bool', label:'点哪动哪',
        d:'戳哪个部位只让那一块动；关掉就回到整套反应。点空白处仍然播整套'},
@@ -839,7 +841,8 @@ void saveSettings() {
           << ",\"legSway\":" << gSet.legSway
           << ",\"dragSpring\":" << gSet.dragSpring
           << ",\"tapPart\":" << (gSet.tapPart ? "true" : "false")
-          << ",\"combo\":" << (gSet.combo ? "true" : "false") << "}\n";
+          << ",\"combo\":" << (gSet.combo ? "true" : "false")
+          << ",\"dblTap\":" << (gSet.dblTap ? "true" : "false") << "}\n";
     }
     if (std::rename(tmp.c_str(), gPath.c_str()) != 0)
         logw("设置存不下来（rename 失败）：%s", gPath.c_str());
@@ -898,6 +901,7 @@ void loadSettings() {
         // 二十一：点哪动哪
         else if (k == "tapPart" && v.t == VBool) gSet.tapPart = v.b;
         else if (k == "combo" && v.t == VBool) gSet.combo = v.b;
+        else if (k == "dblTap" && v.t == VBool) gSet.dblTap = v.b;
         // 十八：aa 是新主键；ssaa 是旧键（映射过来，读了不炸）。
         // 两个都出现时 aa 赢 —— 所以先记「见过 aa」，旧键只在没见 aa 时生效。
         else if (k == "aa" && v.t == VStr) {
@@ -1066,6 +1070,7 @@ std::string stateJson() {
     s += ",\"dragSpring\":" + std::to_string(gSet.dragSpring);
     s += ",\"tapPart\":" + std::string(gSet.tapPart ? "true" : "false");
     s += ",\"combo\":" + std::string(gSet.combo ? "true" : "false");
+    s += ",\"dblTap\":" + std::string(gSet.dblTap ? "true" : "false");
     s += ",\"fps_now\":" + (gFps < 0.0 ? std::string("null") : std::to_string(gFps));
     s += ",\"port\":" + std::to_string(gPort);
     s += ",\"expr_next\":\"" + jsonEsc(gExprs.empty() ? "" : gExprs[gExprIdx % gExprs.size()]) + "\"";
@@ -1227,6 +1232,10 @@ std::string handleSet(const std::string& body, bool logIt) {
         }
         if (k == "timeAware" && v.t == VBool) {
             if (v.b != gSet.timeAware) { gSet.timeAware = v.b; changed.push_back("timeAware"); }
+            continue;
+        }
+        if (k == "dblTap" && v.t == VBool) {
+            if (v.b != gSet.dblTap) { gSet.dblTap = v.b; changed.push_back("dblTap"); }
             continue;
         }
         if (k == "combo" && v.t == VBool) {

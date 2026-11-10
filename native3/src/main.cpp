@@ -1823,7 +1823,7 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             gPokeBoost = (gCombo >= 3) ? 1.6f : 1.0f;
             // 二十六：双击 —— 同一个地方连着戳两下，她的反应不一样：
             // 台词换成「啊」这种被打断的短音，冲量再放大 1.4 倍。
-            const bool dbl = partpoke::gDoubleTap;
+            const bool dbl = partpoke::gDoubleTap && web::settings().dblTap;
             if (dbl) {
                 gPokeBoost *= 1.4f;
                 log_("[tap] %s 双击", part.c_str());
