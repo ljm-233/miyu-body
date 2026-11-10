@@ -56,6 +56,20 @@ PY
     fi
     if "$PY" "$INFER" --request "$B/req.json" --style "$_style" >"$B/out.log" 2>"$B/err.log"; then
         if [ -f "$B/o/speech.wav" ]; then
+            # 二十六：情绪加工。模型只有 cute / gentle 两种预设（差四度音高），
+            # 想再有点区别只能后期：ffmpeg 的 asetrate 变调 + atempo 变速。
+            # MIYU_VOICE_FX="rate=0.92,tempo=0.92" 这种形式（可空）。
+            if [ -n "${MIYU_VOICE_FX:-}" ]; then
+                _r=$(printf '%s' "$MIYU_VOICE_FX" | sed -n 's/.*rate=\([0-9.]*\).*/\1/p')
+                _m=$(printf '%s' "$MIYU_VOICE_FX" | sed -n 's/.*tempo=\([0-9.]*\).*/\1/p')
+                [ -n "$_r" ] || _r=1
+                [ -n "$_m" ] || _m=1
+                if command -v ffmpeg >/dev/null 2>&1; then
+                    ffmpeg -y -loglevel error -i "$B/o/speech.wav" \
+                        -filter:a "asetrate=24000*$_r,aresample=24000,atempo=$_m" \
+                        "$B/o/fx.wav" && mv "$B/o/fx.wav" "$B/o/speech.wav"
+                fi
+            fi
             if cp "$B/o/speech.wav" "$VOICE/$_k.wav"; then
                 rm -rf "$B"; return 0
             fi
