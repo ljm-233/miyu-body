@@ -47,7 +47,9 @@ def send(obj):
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.connect(SOCK)
-        s.sendall(json.dumps(obj, ensure_ascii=False).encode())
+        # 服务端是「收到换行才算一行」；不带 \n 它就等 1 秒超时才处理 ——
+        # 表现为「命令发了没反应，过一会儿才动」，我排查时被这个坑了半小时。
+        s.sendall(json.dumps(obj, ensure_ascii=False).encode() + b"\n")
         s.close()
         return True
     except (FileNotFoundError, ConnectionRefusedError):
