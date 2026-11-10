@@ -1,6 +1,6 @@
 #grid	120	240
 # 部位格子图（身体自己按 drawable→part 光栅化出来的，窗口归一化：u=lx/窗口宽、v=ly/窗口高）
-Z	26	27	56	57	headwear
+Z	26	27	55	57	headwear
 Z	26	27	57	58	head
 Z	27	28	53	57	headwear
 Z	27	28	57	59	head
@@ -13,7 +13,9 @@ Z	29	30	57	60	head
 Z	29	30	60	63	headwear
 Z	29	30	63	65	head
 Z	29	30	65	66	headwear
-Z	30	31	50	63	headwear
+Z	30	31	50	57	headwear
+Z	30	31	57	58	head
+Z	30	31	58	63	headwear
 Z	30	31	63	65	head
 Z	30	31	65	68	headwear
 Z	31	32	49	69	headwear
@@ -32,7 +34,7 @@ Z	35	36	64	73	headwear
 Z	36	37	47	57	headwear
 Z	36	37	57	64	head
 Z	36	37	64	73	headwear
-Z	37	38	46	57	headwear
+Z	37	38	47	57	headwear
 Z	37	38	57	64	head
 Z	37	38	64	74	headwear
 Z	38	39	46	57	headwear
@@ -58,7 +60,7 @@ Z	44	45	49	51	head
 Z	44	45	51	70	brow
 Z	44	45	70	71	head
 Z	44	45	71	75	headwear
-Z	45	46	44	49	headwear
+Z	45	46	45	49	headwear
 Z	45	46	49	51	head
 Z	45	46	51	70	brow
 Z	45	46	70	71	head
@@ -111,18 +113,19 @@ Z	57	58	49	54	head
 Z	57	58	54	68	mouth
 Z	57	58	68	71	head
 Z	57	58	71	76	ear
-Z	58	59	44	50	ear
+Z	58	59	45	50	ear
 Z	58	59	50	54	head
 Z	58	59	54	68	mouth
 Z	58	59	68	71	head
 Z	58	59	71	76	ear
-Z	59	60	45	50	ear
+Z	59	60	46	50	ear
 Z	59	60	50	53	head
 Z	59	60	53	68	mouth
 Z	59	60	68	71	head
 Z	59	60	71	72	ear
 Z	59	60	72	76	head
-Z	60	61	46	49	ear
+Z	60	61	46	47	chest
+Z	60	61	47	49	ear
 Z	60	61	49	53	head
 Z	60	61	53	70	mouth
 Z	60	61	70	71	head
@@ -131,8 +134,8 @@ Z	60	61	72	75	head
 Z	61	62	46	49	chest
 Z	61	62	49	52	head
 Z	61	62	52	70	mouth
-Z	61	62	70	74	head
-Z	62	63	45	50	chest
+Z	61	62	70	75	head
+Z	62	63	46	50	chest
 Z	62	63	50	52	head
 Z	62	63	52	70	mouth
 Z	62	63	70	73	chest
@@ -159,7 +162,7 @@ Z	67	68	54	68	mouth
 Z	67	68	68	70	chest
 Z	67	68	70	72	arm
 Z	67	68	72	77	chest
-Z	68	69	42	51	arm
+Z	68	69	43	51	arm
 Z	68	69	51	70	chest
 Z	68	69	70	78	arm
 Z	69	70	42	47	arm
@@ -169,7 +172,7 @@ Z	69	70	50	70	chest
 Z	69	70	70	72	arm
 Z	69	70	72	73	chest
 Z	69	70	73	78	arm
-Z	70	71	41	47	arm
+Z	70	71	42	47	arm
 Z	70	71	47	48	chest
 Z	70	71	48	50	arm
 Z	70	71	50	70	chest
@@ -178,7 +181,7 @@ Z	70	71	72	73	chest
 Z	70	71	73	79	arm
 Z	71	72	41	51	arm
 Z	71	72	51	69	chest
-Z	71	72	69	79	arm
+Z	71	72	69	80	arm
 Z	72	73	40	46	arm
 Z	72	73	46	47	chest
 Z	72	73	47	51	arm
@@ -197,7 +200,7 @@ Z	74	75	74	82	arm
 Z	75	76	38	46	arm
 Z	75	76	46	74	chest
 Z	75	76	74	82	arm
-Z	76	77	37	46	arm
+Z	76	77	38	46	arm
 Z	76	77	46	74	chest
 Z	76	77	74	83	arm
 Z	77	78	37	46	arm
@@ -211,7 +214,7 @@ Z	79	80	46	74	chest
 Z	79	80	74	84	arm
 Z	80	81	36	44	arm
 Z	80	81	44	76	chest
-Z	80	81	76	84	arm
+Z	80	81	76	85	arm
 Z	81	82	35	47	arm
 Z	81	82	47	73	chest
 Z	81	82	73	86	arm
@@ -233,7 +236,7 @@ Z	86	87	76	86	arm
 Z	87	88	34	45	arm
 Z	87	88	45	75	chest
 Z	87	88	75	86	arm
-Z	88	89	34	45	arm
+Z	88	89	35	45	arm
 Z	88	89	45	75	chest
 Z	88	89	75	86	arm
 Z	89	90	35	45	arm
@@ -247,7 +250,7 @@ Z	89	90	66	71	chest
 Z	89	90	71	74	arm
 Z	89	90	74	75	chest
 Z	89	90	75	85	arm
-Z	90	91	37	50	arm
+Z	90	91	36	50	arm
 Z	90	91	50	53	chest
 Z	90	91	53	57	waist
 Z	90	91	57	64	chest
@@ -303,17 +306,17 @@ Z	98	99	48	73	skirt
 Z	98	99	73	74	arm
 Z	98	99	74	78	skirt
 Z	98	99	78	88	arm
-Z	99	100	32	47	arm
+Z	99	100	33	47	arm
 Z	99	100	47	78	skirt
-Z	99	100	78	89	arm
+Z	99	100	78	88	arm
 Z	100	101	33	44	arm
 Z	100	101	44	77	skirt
 Z	100	101	77	88	arm
 Z	101	102	33	42	arm
 Z	101	102	42	45	waist
 Z	101	102	45	78	skirt
-Z	101	102	78	87	arm
-Z	102	103	33	41	arm
+Z	101	102	78	88	arm
+Z	102	103	34	41	arm
 Z	102	103	41	45	waist
 Z	102	103	45	79	skirt
 Z	102	103	79	87	arm

@@ -25,16 +25,20 @@ static void blog(const char* fmt, ...) {
 namespace {
 
 // ── 可调的几个数 ────────────────────────────────────────────────
-const int   kFontPx     = 22;      // 字号（逻辑像素）—— 窗口顶部只剩 ~110px，26 放不下
-const int   kPadX       = 18;      // 左右内边距
-const int   kPadY       = 11;      // 上下内边距
-const int   kRadius     = 16;      // 圆角半径
-const int   kTailW      = 16;      // 底下小尖角的宽度
-const int   kTailH      = 9;       // 小尖角高度
+// 2026-11-11 01:5x：「聊天气泡有点糊」—— 因为我按**逻辑像素**生成纹理（22px 的字），
+// 画的时候又放大 2 倍贴到 framebuffer（窗口是 500 逻辑 / 1000 物理），等于把 22px 的字
+// 撑成 44px，必糊。现在整张图按**物理像素**做：字号 44、内边距圆角全部 ×2，
+// 贴的时候 1:1 不动，字就是渲染器原生的清晰度。
+const int   kFontPx     = 44;      // 字号（物理像素，对应逻辑 22）
+const int   kPadX       = 36;      // 左右内边距
+const int   kPadY       = 22;      // 上下内边距
+const int   kRadius     = 32;      // 圆角半径
+const int   kTailW      = 32;      // 底下小尖角的宽度
+const int   kTailH      = 18;      // 小尖角高度
 const float kInDur      = 0.16f;   // 淡入 + 放大
 const float kOutDur     = 0.25f;   // 淡出 + 上浮
 const float kHoldExtra  = 0.9f;    // 说完之后再挂这么久才淡出
-const float kMaxWidthPx = 560.0f;  // 单行最宽（超了就压字距，不换行 —— 她说的都是短句）
+const float kMaxWidthPx = 1120.0f; // 单行最宽（物理像素；超了就压字距，不换行）
 
 const char* kFontPaths[] = {
     "/usr/share/fonts/adobe-source-han-sans/SourceHanSansCN-Medium.otf",
@@ -142,10 +146,10 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             // 外圈：亮蓝灰（描边）
             putPx(buf, w, fullH, x, y, 0.55f, 0.66f, 0.86f, 0.85f * covOut);
             // 内圈：深底（往里缩 2px）
-            const float covIn = roundRectCoverage(x + 0.5f - 2.0f, y + 0.5f - 2.0f,
-                                                  static_cast<float>(w) - 4.0f,
-                                                  static_cast<float>(h) - 4.0f,
-                                                  static_cast<float>(kRadius) - 2.0f);
+            const float covIn = roundRectCoverage(x + 0.5f - 4.0f, y + 0.5f - 4.0f,
+                                                  static_cast<float>(w) - 8.0f,
+                                                  static_cast<float>(h) - 8.0f,
+                                                  static_cast<float>(kRadius) - 4.0f);
             if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.07f, 0.09f, 0.14f, 0.94f * covIn);
         }
     }
@@ -317,8 +321,8 @@ void draw(int winW, int winH) {
     ensureProgram();
     if (!gProg) return;
 
-    // 缩放：纹理是按逻辑像素做的，窗口 framebuffer 是它的 2 倍（scale）
-    const float scale = static_cast<float>(winW) / 500.0f;
+    // 纹理已经是**物理像素**（见上面字号那段），这里 1:1 贴，不再放大 —— 这是不糊的关键
+    const float scale = static_cast<float>(winW) / 1000.0f;
     const float bw = static_cast<float>(gTexW) * scale;
     const float bh = static_cast<float>(gTexH) * scale;
     const float cx = static_cast<float>(winW) * 0.5f;
