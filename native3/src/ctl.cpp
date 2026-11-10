@@ -27,6 +27,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
+#include <mutex>
 #include <fstream>
 #include <string>
 
@@ -219,6 +221,39 @@ static double wavSeconds(const std::string& path) {
     return static_cast<double>(data) / static_cast<double>(byteRate);
 }
 
+// 二十六（第二次修）：预热不解决问题 —— 每次 pw-play 都是**新建一条流**，
+// pipewire 在流建起来的头几百毫秒里会丢样本，所以「先按裙子才有声」变成了
+// 「先按腿才有声」，只是换了个牺牲品。
+// 正解是让流一直活着：启动时拉起一个常驻的 `pw-cat --playback`，读 stdin，
+// 之后每次说话只往里**写数据**，不再建流。
+// 格式统一是 pcm_s16le / 24000 / 1ch（合成输出都是这个），所以能复用。
+static FILE* gSink = nullptr;
+static std::mutex gSinkMu;
+
+static void sinkStart() {
+    if (gSink) return;
+    gSink = ::popen("pw-cat --playback --format s16 --rate 24000 --channels 1 -", "w");
+    if (gSink) log_("[voice] 常驻输出流已建立（pw-cat）");
+    else      log_("[voice] 常驻输出流建不起来，退回每次 pw-play");
+}
+
+// 读一个 wav，跳过 44 字节头，把数据段写进常驻流。放后台线程，别卡主循环。
+static void sinkPlayFile(const std::string& path) {
+    std::thread([path]() {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return;
+        f.seekg(44, std::ios::beg);
+        char buf[8192];
+        std::lock_guard<std::mutex> lk(gSinkMu);
+        if (!gSink) return;
+        while (f.read(buf, sizeof buf) || f.gcount() > 0) {
+            if (std::fwrite(buf, 1, static_cast<size_t>(f.gcount()), gSink) == 0) break;
+            if (f.eof()) break;
+        }
+        std::fflush(gSink);
+    }).detach();
+}
+
 void voicePlay(const std::string& text) {
     const char* env = std::getenv("MIYU_VOICE_DIR");
     const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
@@ -242,6 +277,13 @@ void voicePlay(const std::string& text) {
     const std::string path = dir + "/" + key + ".wav";
     if (::access(path.c_str(), R_OK) != 0) {
         log_("[voice] index 里有 %s 但文件不在（静默）", key.c_str());
+        return;
+    }
+    if (gSink) {
+        sinkPlayFile(path);
+        const double sec0 = wavSeconds(path);
+        if (sec0 > 0.05) { gSayDur = sec0; gSayT0 = platTime(); gTalking = true; }
+        log_("[voice] 播 %s.wav（常驻流 %.2fs）: %s", key.c_str(), sec0, text.c_str());
         return;
     }
     char volbuf[16];
@@ -636,6 +678,8 @@ const char* sockPath() { return gPath.empty() ? "(未建)" : gPath.c_str(); }
 // 输出节点第一次要唤醒（几十毫秒～几百毫秒），第一声正好丢在这个窗口里。
 // 启动时先播一段 0.12 秒的静音，把流建起来，后面就都正常。
 void voiceWarmUp() {
+    sinkStart();
+    if (gSink) return;
     const char* env = std::getenv("MIYU_VOICE_DIR");
     const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
     const std::string path = dir + "/silence.wav";
