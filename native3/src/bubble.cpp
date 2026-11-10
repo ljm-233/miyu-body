@@ -144,7 +144,7 @@ bool buildTexture(const std::string& text, double lastSeconds) {
                                                    static_cast<float>(kRadius));
             if (covOut <= 0.0f) continue;
             // 外圈：柔和的蓝灰描边（比之前淡一档，不要硬边）
-            putPx(buf, w, fullH, x, y, 0.55f, 0.66f, 0.86f, 0.85f * covOut);
+            putPx(buf, w, fullH, x, y, 0.74f, 0.84f, 1.0f, 0.95f * covOut);
             // 内圈：深底（往里缩 2px）
             // 描边宽度：外扩 7px（之前 4px，他说太细）
             const float covIn = roundRectCoverage(x + 0.5f - 7.0f, y + 0.5f - 7.0f,
@@ -162,7 +162,7 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             const int half = static_cast<int>(kTailW * 0.5f * t);
             for (int x = cx - half; x <= cx + half; ++x) {
                 const bool edge = (x <= cx - half + 1 || x >= cx + half - 1 || y == 0 || y == kTailH - 1);
-                if (edge) putPx(buf, w, fullH, x, h + y, 0.55f, 0.66f, 0.86f, 0.85f);
+                if (edge) putPx(buf, w, fullH, x, h + y, 0.74f, 0.84f, 1.0f, 0.95f);
                 else      putPx(buf, w, fullH, x, h + y, 0.07f, 0.09f, 0.14f, 0.94f);
             }
         }
@@ -335,7 +335,7 @@ void draw(int winW, int winH) {
     // 她的头顶在窗口里大约 0.90 高处（framebuffer 坐标从底部算）
     // 窗口顶部只剩约 110 物理像素，气泡（含小尖角）大约 100 高 —— 所以下沿贴着
     // 她头顶往上一点点，上沿正好压到窗口边。再高就裁掉了。
-    const float by = static_cast<float>(winH) * 0.858f;   // 气泡底边在她头饰上方约 10px
+    const float by = static_cast<float>(winH) * 0.880f;   // 2026-11-11 02:5x 他说「把人物盖住了」——再往上，气泡底边必须在她头饰之上
     const float x0 = cx - bw * 0.5f, x1 = cx + bw * 0.5f;
     const float y0 = by, y1 = by + bh;
 
