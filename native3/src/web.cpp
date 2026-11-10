@@ -119,6 +119,41 @@ const char* kHtml = R"HTML(<!doctype html>
   .hint.ok{color:#2f9e44}
   html[data-theme="light"] .hint.ok{color:#2b8a3e}
   .foot{margin-top:14px;font-size:11px;color:var(--dim);text-align:center;opacity:.8}
+
+  /* ── 二十五：重排版。左边一条固定导航，右边内容区，窄屏自动收成顶部横条 ── */
+  .app{display:flex;gap:20px;align-items:flex-start;max-width:1180px;margin:0 auto;
+       padding:18px 18px 40px}
+  .side{position:sticky;top:18px;flex:0 0 158px;display:flex;flex-direction:column;gap:2px}
+  .brand{font-size:13px;font-weight:600;color:var(--accent);letter-spacing:.1em;
+         padding:2px 10px 12px}
+  .side a{display:block;font-size:13px;color:var(--dim);text-decoration:none;
+          padding:7px 10px;border-radius:8px;cursor:pointer;border-left:2px solid transparent}
+  .side a:hover{color:var(--fg);background:var(--card)}
+  .side a.on{color:var(--accent);background:var(--card);border-left-color:var(--accent)}
+  .main{flex:1 1 auto;min-width:0}
+  section{display:none}
+  section.on{display:block}
+  @media (max-width:760px){
+    .app{flex-direction:column;gap:10px;padding:14px 12px 30px}
+    .side{position:static;flex:none;flex-direction:row;flex-wrap:wrap;gap:6px;width:100%;
+          overflow-x:auto;padding-bottom:4px}
+    .brand{display:none}
+    .side a{border-left:0;border-bottom:2px solid transparent;padding:6px 9px}
+    .side a.on{border-bottom-color:var(--accent)}
+  }
+  /* 表情墙 / 动作按钮墙 */
+  .wall{display:flex;flex-wrap:wrap;gap:7px;padding:6px 0 10px}
+  .wall button{font:inherit;font-size:12px;color:var(--fg);background:var(--ctl);
+    border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer;
+    transition:border-color .12s,color .12s,background .12s}
+  .wall button:hover{border-color:var(--accent);color:var(--accent)}
+  .wall button:active{background:rgba(122,162,247,.18)}
+  .wall button.dead{opacity:.45}
+  /* 行尾的「试」小按钮 */
+  .try{font:inherit;font-size:11px;color:var(--dim);background:var(--ctl);
+    border:1px solid var(--line);border-radius:7px;padding:3px 8px;cursor:pointer;
+    margin-left:6px;white-space:nowrap}
+  .try:hover{color:var(--accent);border-color:var(--accent)}
 </style></style></head>
 <body><script>
 (function(){
@@ -129,19 +164,21 @@ const char* kHtml = R"HTML(<!doctype html>
         : (location.search.indexOf('theme=dark') >= 0 ? 'dark' : null);
   document.documentElement.setAttribute('data-theme', q || (t === 'light' ? 'light' : 'dark'));
 })();
-</script><div class="wrap">
-  <div class="head"><h1>米鱼 · 设置</h1>
-    <button class="themebtn" id="theme" title="切换明暗">☀</button></div>
-  <p class="status" id="status">连接中…</p>
-  <div class="grid" id="groups"></div>
-  <div class="tools">
-    <button id="call">叫她一下</button>
-    <button id="exprnext">切个表情</button>
-    <button id="restart">重启服务</button>
-  </div>
-  <div class="btns"><button class="main" id="reset">恢复默认</button></div>
-  <div class="hint" id="hint"></div>
-  <div class="foot">改完即时生效 · 设置存在 state/settings.json</div>
+</script><div class="app">
+  <nav class="side" id="nav"><div class="brand">米鱼 · 设置</div></nav>
+  <main class="main">
+    <div class="head"><p class="status" id="status">连接中…</p>
+      <button class="themebtn" id="theme" title="切换明暗">☀</button></div>
+    <div id="groups"></div>
+    <div class="tools">
+      <button id="call">叫她一下</button>
+      <button id="exprnext">切个表情</button>
+      <button id="restart">重启服务</button>
+    </div>
+    <div class="btns"><button class="main" id="reset">恢复默认</button></div>
+    <div class="hint" id="hint"></div>
+    <div class="foot">改完即时生效 · 设置存在 state/settings.json</div>
+  </main>
 </div>
 <script>
 (function(){
@@ -329,13 +366,75 @@ const char* kHtml = R"HTML(<!doctype html>
   }
 
   var root = document.getElementById('groups');
-  SCHEMA.forEach(function(sec){
+  // 二十五：重排版。每个分组渲染成一个 <section>，左边导航切显示；
+  // 宽屏是左侧固定条，窄屏自动收成顶部横条（CSS 里那段 media query）。
+  var navEl = document.getElementById('nav');
+  var sections = [];
+  function addSection(title){
+    var sec = document.createElement('section');
     var card = document.createElement('div'); card.className = 'card';
-    var h = document.createElement('div'); h.className = 'gh'; h.textContent = sec.g;
-    card.appendChild(h);
+    var h = document.createElement('div'); h.className = 'gh'; h.textContent = title;
+    card.appendChild(h); sec.appendChild(card);
+    root.appendChild(sec);
+    sections.push({sec: sec, card: card});
+    var a = document.createElement('a'); a.textContent = title;
+    a.addEventListener('click', function(){ showSection(sections.length - 1); });
+    navEl.appendChild(a);
+    return card;
+  }
+  function showSection(i){
+    sections.forEach(function(s, j){ s.sec.classList.toggle('on', j === i); });
+    var links = navEl.querySelectorAll('a');
+    for (var k = 0; k < links.length; k++) links[k].classList.toggle('on', k === i);
+    try { localStorage.setItem('miyu-tab', String(i)); } catch(e) {}
+  }
+  SCHEMA.forEach(function(sec){
+    var card = addSection(sec.g);
     sec.items.forEach(function(it){ addRow(card, it); });
-    root.appendChild(card);
   });
+
+  // 二十五：两组新东西 —— 表情墙、动作墙。
+  // 都是「点一下立刻发生」，用的是 POST /set 的 cmd 通道（cmd + arg），
+  // 不写设置、不落盘，和改滑块是两回事。
+  var exprCard = null, planCard = null;
+  function cmd(name, arg){
+    var o = {}; o.cmd = name; o.arg = arg;
+    post(o).then(function(d){
+      if (d && d.ok) hint(name === 'expr' ? ('表情：' + arg) : (name === 'plan' ? ('播：' + arg) : 'ok'), true);
+      else hint('没生效', false);
+    }).catch(function(){ hint('连不上', false); });
+  }
+  function buildExprWall(names){
+    if (exprCard) return;
+    exprCard = addSection('表情');
+    var wall = document.createElement('div'); wall.className = 'wall';
+    names.forEach(function(n){
+      var b = document.createElement('button'); b.textContent = n;
+      b.addEventListener('click', function(){ cmd('expr', n); });
+      wall.appendChild(b);
+    });
+    var off = document.createElement('button'); off.textContent = '回默认';
+    off.addEventListener('click', function(){ cmd('expr', '默认'); });
+    wall.appendChild(off);
+    exprCard.appendChild(wall);
+    var tip = document.createElement('div'); tip.className = 'd';
+    tip.textContent = '点一个立刻切过去，5 秒后淡回默认（和点她身上部位用的是同一套）';
+    exprCard.appendChild(tip);
+  }
+  function buildPlanWall(names){
+    if (planCard) return;
+    planCard = addSection('动作');
+    var wall = document.createElement('div'); wall.className = 'wall';
+    names.forEach(function(n){
+      var b = document.createElement('button'); b.textContent = n;
+      b.addEventListener('click', function(){ cmd('plan', n); });
+      wall.appendChild(b);
+    });
+    planCard.appendChild(wall);
+    var tip = document.createElement('div'); tip.className = 'd';
+    tip.textContent = 'plans/ 目录里的动作计划，点一下播一遍';
+    planCard.appendChild(tip);
+  }
 
   // 二十五：点击反应 —— 每个部位点下去播哪个表情。
   // 这一组是**动态的**：部位固定十二个，但表情列表来自 /state 的 exprNames，
@@ -344,6 +443,7 @@ const char* kHtml = R"HTML(<!doctype html>
                ['brow','眉'],['mouth','嘴'],['chest','胸'],['waist','腰'],
                ['arm','手'],['skirt','裙'],['leg','腿'],['tail','尾']];
   var partCard = null;
+  var tabRestored = false;
   function buildPartCard(names){
     if (partCard) return;
     partCard = document.createElement('div'); partCard.className = 'card';
@@ -359,8 +459,16 @@ const char* kHtml = R"HTML(<!doctype html>
       opts.push([n, DEAD[n] ? (n + '（模型里没绑，选了没反应）') : n]);
     });
     PARTS.forEach(function(p){
-      addRow(partCard, {k:'pexpr.'+p[0], t:'select', label:p[1], opts:opts,
+      var row = addRow(partCard, {k:'pexpr.'+p[0], t:'select', label:p[1], opts:opts,
         d:'点这个部位时播哪个表情。选「无」就只放它自己的动作。'});
+      // 行尾加一个「试」：不用真的去点她，直接让身体演一遍这个部位的反应
+      var vb = els['pexpr.'+p[0]] && els['pexpr.'+p[0]].out;
+      if (vb && vb.parentNode) {
+        var t = document.createElement('button'); t.className = 'try'; t.textContent = '试';
+        t.title = '让身体演一遍「点' + p[1] + '」的反应';
+        t.addEventListener('click', function(){ cmd('part', p[0]); });
+        vb.parentNode.appendChild(t);
+      }
     });
     root.appendChild(partCard);
   }
@@ -382,7 +490,17 @@ const char* kHtml = R"HTML(<!doctype html>
       for (var i = aaSel.options.length - 1; i >= 0; i--)
         if (aaSel.options[i].value === 'smaa') aaSel.remove(i);
     }
-    if (s.exprNames && s.exprNames.length) buildPartCard(s.exprNames);
+    if (s.exprNames && s.exprNames.length) {
+      buildPartCard(s.exprNames);
+      buildExprWall(s.exprNames);
+    }
+    if (s.planNames && s.planNames.length) buildPlanWall(s.planNames);
+    if (!tabRestored) {
+      tabRestored = true;
+      var t0 = 0;
+      try { t0 = parseInt(localStorage.getItem('miyu-tab') || '0', 10) || 0; } catch(e) {}
+      showSection(Math.min(t0, sections.length - 1));
+    }
     if (s.partExpr) PARTS.forEach(function(p){
       var e = els['pexpr.'+p[0]];
       if (e && e.el) { var val = s.partExpr[p[0]] || ''; e.el.value = val; }
@@ -578,12 +696,14 @@ int         gFd       = -1;
 int         gPort     = 0;
 Settings    gSet;
 ApplyFn     gApply    = nullptr;
+CmdFn       gCmd      = nullptr;
 std::string gOutput   = "?";
 int         gWinW     = 0, gWinH = 0;
 double      gFps      = -1.0;    // 十八：main 的 framePace 每 5 秒喂一次实测帧率
 std::string gPath     = "settings.json";
 bool        gSmaaOk   = true;    // 十九：postfx 报告 smaa 能不能用（main 启动时喂一次）
 std::vector<std::string> gExprs;
+static std::vector<std::string> gPlans;   // 二十五：plans/*.json 名单
 size_t      gExprIdx  = 0;
 
 struct Conn {
@@ -830,6 +950,12 @@ std::string stateJson() {
             s += "\"" + part + "\":\"" + ex + "\"";
         }
         s += "}";
+        s += ",\"planNames\":[";
+        for (size_t i = 0; i < gPlans.size(); ++i) {
+            if (i) s += ",";
+            s += "\"" + gPlans[i] + "\"";
+        }
+        s += "]";
         s += ",\"exprNames\":[";
         for (size_t i = 0; i < gExprs.size(); ++i) {
             if (i) s += ",";
@@ -876,6 +1002,8 @@ std::string handleSet(const std::string& body, bool logIt) {
     bool persist = false;
     std::string say;
     bool haveSay = false;
+    bool haveCmd = false;
+    std::string cmdName, cmdArg;
     double mood = -1.0;
     bool wantRestart = false, wantExprNext = false, wantReset = false;
 
@@ -1066,6 +1194,10 @@ std::string handleSet(const std::string& body, bool logIt) {
             }
             continue;
         }
+        // 二十五：动作按钮。{"cmd":"part","arg":"chest"} → 让主体「试一下」这个部位
+        // （和真的点它走同一条 partPokeStart），不动任何设置、不落盘。
+        if (k == "cmd" && v.t == VStr) { cmdName = v.s; haveCmd = true; continue; }
+        if (k == "arg" && v.t == VStr) { cmdArg = v.s; continue; }
         if (k == "say" && v.t == VStr) { say = v.s; haveSay = true; continue; }
         if (k == "mood" && v.t == VNum) { mood = v.n; continue; }
         if (k == "action" && v.t == VStr) {
@@ -1094,6 +1226,11 @@ std::string handleSet(const std::string& body, bool logIt) {
         changed.clear();
         for (const char* k : kAll) changed.push_back(k);
         logw("reset：全部设置恢复默认（%zu 项）", changed.size());
+    }
+
+    if (haveCmd && gCmd) {
+        gCmd(cmdName.c_str(), cmdArg.c_str());
+        applied.push_back(cmdName);
     }
 
     if (!changed.empty()) persist = true;
@@ -1251,11 +1388,14 @@ void setExprNames(std::vector<std::string> names) { gExprs = std::move(names); }
 
 const std::vector<std::string>& exprNames() { return gExprs; }
 
+void setPlanNames(std::vector<std::string> names) { gPlans = std::move(names); }
+
 const char* statePath() { return gPath.c_str(); }
 int port() { return gPort; }
 
-void init(ApplyFn apply) {
+void init(ApplyFn apply, CmdFn cmd) {
     gApply = apply;
+    gCmd   = cmd;
     gPath  = resolveStatePath();
     loadSettings();
     loadPartReact();          // 二十五：部位→表情（和 settings.json 分开存）

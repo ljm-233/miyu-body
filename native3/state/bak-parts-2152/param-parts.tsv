@@ -1,0 +1,31 @@
+# 部位级反应的数据表（第二十二节，定稿；量出来的账本在 state/part-roots.json）
+# 格子图在 state/part-zones.tsv（身体按 drawable→part 光栅化、再按 alpha 裁出来的，
+#   窗口归一化，和点击判定用同一份）
+# P<TAB>部位<TAB>驱动参数<TAB>比值×10<TAB>冲量幅度<TAB>备注
+#   幅度 = 给参数的**绝对偏移量**（度 / 比例单位），方向每点一次交替
+#
+# 只拨物理的**输入**，绝不写 ChestX*/ChestY*/SkirtY*/Hair* 这些物理输出：
+#   · AngleX / ParamBreath 是 physics3.json 的根（只被输入，从不被输出）
+#   · ParamAngleX / ParamBodyAngleX / ParamBodyAngleZ / HipAngleX 是那条链上的
+#     **上一级输入**（Chest* 的 Input.Source 就是 ParamBodyAngleX；
+#     SkirtX* 的 Input.Source 是 HipAngleX）。拨它 = 让物理自己算 Chest*/Skirt*，
+#     不是把结果顶掉。他 02:1x 验过的就是这条（ParamBodyAngleX 0→25，胸部变 86%）。
+# 二十五：head 的动作参数整组拿掉了 —— 他 2026-11-10 20:1x 说「点头部，为什么要动头部？很奇怪的」，
+# 头被点一下应该是脸色变了，不是整块转。现在 head 只由 part-react.tsv 里的表情负责，
+# 顺带把倍数从 0.41 拉起来（转头会带动裙子物理，17k px 全算在「别人」头上）
+# 二十五：AngleX/AngleY 是全身参数，一拨手臂 6358 px、头只 2077，倍数被压到 0.34。
+# head 换成下面两个只动头发的（他点名要修的那个回归）。
+# 之前用 AngleX（不带 Param 的那套）头 8692 / arm 6358，被压到 0.34，就是它害的
+P	chest	PokeChest	90	1.000	胸X 的局部版；ChestX1/2/3/BS 同 Destination
+P	arm	PokeArmL	85	1.000	左臂的局部版；LArm/LForearm/LWrist
+P	arm	PokeArmR	84	1.000	右臂的局部版；RArm/RForearm/RWrist
+P	skirt	PokeSkirt	80	1.000	裙子X 摆动的局部版；SkirtX1..4/SkirtSpecial/2
+P	leg	PokeLeg	88	1.000	双腿 Z 的局部版；LEGAngleZ2（原来拨 HipAngleX 会先拽裙）
+P	tail	PokeTail	92	1.000	尾巴的局部版；Param_Angle_Rotation84..89 + Param52
+P	eye	PokeEye	95	1.000	眼睛：眼珠被物理带走 + 点一下眨一次（0.24s 包络）
+P	mouth	PokeMouth	94	1.000	嘴：ParamMouthOpenY 自己拼的一条链
+P	brow	PokeBrow	93	1.000	眉毛：34/35 两条链，上下 + 角度
+P	ear	PokeEarL	91	1.000	左兽耳：PhysicsSetting83 的局部版
+P	ear	PokeEarR	91	1.000	右兽耳：PhysicsSetting85 的局部版
+P	waist	PokeWaist	90	1.000	腰：腰带那一圈的局部版
+P	headwear	PokeHeadWear	90	1.000	头饰（女仆发饰，不是帽子）：117/118 两条链

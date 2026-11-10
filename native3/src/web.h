@@ -86,8 +86,14 @@ struct Settings {
 // 所以 web 只负责喊一声：key 是变了的那个字段名（"scale" / "alpha" / …）。
 using ApplyFn = void (*)(const char* key);
 
+// 二十五：页面上的「动作按钮」走这条 —— 试一下某个部位 / 切表情 / 播动作 / 说一句话。
+// 参数是 (命令名, 参数)，命令名由页面决定：expr / part / plan / say。
+// 和 ApplyFn 分开是因为「改设置」和「触发一次动作」是两回事：
+// 设置要落盘，动作不要。
+using CmdFn = void (*)(const char* cmd, const char* arg);
+
 // 读回 state/settings.json（没有就用默认值）+ 起监听。失败只记日志。
-void init(ApplyFn apply);
+void init(ApplyFn apply, CmdFn cmd);
 
 // ── 十九：smaa 的可用性（main 在 postfx::init() 之后调一次）────────────
 // false 时：页面「抗锯齿」下拉里不留 smaa 这一项，POST 传来 smaa 也按 ssaa2x 落。
@@ -119,6 +125,9 @@ void setFps(double fps);
 void setExprNames(std::vector<std::string> names);
 // 二十五：给设置页用的「现在有哪几个表情可挑」
 const std::vector<std::string>& exprNames();
+
+// 二十五：动画计划名单（plans/*.json）
+void setPlanNames(std::vector<std::string> names);
 
 // 设置落到哪个文件（日志/文档用）。
 const char* statePath();

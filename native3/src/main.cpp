@@ -3107,6 +3107,42 @@ static void webApply(const char* key) {
     log_("[web] 生效：%s", key);
 }
 
+// 二十五：设置页上的「动作按钮」。
+// 和 webApply 分开：改设置要落盘，动作不要。四个命令：
+//   part  试一下某个部位（走和真点击同一条 partPokeStart）
+//   expr  切一个表情（2 秒后回默认，和点部位同一套）
+//   plan  播一份动作计划（plans/*.json）
+//   say   说一句话（含嘴型包络，不出声 —— 出声由 voice 设置那套管）
+static void webCmd(const char* cmd, const char* arg) {
+    const std::string c = cmd ? cmd : "", a = arg ? arg : "";
+    if (c == "part") {
+        if (!a.empty()) {
+            std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", a.c_str());
+            ++partpoke::gGen;
+            log_("[web] 试一下部位：%s", a.c_str());
+        }
+    } else if (c == "expr") {
+        if (web::settings().expr) {
+            exprPlay(a.empty() ? "默认" : a);
+            gTapExprUntil = platTime() + 5.0;
+            gTapExprOn = true;
+        }
+    } else if (c == "plan") {
+        if (!a.empty()) {
+            const std::string p = std::string(kModelDir) + "../plans/" + a + ".json";
+            std::vector<char> raw = slurp(p);
+            if (raw.empty()) {
+                log_("[web] 找不到计划：%s", p.c_str());
+            } else {
+                const double now = platTime();
+                plan::start(std::string(raw.begin(), raw.end()), now);
+                if (plan::active()) planTakeover(now);
+                log_("[web] 播计划：%s（%.1fs）", p.c_str(), plan::total());
+            }
+        }
+    }
+}
+
 // 「切个表情」按钮要的是「有哪几个表情」：扫 model/Exp3/*.exp3.json 的文件名。
 // 排个序，这样每次点都是同一个循环顺序，不会随机跳。
 static std::vector<std::string> scanExpressions(const char* dir) {
@@ -3197,7 +3233,23 @@ int main() {
     // 顺序讲究：web::init 会读 state/settings.json，读回来的值要在这里就应用，
     // 否则「重启服务后仍是改后的值」只有页面显示对、实际行为回到默认。
     web::setExprNames(scanExpressions((std::string(kModelDir) + "Exp3").c_str()));
-    web::init(&webApply);
+    // 二十五：动作计划名单（设置页「动作」那一组用它出按钮）
+    {
+        std::vector<std::string> names;
+        const std::string dir = std::string(kModelDir) + "../native3/plans/";
+        if (DIR* d = opendir(dir.c_str())) {
+            while (dirent* e = readdir(d)) {
+                std::string f = e->d_name;
+                if (f.size() > 5 && f.substr(f.size() - 5) == ".json")
+                    names.push_back(f.substr(0, f.size() - 5));
+            }
+            closedir(d);
+        }
+        std::sort(names.begin(), names.end());
+        web::setPlanNames(names);
+        log_("[web] 动作计划 %zu 个", names.size());
+    }
+    web::init(&webApply, &webCmd);
     {
         // MIYU_NO_TAP 是命令行上的一次性覆盖，压过设置文件的 tap（排查时它该说了算）
         if (getenv("MIYU_NO_TAP") && web::settings().tap) web::settings().tap = false;
