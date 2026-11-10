@@ -784,15 +784,25 @@ static void exprPlay(const std::string& name) {
     if (label == "(默认)") {
         gExprResetPending = true;          // 让主循环把上次碰过的参数写回默认值
     } else {
-        gExprTouched.clear();
+        // 二十五：**累积**，不再每次清空。
+        // 原来这里 `gExprTouched.clear()` —— 只记住「最后一次切的表情」碰过哪些参数。
+        // 于是点胸（脸红 key7）再点腰（圈圈眼 key3）之后回默认，只把 key7 写回去，
+        // key3 留在 1.0，她的眼睛就一直卡在圈圈眼上。他截图里那双白圈就是这么来的。
+        // 现在改成并集（去重），回默认时把这一段时间碰过的参数全写回默认值。
         const std::string raw(bytes.begin(), bytes.end());
         size_t p = 0;
         while ((p = raw.find("\"Id\"", p)) != std::string::npos) {
             const size_t q = raw.find('"', raw.find(':', p) + 1);
             const size_t r = q == std::string::npos ? std::string::npos : raw.find('"', q + 1);
-            if (r != std::string::npos) gExprTouched.push_back(raw.substr(q + 1, r - q - 1));
+            if (r != std::string::npos) {
+                const std::string id = raw.substr(q + 1, r - q - 1);
+                bool dup = false;
+                for (const auto& t : gExprTouched) if (t == id) { dup = true; break; }
+                if (!dup) gExprTouched.push_back(id);
+            }
             p = r == std::string::npos ? raw.size() : r;
         }
+        if (gExprTouched.size() > 64) gExprTouched.resize(64);   // 别无限长
     }
 
     Csm::CubismExpressionMotion* m = Csm::CubismExpressionMotion::Create(
