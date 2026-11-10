@@ -107,20 +107,23 @@ const char* kHtml = R"HTML(<!doctype html>
       background:var(--knob);border-radius:50%;transition:transform .15s,background .15s}
   .sw input:checked + .sl{background:rgba(122,162,247,.35)}
   .sw input:checked + .sl:before{transform:translateX(17px);background:var(--accent)}
-  .tools{display:flex;justify-content:center;gap:8px;margin:18px 0 10px}
+  /* 2026-11-10 23:1x：底部这几块跟着 .main 一起被拉到 1700px 宽，按钮条横贯整屏很难看。
+     统一限宽居中，和上面两栏内容区的视觉宽度对齐。 */
+  .tools, .btns, .hint, .foot{max-width:760px;margin-left:auto;margin-right:auto}
+  .tools{display:flex;justify-content:center;gap:8px;margin:18px auto 10px}
   .tools button{font:inherit;font-size:11px;color:var(--dim);background:none;border:0;
     padding:4px 6px;cursor:pointer;border-radius:6px}
   .tools button:hover{color:var(--accent);background:var(--card)}
-  .btns{margin-top:2px}
+  .btns{margin-top:2px;max-width:760px}
   button.main{width:100%;font:inherit;font-size:13px;color:var(--fg);background:var(--card);
     border:1px solid var(--line);border-radius:10px;padding:11px 8px;cursor:pointer;
     transition:border-color .15s,color .15s}
   button.main:hover{border-color:#f7768e;color:#f7768e}
-  .hint{margin-top:12px;font-size:11px;color:var(--dim);min-height:15px;
+  .hint{margin-top:12px;font-size:11px;color:var(--dim);min-height:15px;max-width:760px;
         text-align:center;transition:color .2s}
   .hint.ok{color:#2f9e44}
   html[data-theme="light"] .hint.ok{color:#2b8a3e}
-  .foot{margin-top:14px;font-size:11px;color:var(--dim);text-align:center;opacity:.8}
+  .foot{margin-top:14px;font-size:11px;color:var(--dim);text-align:center;opacity:.8;max-width:760px}
 
   /* ── 二十五：重排版。左边一条固定导航，右边内容区，窄屏自动收成顶部横条 ── */
   .app{display:flex;gap:22px;align-items:flex-start;width:100%;max-width:1720px;margin:0 auto;
