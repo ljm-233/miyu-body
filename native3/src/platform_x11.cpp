@@ -107,6 +107,25 @@ void platSetPosition(int x, int y) {
     glfwSetWindowPos(g_win, x, y);
 }
 
+// 走路要用（2026-11-11）：Wayland 那边读 W.posX/posY，X11 这边直接问 GLFW。
+// 两个平台都有实现，否则 miyu 那个 target 链接不过。
+void platSyncRect() {}
+
+void platGetPosition(int* x, int* y, int* w, int* h) {
+    if (x || y) {
+        int px = 0, py = 0;
+        if (g_win) glfwGetWindowPos(g_win, &px, &py);
+        if (x) *x = px;
+        if (y) *y = py;
+    }
+    if (w || h) {
+        int ww = 0, wh = 0;
+        if (g_win) glfwGetWindowSize(g_win, &ww, &wh);
+        if (w) *w = ww;
+        if (h) *h = wh;
+    }
+}
+
 // X11 版不接管鼠标拖动：GLFW 那边有自己的窗口拖动（以后要接也是走
 // glfwSetWindowUserPointer + 自己算标题栏），这一层恒 false。
 // 存在的意义有两个：接口两个 target 一致；main.cpp 里「拖动时跳过 region 重算」

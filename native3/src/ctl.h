@@ -42,7 +42,10 @@ void setMouthScale(float s);
 // 二十六：让身体自己说一句（点击反应用）。和外部推 {"say":...} 走同一套：
 // 嘴型包络 + 有缓存就出声。now 由调用方给（main 的帧时间）。
 void say(const std::string& text, double now);
-void voiceWarmUp();   // 启动时预热输出流（第一声会被 pipewire 吞掉）
+void voiceWarmUp();
+// 二十六：走路目标（由 ctl 的命令写、main 的 walkTick 读）
+extern bool  gWalkWanted;
+extern float gWalkTargetX, gWalkTargetY;   // 启动时预热输出流（第一声会被 pipewire 吞掉）
 void setVoice(bool on, float vol);
 
 // socket 路径，日志用。

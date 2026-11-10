@@ -1151,6 +1151,15 @@ static void printOutputTable() {
 int  platOutputCount()  { return W.nouts; }
 int  platCurrentOutput(){ return W.curIdx; }
 
+void platSyncRect() { writeWindowRect(); }
+
+void platGetPosition(int* x, int* y, int* w, int* h) {
+    if (x) *x = W.posX;
+    if (y) *y = W.posY;
+    if (w) *w = W.logicalW;
+    if (h) *h = W.logicalH;
+}
+
 bool platMoveToOutput(int index) {
     if (!W.inited) { LOG("platMoveToOutput(%d)：还没 init", index); return false; }
     if (index < 0 || index >= W.nouts) {

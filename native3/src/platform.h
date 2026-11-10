@@ -41,6 +41,13 @@ double platTime();
 // 把窗口挪到屏幕坐标 (x, y)。
 void platSetPosition(int x, int y);
 
+// 读当前窗口在屏幕上的位置和大小（逻辑像素）。走路要用它算「还剩多远」。
+void platGetPosition(int* x, int* y, int* w, int* h);
+
+// 位置变了之后把 state/window.json 同步一下（第二支指针靠它算局部坐标）。
+// 拖动那条路是平台内部自己写的；走路是 main 在挪，所以要主动喊一次。
+void platSyncRect();
+
 // 现在是不是正被按住拖动（鼠标拖窗）。
 //   · Wayland 实现：按下 BTN_LEFT 且指针在她身上 → true，松开 → false
 //   · X11 实现：恒 false（GLFW 那边有自己的窗口拖动，这一层不接管）

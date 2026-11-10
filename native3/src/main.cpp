@@ -1672,6 +1672,68 @@ static void herStateTick(double now) {
     if (!t.empty()) parseMoodJson(t);
 }
 
+// ── 二十六：走路 ────────────────────────────────────────────────
+//
+// 2026-11-11 00:4x：「她还不可以走路呢，能不能去做走路，就是移动」。
+//
+// 模型里**没有迈步的骨头**（只有站着待机 + 拖动的物理跟随），所以「走」只能是
+// 三件事叠出来的感觉，缺一不可：
+//   ① 窗口真的在动（platSetPosition），而且速度是人在走的速度（~110 px/s），不是瞬移
+//   ② 身体在动：上下起伏 + 左右轻摆 + 腿交替张合（用 PokeLeg 正负交替）
+//   ③ 面朝方向：往左走向左偏一点、往右走向右偏 —— 不面朝就走是滑行
+// 缺了 ②③ 就是「一个立绘被平移」，那正是他之前说的「挪图片」。
+//
+// 到点容差 2px，到了就停，停在原地呼吸。
+static const float kWalkSpeed = 110.0f;     // px/s
+static void walkTick(Csm::CubismModel* model, double now, float dt) {
+    static double lastLog = -1e9;
+    if (!ctl::gWalkWanted) return;
+
+    int wx = 0, wy = 0, ww = 0, wh = 0;
+    platGetPosition(&wx, &wy, &ww, &wh);
+    const float dx = ctl::gWalkTargetX - static_cast<float>(wx);
+    const float dy = ctl::gWalkTargetY - static_cast<float>(wy);
+    const float dist = std::sqrt(dx * dx + dy * dy);
+
+    if (dist < 2.0f) {
+        ctl::gWalkWanted = false;
+        log_("[walk] 到了 (%.0f, %.0f)", ctl::gWalkTargetX, ctl::gWalkTargetY);
+        return;
+    }
+
+    const float step = std::min(dist, kWalkSpeed * dt);
+    platSetPosition(wx + static_cast<int>(std::lround(dx / dist * step)),
+                    wy + static_cast<int>(std::lround(dy / dist * step)));
+    // 每 0.25 秒把 window.json 同步一次（第二支指针按它算局部坐标；不写就会指着旧位置）
+    static double lastSync = -1e9;
+    if (now - lastSync > 0.25) { lastSync = now; platSyncRect(); }
+
+    // 走起来的样子：步伐相位用时间推（不累计误差）
+    static double walkT0 = -1.0;
+    if (walkT0 < 0.0 || !ctl::gWalkWanted) walkT0 = now;
+    const double ph = (now - walkT0) * 2.0 * 3.14159265358979 * 1.55;        // 1.55 步/秒
+    const float bob   = std::sin(ph * 2.0f) * 2.6f;              // 上下：两步一个周期
+    const float sway  = std::sin(ph) * 3.2f;                     // 左右摆
+    const float legL  = std::sin(ph) * 0.55f;                    // 腿交替
+    const float faceX = (dx > 0 ? 1.0f : -1.0f) * std::min(1.0f, std::fabs(dx) / 60.0f);
+
+    auto setP = [&](const char* name, float v) {
+        const Csm::csmInt32 i = model->GetParameterIndex(
+            Csm::CubismFramework::GetIdManager()->GetId(name));
+        if (i >= 0) model->SetParameterValue(i, v, 1.0f);
+    };
+    setP("PositionY", bob);
+    setP("ParamAngleZ", sway);
+    setP("ParamAngleX", faceX * 6.0f);
+    setP("PokeLeg", legL);
+
+    if (now - lastLog > 0.8) {
+        lastLog = now;
+        log_("[walk] 走向 (%.0f,%.0f) 剩 %.0f px｜起伏 %+.1f 摆 %+.1f 腿 %+.2f",
+             ctl::gWalkTargetX, ctl::gWalkTargetY, dist, bob, sway, legL);
+    }
+}
+
 // 她的状态 → 身体上的几个连续量（都是 0.0–1.0 之间的「程度」）
 static float herTired() { return gHer.valid ? std::min(1.0f, std::max(0.0f, gHer.tired / 100.0f)) : 0.35f; }
 static float herHappy() { return gHer.valid ? std::min(1.0f, std::max(0.0f, gHer.happy / 100.0f)) : 0.20f; }
@@ -3774,6 +3836,7 @@ int main() {
         probeTick(model, now);
         partPokeTick(model, now);
         herStateTick(now);
+        walkTick(model, now, dt);
         // 她的状态 → 姿态。连续量，不是开关：累了整个人往下沉、头低一点；
         // 开心的时候反过来。这是「身体反映她」最直接的一层。
         if (gHer.valid) {

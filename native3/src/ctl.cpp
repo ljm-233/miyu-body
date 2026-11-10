@@ -33,6 +33,11 @@
 #include <string>
 
 namespace ctl {
+
+// 二十六：走路（main 的 walkTick 读、这边的 walkTo 命令写）
+bool  gWalkWanted = false;
+float gWalkTargetX = 0.0f;
+float gWalkTargetY = 0.0f;
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
@@ -384,6 +389,27 @@ void handleLine(const std::string& raw, double now) {
             }
         }
     }
+
+    // walkTo：让她**走过去**。
+    // 用法：echo '{"walkTo":{"x":800,"y":300}}' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/miyu-body.sock
+    // 二十六（2026-11-11 00:4x）：他问「她还不可以走路呢，能不能去做走路，就是移动」。
+    // 这里只收目标点，真正的位移和「走起来的样子」在 main 的 walkTick 里做。
+    {
+        const auto* kw = std::strstr(line.c_str(), "\"walkTo\"");
+        if (kw) {
+            const char* px = std::strstr(kw, "\"x\"");
+            const char* py = std::strstr(kw, "\"y\"");
+            if (px && py) {
+                any = true;
+                gWalkTargetX = static_cast<float>(std::atof(std::strchr(px, ':') + 1));
+                gWalkTargetY = static_cast<float>(std::atof(std::strchr(py, ':') + 1));
+                gWalkWanted  = true;
+                log_("[ctl] walkTo 目标 (%.0f, %.0f)", gWalkTargetX, gWalkTargetY);
+            }
+        }
+    }
+    // 停止走：{"walkStop":1}
+    if (std::strstr(line.c_str(), "\"walkStop\"")) { any = true; gWalkWanted = false; }
 
     // expr（空串 / "默认" = 淡出回默认）
     std::string en;
