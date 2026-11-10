@@ -36,6 +36,8 @@ namespace ctl {
 
 // 二十六：走路（main 的 walkTick 读、这边的 walkTo 命令写）
 bool  gWalkWanted = false;
+// 二十六：运行时播一个 Animation 里的动作（举手 / 竖手指 / 狗尾草 / 脱捕）
+char  gMotionName[64] = {0};   // 空 = 没请求
 float gWalkTargetX = 0.0f;
 float gWalkTargetY = 0.0f;
 namespace {
@@ -410,6 +412,16 @@ void handleLine(const std::string& raw, double now) {
     }
     // 停止走：{"walkStop":1}
     if (std::strstr(line.c_str(), "\"walkStop\"")) { any = true; gWalkWanted = false; }
+
+    // motion：播 Animation/ 下的一个 motion3（举手 / 竖手指切出来动画 / 狗尾草切换出来 / 脱捕 …）
+    {
+        std::string mn;
+        if (keyStr(line, "motion", mn)) {
+            any = true;
+            std::snprintf(gMotionName, sizeof gMotionName, "%s", mn.c_str());
+            log_("[ctl] motion 请求：%s", mn.c_str());
+        }
+    }
 
     // expr（空串 / "默认" = 淡出回默认）
     std::string en;

@@ -1708,13 +1708,26 @@ static void walkTick(Csm::CubismModel* model, double now, float dt) {
     static double lastSync = -1e9;
     if (now - lastSync > 0.25) { lastSync = now; platSyncRect(); }
 
-    // 走起来的样子：步伐相位用时间推（不累计误差）
+    // 2026-11-11 01:2x：他一句「这不就是平移吗，脚和腿根本没动」把我打回来了。
+    // 他说得对 —— 这具模型**没有迈步的骨头**：腿只有一条对称的「张开」链
+    // （LEGAngleZ2），两条腿绑在一起，做不出「左脚迈出去、右脚跟上」。
+    // 硬把它当走路，就是「平移 + 腿一张一合」，比不动更假。
+    //
+    // 所以改成一个诚实的东西：**飘**。她有尾巴、裙摆、长发，飘着走不违和，
+    // 而且这三样都真的能动：
+    //   · 身体前倾一点（ParamAngleY 往下压 = 上半身前倾）
+    //   · 尾巴跟着步伐甩（PokeTail 最灵敏，实测 16000px）
+    //   · 裙摆被带着飘（PokeSkirt）
+    //   · 上下起伏比走路更缓、幅度更小（飘不是踩）
+    // 说白了：承认她不会走，但让她「移过去」这件事本身好看。
     static double walkT0 = -1.0;
-    if (walkT0 < 0.0 || !ctl::gWalkWanted) walkT0 = now;
-    const double ph = (now - walkT0) * 2.0 * 3.14159265358979 * 1.55;        // 1.55 步/秒
-    const float bob   = std::sin(ph * 2.0f) * 2.6f;              // 上下：两步一个周期
-    const float sway  = std::sin(ph) * 3.2f;                     // 左右摆
-    const float legL  = std::sin(ph) * 0.55f;                    // 腿交替
+    if (walkT0 < 0.0) walkT0 = now;
+    const double ph = (now - walkT0) * 2.0 * 3.14159265358979 * 1.1;   // 1.1 次/秒
+    const float bob   = std::sin(ph * 2.0f) * 3.4f;      // 上下：飘的浮沉
+    const float sway  = std::sin(ph) * 4.2f;             // 左右摆
+    const float tailS = std::sin(ph - 0.6f) * 0.55f;     // 尾巴晚半拍跟着甩
+    const float skirt = std::fabs(std::sin(ph)) * 0.35f; // 裙摆被带走
+    const float lean  = 5.0f + std::sin(ph) * 1.2f;      // 前倾（常量 + 微动）
     const float faceX = (dx > 0 ? 1.0f : -1.0f) * std::min(1.0f, std::fabs(dx) / 60.0f);
 
     auto setP = [&](const char* name, float v) {
@@ -1724,13 +1737,15 @@ static void walkTick(Csm::CubismModel* model, double now, float dt) {
     };
     setP("PositionY", bob);
     setP("ParamAngleZ", sway);
-    setP("ParamAngleX", faceX * 6.0f);
-    setP("PokeLeg", legL);
+    setP("ParamAngleX", faceX * 7.0f);
+    setP("ParamAngleY", -lean);
+    setP("PokeTail", tailS);
+    setP("PokeSkirt", skirt);
 
     if (now - lastLog > 0.8) {
         lastLog = now;
-        log_("[walk] 走向 (%.0f,%.0f) 剩 %.0f px｜起伏 %+.1f 摆 %+.1f 腿 %+.2f",
-             ctl::gWalkTargetX, ctl::gWalkTargetY, dist, bob, sway, legL);
+        log_("[walk] 飘向 (%.0f,%.0f) 剩 %.0f px｜浮沉 %+.1f 摆 %+.1f 尾 %+.2f 裙 %+.2f",
+             ctl::gWalkTargetX, ctl::gWalkTargetY, dist, bob, sway, tailS, skirt);
     }
 }
 
@@ -3490,7 +3505,9 @@ int main() {
     const char* mfNow = std::getenv("MIYU_MOTION");
     const bool kUseSine = (mfNow == nullptr);
     const bool kUseLegacyIdle = false;
-    Csm::CubismMotionManager* motionManager = nullptr;
+    // 二十六：motionManager **总是**创建 —— 之前只在 MIYU_MOTION 指定待机动作时才 new，
+    // 于是默认配置（手写正弦待机）下它一直是 nullptr，运行时想播「举手」根本没地方播。
+    Csm::CubismMotionManager* motionManager = new Csm::CubismMotionManager();
     Csm::CubismMotion* idleMotion = nullptr;
     if (kNoIdle) {
         log_("[main] 待机：MIYU_NO_IDLE 已设 —— 关");
@@ -3518,7 +3535,6 @@ int main() {
             idleMotion->SetLoopFadeIn(true);   // 循环接缝不跳
             idleMotion->SetFadeInTime(1.0f);   // 从静态站姿淡入，别一上来就弹
             idleMotion->SetFadeOutTime(1.0f);
-            motionManager = new Csm::CubismMotionManager();
             const Csm::CubismMotionQueueEntryHandle h =
                 motionManager->StartMotionPriority(idleMotion, false /* autoDelete */, 1 /* priority */);
             log_("[main] 待机动作：%s %zu 字节，时长 %.3fs，loop=1，句柄=%p", ip.c_str(),
@@ -3836,7 +3852,6 @@ int main() {
         probeTick(model, now);
         partPokeTick(model, now);
         herStateTick(now);
-        walkTick(model, now, dt);
         // 她的状态 → 姿态。连续量，不是开关：累了整个人往下沉、头低一点；
         // 开心的时候反过来。这是「身体反映她」最直接的一层。
         if (gHer.valid) {
@@ -3862,7 +3877,33 @@ int main() {
                      gHer.mood, gHer.tired, gHer.happy, gHer.sad, sink, lean, herReactionScale());
             }
         }
+        // 二十六：运行时播动作（举手 / 竖手指 / 狗尾草 / 脱捕）。
+        // 之前只能 MIYU_MOTION 在启动时指定一个，跑起来就换不了 ——
+        // 那些 motion 是「手的切换」，本来就是要随手播的。
+        if (ctl::gMotionName[0] != '\0' && motionManager) {
+            const std::string mn(ctl::gMotionName);
+            ctl::gMotionName[0] = '\0';
+            const std::string mp = std::string(kModelDir) + "Animation/" + mn;
+            std::vector<char> mb = slurp(mp);
+            if (mb.empty()) {
+                log_("[motion] 读不到 %s", mp.c_str());
+            } else {
+                auto* mo = Csm::CubismMotion::Create(
+                    reinterpret_cast<const Csm::csmByte*>(mb.data()),
+                    static_cast<Csm::csmSizeInt>(mb.size()));
+                if (mo) {
+                    mo->SetFadeInTime(0.25f);
+                    mo->SetFadeOutTime(0.25f);
+                    motionManager->StartMotionPriority(mo, true /* autoDelete */, 3 /* 高优先级，压过待机 */);
+                    log_("[motion] 播 %s（%.2fs）", mn.c_str(), mo->GetLoopDuration());
+                }
+            }
+        }
         followTick(model, now, dt);
+        // 走路放在 followTick **之后**：follow 里有一条 `follow leg PokeLeg`，
+        // 它在拖动的每一帧都会把 PokeLeg 写掉 —— 走路写在这之前等于白写，
+        // 他看到的「脚和腿根本没动」就是这个。
+        walkTick(model, now, dt);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。

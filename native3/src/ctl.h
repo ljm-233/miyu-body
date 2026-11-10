@@ -45,7 +45,8 @@ void say(const std::string& text, double now);
 void voiceWarmUp();
 // 二十六：走路目标（由 ctl 的命令写、main 的 walkTick 读）
 extern bool  gWalkWanted;
-extern float gWalkTargetX, gWalkTargetY;   // 启动时预热输出流（第一声会被 pipewire 吞掉）
+extern float gWalkTargetX, gWalkTargetY;
+extern char  gMotionName[64];   // 非空 = 要播这个 motion（播完自动清空）
 void setVoice(bool on, float vol);
 
 // socket 路径，日志用。
