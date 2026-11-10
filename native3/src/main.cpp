@@ -757,6 +757,7 @@ static bool gExprResetPending = false;
 // 第十六节：表情的停留截止时间（-1e9 = 不设防，默认表情就是它）。
 // 基准 2.5s × 网页上的 exprHold（0.2–5）→ 0.5s ~ 12.5s。
 static double gExprUntil = -1e9;
+static double gExprStart = -1e9;   // 这一条表情什么时候开始播（日志用）
 static constexpr double kExprBaseHold = 2.5;
 
 // name 为空 / "默认" → 淡出回默认表情：用一份**参数表是空的** exp3 顶上，
@@ -835,6 +836,7 @@ static void exprPlay(const std::string& name) {
     // 第十六节的「表情停留时长」：以前只有动作计划结束会收回默认，socket/页面推来的表情
     // 会一直挂着（点一次脸红红到重启）。现在起一个截止时间，到点自己淡回默认。
     // 计划在播时不算时间（那时候由 planTick 负责收尾），所以主循环那边也要判 plan::active()。
+    gExprStart = platTime();
     gExprUntil = (label == "(默认)") ? -1e9
                                     : platTime() + kExprBaseHold * double(web::settings().exprHold);
 }
@@ -1787,7 +1789,11 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             const char* ex = tapExprFor(part, gTapSeed++);
             if (ex && web::settings().expr) {
                 exprPlay(ex);
-                gTapExprUntil = now + gTapExprHold;   // 表里：part 行的 hold × expr 行的覆盖，默认 5.0
+                // 2026-11-10 23:2x：exprPlay 内部会按「全局基准 × 设置里的倍率」设 gExprUntil
+                // （现在是 2.5 秒），把我们在表里配的每条时长盖掉 —— 实测点发饰本该 6 秒，
+                // 结果 2.5 秒就淡回去了。所以这里调完 exprPlay 再按表里的 hold 覆盖一次。
+                gExprUntil = now + gTapExprHold;
+                gTapExprUntil = now + gTapExprHold;
                 gTapExprOn = true;
                 log_("[tap] 点 %s -> 表情「%s」", part.c_str(), ex);
             }
@@ -3616,8 +3622,11 @@ int main() {
         // 第十六节：表情到点回收（只有「计划在播」时跳过 —— 那时候由 planTick 收尾，
         // 计划附带的那个表情不该在中途被计时器拽回默认）。
         if (gExprUntil > -1e9 && now >= gExprUntil && !plan::active()) {
-            log_("[expr] 停留 %.1fs 到点（exprHold=%.2f），回默认",
-                kExprBaseHold * double(ws.exprHold), ws.exprHold);
+            // 2026-11-10 23:3x：这里原来打的是「全局基准 × 倍率」（2.5s），可点部位出表情时
+            // 实际停留是按 parts.tsv 里那一行的 hold 算的（可能是 6s）。日志和事实对不上，
+            // 我差点被它骗一次。改成打真正用掉的那段时间。
+            log_("[expr] 停留 %.1fs 到点（这一条实际用的时长），回默认",
+                 (gExprStart > -1e8) ? (now - gExprStart) : 0.0);
             gExprUntil = -1e9;
             exprPlay("默认");
         }

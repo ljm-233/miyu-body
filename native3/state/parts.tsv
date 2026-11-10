@@ -95,17 +95,17 @@ param	headwear	PokeHeadWear	90	1.000	# 头饰（女仆发饰，不是帽子）�
 # ══ 表情（0..N；空 = 只放自身动作；`/` 分隔 = 每次随机抽一个）══════════════
 # 原 state/part-react.tsv 的 12 行，顺序按部位名排（无声明的部位写空）。
 expr	arm	
-expr	brow	黑脸
-expr	chest	脸红
-expr	ear	＞＜
-expr	eye	爱心眼
-expr	head	前倾
-expr	headwear	流泪
+expr	brow	黑脸	4.5
+expr	chest	脸红	5.0
+expr	ear	＞＜	2.5
+expr	eye	爱心眼	4.0
+expr	head	前倾	3.0
+expr	headwear	流泪	6.0
 expr	leg	
-expr	mouth	＞＜
+expr	mouth	＞＜	2.5
 expr	skirt	
 expr	tail	
-expr	waist	圈圈眼
+expr	waist	圈圈眼	4.0
 
 # ══ 拖动跟随（0..N；部位自己的弹簧活着时这段让位）══════════════════════
 # 系数 × 拖动摆动量（ax/az），结果按标签量 clamp 到 ±上限，写绝对值。
