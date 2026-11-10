@@ -38,6 +38,10 @@ int mood();
 //   setMouthScale：说话时嘴动时长倍率（0.5–3，超范围就地夹紧）
 //   setVoice：说话时要不要出声 + 音量 0–1（播预生成 wav，没有就静默）
 void setMouthScale(float s);
+
+// 二十六：让身体自己说一句（点击反应用）。和外部推 {"say":...} 走同一套：
+// 嘴型包络 + 有缓存就出声。now 由调用方给（main 的帧时间）。
+void say(const std::string& text, double now);
 void setVoice(bool on, float vol);
 
 // socket 路径，日志用。

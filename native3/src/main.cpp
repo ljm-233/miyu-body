@@ -1821,6 +1821,15 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             }
             // 连击加剧：把这一下的冲量放大（partPokeStart 里按 gPokeBoost 乘）
             gPokeBoost = (gCombo >= 3) ? 1.6f : 1.0f;
+            // 二十六：让身体自己说一句（parts.tsv 的 part 行第 5 列）。
+            // 和外部推 {"say":...} 同一套：嘴型包络走 ctl，有缓存就出声。
+            // 连点第 5 下（黑脸那下）改成「够了吧」，这比部位台词更像有脾气。
+            if (const char* line = partapi::sayOf(curId)) {
+                if (*line) {
+                    const std::string s2 = (gCombo >= 5) ? std::string("够了吧") : std::string(line);
+                    ctl::say(s2, now);
+                }
+            }
             // ② 这个部位自己的动作（有根参数就晃）—— **不是二选一**，两个一起播
             partPokeStart(model, part, now);
         }

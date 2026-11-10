@@ -83,6 +83,7 @@ struct Part {
     std::string name, label;
     double      hold = 5.0;
     bool        dragOnly = false;
+    std::string say;        // 二十六：被点时她说的一句（第 5 列，可空）
 };
 
 struct Zone {   // part-zones.tsv 的 Z 行：格子区间（半开！和 band 不同，见设计文档 4.1）
@@ -204,6 +205,7 @@ inline void loadParts(Registry& r) {
             Part p;
             p.name = c[1];
             p.label = c[2];
+            p.say = (c.size() > 4) ? c[4] : std::string();
             p.hold = (c.size() > 3 && !c[3].empty()) ? std::atof(c[3].c_str()) : 5.0;
             if (c.size() > 4) p.dragOnly = (c[4].find("dragonly") != std::string::npos);
             if (static_cast<int>(r.parts.size()) >= kMaxParts) {
@@ -386,6 +388,13 @@ inline const char* nameOf(int id) {
     const Registry& r = reg();
     if (id <= 0 || id > static_cast<int>(r.parts.size())) return "";
     return r.parts[static_cast<size_t>(id) - 1].name.c_str();
+}
+
+// 二十六：被点这个部位时她说的一句（第 5 列，没写就空 → 不说话）
+inline const char* sayOf(int id) {
+    const Registry& r = reg();
+    if (id <= 0 || id > static_cast<int>(r.parts.size())) return "";
+    return r.parts[static_cast<size_t>(id) - 1].say.c_str();
 }
 
 inline const char* labelOf(int id) {

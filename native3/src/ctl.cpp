@@ -471,6 +471,21 @@ void poll(double now) {
     closeConn();
 }
 
+// 二十六：内部调用版「说一句」。逻辑和 socket 收到 {"say":...} 完全一样，
+// 抽出来只为了让 main 也能直接让身体说话（点击时的那句台词）。
+void say(const std::string& text, double now) {
+    if (text.empty()) { gTalking = false; return; }
+    double dur = static_cast<double>(utf8Chars(text)) * kPerChar;
+    if (dur < kMinSay) dur = kMinSay;
+    if (dur > 60.0) dur = 60.0;
+    gSayText = text;
+    gSayDur = dur;
+    gSayT0 = now;
+    gTalking = true;
+    log_("[ctl] 自说 %.1fs: %s", dur, text.c_str());
+    if (gVoiceOn) voicePlay(text);
+}
+
 float mouth(double now) {
     if (!gTalking) return -1.0f;
     const double t = now - gSayT0;
