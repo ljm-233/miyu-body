@@ -52,6 +52,29 @@ const Pt kPts[] = {
 int main(int argc, char** argv) {
     const bool dumpOnly = (argc > 1 && std::strcmp(argv[1], "--dump") == 0);
     const bool gridOnly = (argc > 1 && std::strcmp(argv[1], "--grid") == 0);
+    const bool gridDump = (argc > 1 && std::strcmp(argv[1], "--grid-dump") == 0);
+
+    // --grid-dump：把判定带画进一张空格子图，按 RLE 打出来（和旧算法逐格对账用）
+    if (gridDump) {
+        const int gw = 120, gh = 240;
+        std::vector<unsigned char> grid(static_cast<size_t>(gw) * gh, 0);
+        std::vector<unsigned char> ok(grid.size(), 1);
+        partapi::applyBands(grid, gw, gh, &ok);
+        std::printf("#grid %d %d\n", gw, gh);
+        for (int y = 0; y < gh; ++y) {
+            std::printf("%d\t", y);
+            int run = 0;
+            unsigned char cur = grid[static_cast<size_t>(y) * gw];
+            for (int x = 0; x < gw; ++x) {
+                const unsigned char v = grid[static_cast<size_t>(y) * gw + static_cast<size_t>(x)];
+                if (v == cur) { ++run; continue; }
+                std::printf("%d,%d;", run, static_cast<int>(cur));
+                cur = v; run = 1;
+            }
+            std::printf("%d,%d\n", run, static_cast<int>(cur));
+        }
+        return 0;
+    }
 
     if (dumpOnly) {
         std::fputs(partapi::dump().c_str(), stdout);
