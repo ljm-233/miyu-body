@@ -1490,8 +1490,15 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         // 头的面积先天只有手臂一半，参数怎么调都压在 1.5 以下（实测最好 1.58）。
         // 这条带把「头部剪影里还没归属的格」全给 head，已经有标签的一律不动。
         {
-            static const float kHeadV0 = 0.090f, kHeadV1 = 0.275f;
-            static const float kHeadU0 = 0.370f, kHeadU1 = 0.635f;
+            // 2026-11-10 21:1x：v 上限从 0.275 收到 0.205。
+            // 0.275 那条把兽耳那一层（ear 实际占 v 0.206..0.235、u 0.346..0.663）
+            // 的空白格也填成了 head —— 他点兽耳弹出的却是「前倾」，就是这个。
+            // 耳朵自己的 drawable 格子还在，只是被这条带盖掉了一部分。
+            static const float kHeadV0 = 0.090f, kHeadV1 = 0.205f;
+            // 21:1x 再收一次：u 从 0.370..0.635 收到 0.400..0.600。
+            // 两侧那一圈是耳朵和脸的交界，drawable 常常把它判成 head；
+            // 这条带再把两侧填满，兽耳就整片点不动了（他点的正好是那里）。
+            static const float kHeadU0 = 0.400f, kHeadU1 = 0.600f;
             const int gy0 = static_cast<int>(kHeadV0 * GH), gy1 = static_cast<int>(kHeadV1 * GH);
             const int gx0 = static_cast<int>(kHeadU0 * GW), gx1 = static_cast<int>(kHeadU1 * GW);
             for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
@@ -1499,6 +1506,25 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
                     const size_t i = static_cast<size_t>(gy) * GW + gx;
                     if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 1;   // 1 = head
                 }
+        }
+        // 二十五：兽耳。左右各一条位置带，**只填剪影里的空格**。
+        // 为什么需要：耳朵和脸是连着画的，右耳那一圈 drawable 常被判成 head，
+        // 点上去弹「前倾」而不是「＞＜」。左耳刚好判得对，右耳不行，就是层叠顺序造成的。
+        // 只填空格 → 已经有 ear 标签的格子不动，head 的也不会被抢。
+        {
+            static const float kEarV0 = 0.195f, kEarV1 = 0.245f;
+            struct EarBox { float u0, u1; };
+            static const EarBox kEar[2] = {{0.330f, 0.405f}, {0.595f, 0.680f}};
+            const int gy0 = static_cast<int>(kEarV0 * GH), gy1 = static_cast<int>(kEarV1 * GH);
+            for (int k2 = 0; k2 < 2; ++k2) {
+                const int gx0 = static_cast<int>(kEar[k2].u0 * GW);
+                const int gx1 = static_cast<int>(kEar[k2].u1 * GW);
+                for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
+                    for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
+                        const size_t i = static_cast<size_t>(gy) * GW + gx;
+                        if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 11;   // 11 = ear
+                    }
+            }
         }
         // 二十四：腰。模型里没有「腰」这个 part —— 只有「腰部衣服」，而且它被围裙和
         // 裙子压着，只剩两三个格子（实测 raw 2 格）。所以腰按**位置**画一条带子：

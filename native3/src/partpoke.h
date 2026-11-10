@@ -199,6 +199,12 @@ inline const Table& table() {
 // 优先用渲染层刷出来的格子图（模型自带分区）；还没刷出来时退回文件里的格子。
 inline std::string classify(float u, float v) {
     if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return std::string();
+    // 二十五：兽耳是硬判的，不看格子。
+    // 原因：耳朵和脸/头发是连着画的，右耳那一圈 drawable 常被判成 head，
+    // 他点上去弹的是「前倾」。补位置带也不管用 —— 「只填空格」填不到已经被 head
+    // 占掉的格子。耳朵的位置很固定（实测 u 0.346..0.663、v 0.206..0.235），
+    // 两侧这块窄带直接判 ear，中间那段（脸）不碰。
+    if (v >= 0.198f && v <= 0.248f && (u < 0.425f || u > 0.575f)) return std::string("ear");
     int gu = static_cast<int>(u * static_cast<float>(gGridW));
     int gv = static_cast<int>(v * static_cast<float>(gGridH));
     if (gu >= gGridW) gu = gGridW - 1;
