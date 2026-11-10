@@ -87,3 +87,13 @@ finally:
 
 print("[body-say] -> %s  %s" % (sock_path, line.strip()))
 PY
+rc=$?
+
+# 说出去之后顺手查一次语音缓存：没命中就让 body-voice.sh 后台补生成。
+# body-voice.sh --warm 自己 nohup 出去就返回（CosyVoice 一句要几十秒），这里只是 fork 一下，
+# 说话的主路径一点都不会等它；失败也只记 gen.log / failed.tsv，不影响这次说话。
+if [ "$rc" = 0 ] && [ -n "$text" ]; then
+    HERE=$(cd "$(dirname "$0")" && pwd)
+    [ -x "$HERE/body-voice.sh" ] && "$HERE/body-voice.sh" --warm "$text" >/dev/null 2>&1 &
+fi
+exit "$rc"

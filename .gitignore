@@ -26,6 +26,10 @@ native3/FrameworkShaders/
 wayland-probe/*.o
 alpha-probe/*.o
 
+# 语音缓存：她自己的声音样本 + 生成索引，不进公开仓
+# （wav 32 个、index.tsv、gen.log、failed.tsv、语料表、生成锁全在这条下面）
+voice/
+
 # 截图与实验产物（体积大，结论写在 md 里就够了）
 *.png
 *.jpg

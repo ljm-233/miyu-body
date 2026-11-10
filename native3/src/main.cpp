@@ -1899,7 +1899,7 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
             const char* ex = tapExprFor(part, gTapSeed++);
             if (ex && web::settings().expr) {
                 exprPlay(ex);
-                gTapExprUntil = now + 2.0;
+                gTapExprUntil = now + 5.0;   // 他 2026-11-10 21:2x 定的：五秒
                 gTapExprOn = true;
                 log_("[tap] 点 %s -> 表情「%s」", part.c_str(), ex);
             }
