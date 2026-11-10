@@ -1,0 +1,110 @@
+# ── 部位总表（唯一一份；一份文件六种记录，由 src/partapi.h 一次读完）─────────────
+# 设计：NOTES-part-api.md 第四节。生成的：tools/parts-migrate.py（一次性）。
+# 手工维护这一份就够 —— 加一个可点部位 = 加几行，不用改 C++、不用重编译。
+#
+# 记录类型（第一列）：
+#   part    部位名 中文标签 [停留秒] [开关]                          停 关
+#   alias   部位名 关键词,关键词…（按文件顺序匹配，先出现的赢）        关
+#   band    部位名 u0 u1 v0 v1 force|fill 优先级 [body|any]           停
+#   param   部位名 参数Id 评分 幅度 [alt|up]                          停
+#   expr    部位名 表情[/表情…] [停留秒]                              热（网页改立刻生效）
+#   follow  部位名 参数Id 系数 上限 ax|az|ay                          停
+#
+# 「停」= 改完要 miyu-body-ctl restart；「热」= 网页上改立刻生效。
+# 部位 id = part 行出现顺序（1 起，0 = 空白）。★ 已有部位不许换序，新部位只能往后追加：
+#   渲染层的格子图（state/part-zones.tsv / gZoneCells）存的就是这个下标。
+# 列的多余空白不重要，分隔一律是 TAB。「#」到行尾是注释，行尾注释可以放说明。
+# ────────────────────────────────────────────────────────────────────────────
+# ══ 部位（顺序即 id，1 起；不能换序）════════════════════════════════
+part	head	头	5.0
+part	chest	胸	5.0
+part	arm	手	5.0
+part	skirt	裙	5.0
+part	leg	腿	5.0
+part	tail	尾	5.0
+part	other	其他	5.0
+part	eye	眼	5.0
+part	mouth	嘴	5.0
+part	brow	眉	5.0
+part	ear	兽耳	5.0
+part	waist	腰	5.0
+part	headwear	头饰	5.0
+
+# ══ drawable 的 part 名 → 部位（子串匹配，先出现的赢）══════════════════
+# 来源：src/main.cpp:1062 zoneOfPartName（原样搬，顺序有意义）
+alias	head	眼镜
+alias	headwear	女仆发饰,发饰
+alias	ear	耳朵,兽耳
+alias	eye	眼眶,眼球,眼白,左眼,右眼,圈圈眼,爱心眼,屑屑眼,眼
+alias	mouth	嘴,口内,牙,舌
+alias	brow	眉毛,眉
+alias	waist	腰部
+alias	tail	尾巴,狗尾草
+alias	leg	腿,脚,膝
+alias	skirt	裙,蝴蝶结,缎带
+alias	arm	手臂,大臂,小臂,手腕,袖子,举手,竖食指,手
+alias	chest	胸,上身,领子,肩膀,腰
+alias	head	头,脑,发,脸,五官,眼,眉,嘴,鼻,耳,脖,牙,呆毛,眼镜,表情,汗,泪,口内
+
+# ══ 判定带（光栅化之后、泛洪补洞之前应用）════════════════════════════
+# u0 u1 / v0 v1 是窗口归一化，**两端闭区间**（原 main.cpp:1505 是 gy<=gy1；
+# 注意和 part-zones.tsv 的 Z 行不同 —— 那是半开 gv<z.v1，别顺手统一）。
+# force=无条件盖、fill=只填还没标签的格子；prio 大者赢，同 prio 后写的赢。
+# scope=any 的那两条排在**一切之前**（原文是 classify 第一步的硬判）。
+
+# ── scope=any（无视剪影）──
+band	ear	0.000	0.425	0.198	0.248	force	200	any	# 兽耳左（硬判，无视剪影；原 partpoke.h:207）
+band	ear	0.575	1.000	0.198	0.248	force	200	any	# 兽耳右（硬判，无视剪影；原 partpoke.h:207）
+
+# ── scope=body（剪影内；原 state/part-bands.tsv 的 11 条）──
+band	ear	0.330	0.405	0.195	0.245	force	100	# 兽耳左（drawable 常判成 head）
+band	ear	0.595	0.680	0.195	0.245	force	100	# 兽耳右
+band	eye	0.415	0.590	0.208	0.228	force	100	# 眼睛
+band	brow	0.430	0.575	0.186	0.208	force	100	# 眉毛
+band	mouth	0.450	0.560	0.236	0.282	force	100	# 嘴和下巴
+band	waist	0.358	0.592	0.432	0.506	force	100	# 腰那一圈（模型里没有独立的腰 part）
+band	skirt	0.690	0.800	0.500	0.630	force	100	# 右飘带尖端（实测 x350-395 y500-565）
+band	skirt	0.300	0.400	0.550	0.630	force	100	# 左飘带尖端（实测 x150-195 y500-565 → u.30-.39 v.555-.628；原来判成 leg）
+band	headwear	0.395	0.470	0.118	0.178	fill	0	# 女仆发饰左（补白，不抢头发）
+band	headwear	0.535	0.610	0.118	0.178	fill	0	# 女仆发饰右
+band	head	0.400	0.600	0.090	0.205	fill	0	# 头顶到眉线（补白，脸三块在它之前已钉死）
+
+# ══ 动作参数（点一下拨的**物理输入**，不是输出）════════════════════════
+# 评分 = 比值×10，同部位内按它降序、一次点最多取前 4。
+# 幅度 = 绝对偏移量（度 / 比例单位），正负每点一次交替；up = 只往正方向。
+# 原 state/param-parts.tsv 的 13 行，备注原样留在行尾。
+param	chest	PokeChest	90	1.000	# 胸X 的局部版；ChestX1/2/3/BS 同 Destination
+param	arm	PokeArmL	85	1.000	# 左臂的局部版；LArm/LForearm/LWrist
+param	arm	PokeArmR	84	1.000	# 右臂的局部版；RArm/RForearm/RWrist
+param	skirt	PokeSkirt	80	1.000	# 裙子X 摆动的局部版；SkirtX1..4/SkirtSpecial/2
+param	leg	PokeLeg	88	1.000	# 双腿 Z 的局部版；LEGAngleZ2（原来拨 HipAngleX 会先拽裙）
+param	tail	PokeTail	92	1.000	# 尾巴的局部版；Param_Angle_Rotation84..89 + Param52
+param	eye	PokeEye	95	1.000	# 眼睛：眼珠被物理带走 + 点一下眨一次（0.24s 包络）
+param	mouth	PokeMouth	94	1.000	up	# 嘴：ParamMouthOpenY 自己拼的一条链
+param	brow	PokeBrow	93	1.000	up	# 眉毛：34/35 两条链，上下 + 角度
+param	ear	PokeEarL	91	1.000	# 左兽耳：PhysicsSetting83 的局部版
+param	ear	PokeEarR	91	1.000	# 右兽耳：PhysicsSetting85 的局部版
+param	waist	PokeWaist	90	1.000	# 腰：腰带那一圈的局部版
+param	headwear	PokeHeadWear	90	1.000	# 头饰（女仆发饰，不是帽子）：117/118 两条链
+
+# ══ 表情（0..N；空 = 只放自身动作；`/` 分隔 = 每次随机抽一个）══════════════
+# 原 state/part-react.tsv 的 12 行，顺序按部位名排（无声明的部位写空）。
+expr	arm	
+expr	brow	黑脸
+expr	chest	脸红
+expr	ear	＞＜
+expr	eye	爱心眼
+expr	head	前倾
+expr	headwear	流泪
+expr	leg	
+expr	mouth	＞＜
+expr	skirt	
+expr	tail	
+expr	waist	圈圈眼
+
+# ══ 拖动跟随（0..N；部位自己的弹簧活着时这段让位）══════════════════════
+# 系数 × 拖动摆动量（ax/az），结果按标签量 clamp 到 ±上限，写绝对值。
+# 来源：src/main.cpp:3138 legDragTick 的三个常量。
+follow	leg	HipAngleX	0.6	30	ax
+follow	leg	HipAngleZ	2.2	30	az
+follow	leg	PokeLeg	0.0625	1	ax

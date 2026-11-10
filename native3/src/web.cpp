@@ -78,7 +78,7 @@ const char* kHtml = R"HTML(<!doctype html>
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
         padding:3px 16px 8px;min-width:0}
   .gh{font-size:11px;letter-spacing:.18em;color:var(--gh);padding:12px 0 5px}
-  .row{display:grid;grid-template-columns:88px minmax(0,1fr) 62px;column-gap:12px;
+  .row{display:grid;grid-template-columns:104px minmax(0,1fr) 62px 52px;column-gap:10px;
        align-items:center;padding:9px 0;border-top:1px solid var(--line)}
   .gh + .row{border-top:0}
   .k{font-size:13px;white-space:nowrap}
@@ -121,9 +121,10 @@ const char* kHtml = R"HTML(<!doctype html>
   .foot{margin-top:14px;font-size:11px;color:var(--dim);text-align:center;opacity:.8}
 
   /* ── 二十五：重排版。左边一条固定导航，右边内容区，窄屏自动收成顶部横条 ── */
-  .app{display:flex;gap:20px;align-items:flex-start;max-width:1180px;margin:0 auto;
-       padding:18px 18px 40px}
-  .side{position:sticky;top:18px;flex:0 0 158px;display:flex;flex-direction:column;gap:2px}
+  .app{display:flex;gap:22px;align-items:flex-start;width:100%;max-width:1720px;margin:0 auto;
+       padding:18px 22px 40px}
+  .side{position:sticky;top:18px;flex:0 0 158px;display:flex;flex-direction:column;gap:2px;
+        position:sticky;z-index:5}
   .brand{font-size:13px;font-weight:600;color:var(--accent);letter-spacing:.1em;
          padding:2px 10px 12px}
   .side a{display:block;font-size:13px;color:var(--dim);text-decoration:none;
@@ -131,6 +132,10 @@ const char* kHtml = R"HTML(<!doctype html>
   .side a:hover{color:var(--fg);background:var(--card)}
   .side a.on{color:var(--accent);background:var(--card);border-left-color:var(--accent)}
   .main{flex:1 1 auto;min-width:0}
+  /* 宽屏时内容区分两栏，别让一行拉到 1600px 那么长 */
+  @media (min-width:1180px){
+    #groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px;align-items:start}
+  }
   section{display:none}
   section.on{display:block}
   @media (max-width:760px){
@@ -372,6 +377,7 @@ const char* kHtml = R"HTML(<!doctype html>
   var sections = [];
   function addSection(title){
     var sec = document.createElement('section');
+    sec.style.display = 'none';   // 显式隐藏，不靠 CSS 类
     var card = document.createElement('div'); card.className = 'card';
     var h = document.createElement('div'); h.className = 'gh'; h.textContent = title;
     card.appendChild(h); sec.appendChild(card);
@@ -383,7 +389,8 @@ const char* kHtml = R"HTML(<!doctype html>
     return card;
   }
   function showSection(i){
-    sections.forEach(function(s, j){ s.sec.classList.toggle('on', j === i); });
+    if (!(i >= 0 && i < sections.length)) i = 0;
+    sections.forEach(function(s, j){ s.sec.style.display = (j === i) ? 'block' : 'none'; });
     var links = navEl.querySelectorAll('a');
     for (var k = 0; k < links.length; k++) links[k].classList.toggle('on', k === i);
     try { localStorage.setItem('miyu-tab', String(i)); } catch(e) {}
@@ -464,10 +471,11 @@ const char* kHtml = R"HTML(<!doctype html>
       // 行尾加一个「试」：不用真的去点她，直接让身体演一遍这个部位的反应
       var vb = els['pexpr.'+p[0]] && els['pexpr.'+p[0]].out;
       if (vb && vb.parentNode) {
+        // 放在 .v 后面当 row 的第 4 列（CSS 里 .row 已经是 4 列）
         var t = document.createElement('button'); t.className = 'try'; t.textContent = '试';
         t.title = '让身体演一遍「点' + p[1] + '」的反应';
         t.addEventListener('click', function(){ cmd('part', p[0]); });
-        vb.parentNode.appendChild(t);
+        vb.parentNode.insertBefore(t, vb.nextSibling);
       }
     });
     root.appendChild(partCard);
@@ -499,7 +507,9 @@ const char* kHtml = R"HTML(<!doctype html>
       tabRestored = true;
       var t0 = 0;
       try { t0 = parseInt(localStorage.getItem('miyu-tab') || '0', 10) || 0; } catch(e) {}
-      showSection(Math.min(t0, sections.length - 1));
+      // 索引越界就回到第一页 —— 兜底，省得以后加了组又变成「点了没反应」
+      if (!(t0 >= 0 && t0 < sections.length)) t0 = 0;
+      showSection(t0);
     }
     if (s.partExpr) PARTS.forEach(function(p){
       var e = els['pexpr.'+p[0]];
