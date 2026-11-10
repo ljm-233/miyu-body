@@ -1447,110 +1447,72 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         // 三条带**互不重叠**，都只压在剪影里（cellOk）。眉毛那条只到 0.207 ——
         // 眉毛抬起来时往上走，留在这条带里；它往下甩才会掉进眼睛那条，所以眉毛的
         // 方向固定成「往上」（见 partPokeStart 的 upOnly）。
+        // 二十五：部位判定带改成**读配置**（state/part-bands.tsv）。
+        // 原来这些矩形散在这一段十几处硬编码里（脸三块一组、头饰两块、头一条、
+        // 兽耳两块、腰一条），漏一条就出一个洞 —— 2026-11-10 飘带尖端被判成
+        // tail/leg 就是这么来的。现在统一成一张表：部位 + u0/u1/v0/v1，
+        // 以后要补一个地方，加一行就够，不用改代码、不用重编译。
+        // 规则没变：只填「剪影内(cellOk)且还没有标签」的格子。
         {
-            struct Band { unsigned char id; float u0, u1, v0, v1; };
-            static const Band kBands[3] = {
-                {10, 0.430f, 0.575f, 0.186f, 0.208f},   // brow（眉线 + 上下余量）
-                { 8, 0.415f, 0.590f, 0.208f, 0.228f},   // eye（眼睛本体；下巴/脸颊那段留给嘴）
-                { 9, 0.450f, 0.560f, 0.236f, 0.282f},   // mouth（嘴 + 下巴那一小块）
+            struct Band { unsigned char id; float u0, u1, v0, v1; bool force; };
+            // 读不到文件时的兜底（内容和 state/part-bands.tsv 同步）
+            static const Band kFallback[] = {
+                {11, 0.330f, 0.405f, 0.195f, 0.245f, true},
+                {11, 0.595f, 0.680f, 0.195f, 0.245f, true},
+                { 8, 0.415f, 0.590f, 0.208f, 0.228f, true},
+                {10, 0.430f, 0.575f, 0.186f, 0.208f, true},
+                { 9, 0.450f, 0.560f, 0.236f, 0.282f, true},
+                {12, 0.358f, 0.592f, 0.432f, 0.506f, true},
+                {13, 0.395f, 0.470f, 0.118f, 0.178f, false},
+                {13, 0.535f, 0.610f, 0.118f, 0.178f, false},
+                { 1, 0.400f, 0.600f, 0.090f, 0.205f, false},
             };
-            for (int k = 0; k < 3; ++k) {
-                const Band& b = kBands[k];
-                int gx0 = static_cast<int>(b.u0 * GW), gx1 = static_cast<int>(b.u1 * GW);
-                int gy0 = static_cast<int>(b.v0 * GH), gy1 = static_cast<int>(b.v1 * GH);
-                for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
-                    for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
-                        const size_t i = static_cast<size_t>(gy) * GW + gx;
-                        if (gZones.cellOk[i]) gZones.grid[i] = b.id;
+            static std::vector<Band> bands;
+            static bool loaded = false;
+            if (!loaded) {
+                loaded = true;
+                std::ifstream fb("state/part-bands.tsv");
+                std::string line;
+                while (std::getline(fb, line)) {
+                    if (line.empty() || line[0] == '#') continue;
+                    std::vector<std::string> c;
+                    size_t p0 = 0;
+                    for (;;) {
+                        const size_t p1 = line.find('\t', p0);
+                        c.push_back(line.substr(p0, p1 == std::string::npos ? std::string::npos : p1 - p0));
+                        if (p1 == std::string::npos) break;
+                        p0 = p1 + 1;
                     }
-            }
-        }
-        // 二十四：头饰（Part161 女仆发饰）也补一条**位置带**。原因和脸一样：
-        // 发饰是那条白色蕾丝边，画得很靠上，而「头/发」那些 drawable 一层层压在上面，
-        // 同一格到底算发饰还是头发，随她一帧一帧的呼吸在变 —— 实测点发饰正中
-        // （u .486 v .162）被判成 head，而格子文件里那一格写的是 headwear。
-        // 位置带把这块钉死：v .118..0.172、u .395..0.610 内一律算头饰。
-        {
-            // 2026-11-10 20:0x：这条带子改过两次。
-            // ① 原来 v .118..0.172 一整条横带：把整个头顶的头发都写成了 headwear，
-            //    「头」的格子从 6.47 掉到 0.55（他说的那个回归）。
-            // ② 收成 v .120..0.150 还是盖住 173 格（raw 只有 120 格，带子比本体还大）。
-            // ③ 现在改成**左右两块**：发饰是头顶两侧那对白色蕾丝，中间那一撮是头发。
-            //    中间留给 head，两边钉成 headwear；每边 v 放到 .118..0.178 覆盖褶边。
-            struct HwBox { float u0, u1; };
-            static const HwBox kHw[2] = {{0.395f, 0.470f}, {0.535f, 0.610f}};
-            static const float kHwV0 = 0.120f, kHwV1 = 0.130f;   // 只留最上面那条褶边
-            const int gy0 = static_cast<int>(kHwV0 * GH), gy1 = static_cast<int>(kHwV1 * GH);
-            for (int k2 = 0; k2 < 2; ++k2) {
-                const int gx0 = static_cast<int>(kHw[k2].u0 * GW);
-                const int gx1 = static_cast<int>(kHw[k2].u1 * GW);
-                for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
-                    for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
-                        const size_t i = static_cast<size_t>(gy) * GW + gx;
-                        // 二十五：只在**还没有标签**的格子上补 — 原来是无条件写 13，
-                        // 结果发饰带把头顶的头发（本来是 head）整片吃掉了。
-                        // 现在只填空位：drawable 已经判成 head 的地方留给 head。
-                        if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 13;
-                    }
-            }
-        }
-        // 二十五：头。整个头部（含头发）画一条位置带，**只填空格子**。
-        // 为什么要它：head 的 drawable 光栅化出 763 格，被脸三块、头饰、剪影补洞
-        // 一分只剩 240 上下；而 arm 有 863 格。倍数按「部位格子里变了多少像素」算，
-        // 头的面积先天只有手臂一半，参数怎么调都压在 1.5 以下（实测最好 1.58）。
-        // 这条带把「头部剪影里还没归属的格」全给 head，已经有标签的一律不动。
-        {
-            // 2026-11-10 21:1x：v 上限从 0.275 收到 0.205。
-            // 0.275 那条把兽耳那一层（ear 实际占 v 0.206..0.235、u 0.346..0.663）
-            // 的空白格也填成了 head —— 他点兽耳弹出的却是「前倾」，就是这个。
-            // 耳朵自己的 drawable 格子还在，只是被这条带盖掉了一部分。
-            static const float kHeadV0 = 0.090f, kHeadV1 = 0.205f;
-            // 21:1x 再收一次：u 从 0.370..0.635 收到 0.400..0.600。
-            // 两侧那一圈是耳朵和脸的交界，drawable 常常把它判成 head；
-            // 这条带再把两侧填满，兽耳就整片点不动了（他点的正好是那里）。
-            static const float kHeadU0 = 0.400f, kHeadU1 = 0.600f;
-            const int gy0 = static_cast<int>(kHeadV0 * GH), gy1 = static_cast<int>(kHeadV1 * GH);
-            const int gx0 = static_cast<int>(kHeadU0 * GW), gx1 = static_cast<int>(kHeadU1 * GW);
-            for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
-                for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
-                    const size_t i = static_cast<size_t>(gy) * GW + gx;
-                    if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 1;   // 1 = head
+                    if (c.size() < 5) continue;
+                    int id = -1;
+                    for (int k2 = 1; k2 < partpoke::kZoneCount; ++k2)
+                        if (c[0] == partpoke::kZoneNames[k2]) { id = k2; break; }
+                    if (id < 0) continue;
+                    Band b;
+                    b.id = static_cast<unsigned char>(id);
+                    b.u0 = float(atof(c[1].c_str())); b.u1 = float(atof(c[2].c_str()));
+                    b.v0 = float(atof(c[3].c_str())); b.v1 = float(atof(c[4].c_str()));
+                    b.force = (c.size() >= 6) && (atoi(c[5].c_str()) != 0);
+                    bands.push_back(b);
                 }
-        }
-        // 二十五：兽耳。左右各一条位置带，**只填剪影里的空格**。
-        // 为什么需要：耳朵和脸是连着画的，右耳那一圈 drawable 常被判成 head，
-        // 点上去弹「前倾」而不是「＞＜」。左耳刚好判得对，右耳不行，就是层叠顺序造成的。
-        // 只填空格 → 已经有 ear 标签的格子不动，head 的也不会被抢。
-        {
-            static const float kEarV0 = 0.195f, kEarV1 = 0.245f;
-            struct EarBox { float u0, u1; };
-            static const EarBox kEar[2] = {{0.330f, 0.405f}, {0.595f, 0.680f}};
-            const int gy0 = static_cast<int>(kEarV0 * GH), gy1 = static_cast<int>(kEarV1 * GH);
-            for (int k2 = 0; k2 < 2; ++k2) {
-                const int gx0 = static_cast<int>(kEar[k2].u0 * GW);
-                const int gx1 = static_cast<int>(kEar[k2].u1 * GW);
+                if (bands.empty()) {
+                    bands.assign(std::begin(kFallback), std::end(kFallback));
+                    log_("[zones] 读不到 state/part-bands.tsv，用内置的 %zu 条判定带", bands.size());
+                } else {
+                    log_("[zones] 判定带：从 state/part-bands.tsv 读了 %zu 条", bands.size());
+                }
+            }
+            for (const Band& b : bands) {
+                const int gy0 = static_cast<int>(b.v0 * GH), gy1 = static_cast<int>(b.v1 * GH);
+                const int gx0 = static_cast<int>(b.u0 * GW), gx1 = static_cast<int>(b.u1 * GW);
                 for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
                     for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
                         const size_t i = static_cast<size_t>(gy) * GW + gx;
-                        if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 11;   // 11 = ear
+                        if (!gZones.cellOk[i]) continue;
+                        if (!b.force && gZones.grid[i]) continue;   // 补白模式：不抢已有标签
+                        gZones.grid[i] = b.id;
                     }
             }
-        }
-        // 二十四：腰。模型里没有「腰」这个 part —— 只有「腰部衣服」，而且它被围裙和
-        // 裙子压着，只剩两三个格子（实测 raw 2 格）。所以腰按**位置**画一条带子：
-        // 他给的 v 0.42–0.60 / u 0.30–0.60 是「她本人 bbox」归一化，换成窗口归一化
-        // （她的 bbox = 窗口里 x 109..446 / y 144..874）就是下面这组数。
-        // 只在她身上（cellOk）上色；下面的「借标签」不会覆盖已经有标签的格子。
-        {
-            static const float kWaistV0 = 0.432f, kWaistV1 = 0.506f;
-            static const float kWaistU0 = 0.358f, kWaistU1 = 0.592f;
-            const int gy0 = static_cast<int>(kWaistV0 * GH), gy1 = static_cast<int>(kWaistV1 * GH);
-            const int gx0 = static_cast<int>(kWaistU0 * GW), gx1 = static_cast<int>(kWaistU1 * GW);
-            for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
-                for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
-                    const size_t i = static_cast<size_t>(gy) * GW + gx;
-                    if (gZones.cellOk[i]) gZones.grid[i] = 12;    // 12 = waist
-                }
         }
         // 剪影里、但没有任何部位 drawable 盖到的格子（皮肤、缝隙、作者的「组 N」素材）
         // → 从最近的已标格借标签，最多借两圈。不补的话点在她身上却判成「空白」，
