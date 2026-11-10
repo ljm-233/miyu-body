@@ -632,4 +632,27 @@ void setVoice(bool on, float vol) {
 
 const char* sockPath() { return gPath.empty() ? "(未建)" : gPath.c_str(); }
 
+// 二十六：预热。他报「先按腿才有声音，先按别的没声」—— 那是 pipewire 的
+// 输出节点第一次要唤醒（几十毫秒～几百毫秒），第一声正好丢在这个窗口里。
+// 启动时先播一段 0.12 秒的静音，把流建起来，后面就都正常。
+void voiceWarmUp() {
+    const char* env = std::getenv("MIYU_VOICE_DIR");
+    const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
+    const std::string path = dir + "/silence.wav";
+    if (::access(path.c_str(), R_OK) != 0) return;
+    const pid_t pid = ::fork();
+    if (pid == 0) {
+        const pid_t p2 = ::fork();
+        if (p2 != 0) ::_exit(0);
+        ::freopen("/dev/null", "w", stdout);
+        ::freopen("/dev/null", "w", stderr);
+        ::execlp("pw-play", "pw-play", "--volume=0.01", path.c_str(), (char*)nullptr);
+        ::_exit(127);
+    }
+    int st = 0;
+    ::waitpid(pid, &st, 0);
+    log_("[voice] 输出流预热完成");
+}
+
+
 }  // namespace ctl

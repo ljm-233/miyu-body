@@ -3201,6 +3201,7 @@ static void followTick(Csm::CubismModel* model, double now, float dt) {
 int main() {
     // ── 窗口（窗口层接口，实现在 platform_x11.cpp）────────────
     if (!platInit(500, 900, "native2-test")) { log_("[main] 窗口层起不来"); return 1; }
+    ctl::voiceWarmUp();   // 二十六：先把声音输出流唤醒，否则第一声会被吞
     glewExperimental = GL_TRUE;
     const GLenum ge = glewInit();
     // ge 的含义：
