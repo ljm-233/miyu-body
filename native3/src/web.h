@@ -52,7 +52,7 @@ struct Settings {
     std::string aa     = "ssaa2x";  // off/ssaa2x/ssaa3x/fxaa/smaa
     float       shadow = 0.0f;      // 0–1   地面软阴影强度（默认关：深色壁纸上基本看不见）
     float       rim    = 0.35f;     // 0–1   轮廓光强度
-    float       particles = 0.3f;   // 0–1   粒子数量倍率
+    float       particles = 0.0f;   // 0–1   粒子数量倍率（2026-11-10 他定的：默认 0）
 
     // ── 二十：拖动体感 + 时间感（2026-11-10 01:xx）────────────────────
     // 四项都默认开。前三个只管「按住她」那一段的手感，第四个是她的作息。
