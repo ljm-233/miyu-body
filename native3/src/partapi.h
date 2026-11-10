@@ -339,10 +339,34 @@ inline void loadZones(Registry& r) {
     std::fclose(f);
 }
 
+// 2026-11-10 23:4x：parts.tsv 现在是**单一真源** —— 判定带、别名、动作参数、表情、
+// 拖动跟随、显示顺序全在里面。网页还会写它（改表情）。它能被改坏，而坏了没有回头路：
+// 判定全空、点谁都是整套反应。所以每次启动读之前先留一份，最多留 5 份。
+inline void backupPartsOnce() {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    FILE* src = std::fopen("state/parts.tsv", "rb");
+    if (!src) return;
+    // 轮转：.bak4 ← .bak3 ← .bak2 ← .bak1 ← 当前
+    const char* names[5] = {"state/parts.tsv.bak1", "state/parts.tsv.bak2",
+                            "state/parts.tsv.bak3", "state/parts.tsv.bak4"};
+    for (int k = 3; k > 0; --k) std::rename(names[k - 1], names[k]);
+    std::FILE* dst = std::fopen(names[0], "wb");
+    if (dst) {
+        char buf[4096];
+        size_t n;
+        while ((n = std::fread(buf, 1, sizeof buf, src)) > 0) std::fwrite(buf, 1, n, dst);
+        std::fclose(dst);
+    }
+    std::fclose(src);
+}
+
 inline const Registry& reg() {
     static Registry r;
     if (r.loaded) return r;
     r.loaded = true;
+    backupPartsOnce();
     loadParts(r);
     loadZones(r);
     return r;
