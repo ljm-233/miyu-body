@@ -1,0 +1,74 @@
+{
+ "head": {
+  "own": 7368,
+  "others": {
+   "head": 7368,
+   "chest": 1122,
+   "arm": 373,
+   "skirt": 35,
+   "leg": 2,
+   "tail": 7
+  },
+  "ratio": 6.57
+ },
+ "chest": {
+  "own": 4804,
+  "others": {
+   "head": 11,
+   "chest": 4804,
+   "arm": 1042,
+   "skirt": 1189,
+   "leg": 67,
+   "tail": 6469
+  },
+  "ratio": 0.74
+ },
+ "arm": {
+  "own": 2429,
+  "others": {
+   "head": 7949,
+   "chest": 6112,
+   "arm": 2429,
+   "skirt": 8892,
+   "leg": 2610,
+   "tail": 5865
+  },
+  "ratio": 0.27
+ },
+ "skirt": {
+  "own": 8491,
+  "others": {
+   "head": 11,
+   "chest": 72,
+   "arm": 283,
+   "skirt": 8491,
+   "leg": 5313,
+   "tail": 5
+  },
+  "ratio": 1.6
+ },
+ "leg": {
+  "own": 5626,
+  "others": {
+   "head": 11,
+   "chest": 84,
+   "arm": 303,
+   "skirt": 8947,
+   "leg": 5626,
+   "tail": 14
+  },
+  "ratio": 0.63
+ },
+ "tail": {
+  "own": 8,
+  "others": {
+   "head": 7113,
+   "chest": 1139,
+   "arm": 360,
+   "skirt": 40,
+   "leg": 2,
+   "tail": 8
+  },
+  "ratio": 0.0
+ }
+}

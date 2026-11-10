@@ -1080,7 +1080,63 @@ static std::map<std::string, std::string> loadPartNames() {
     return out;
 }
 
+// ── 纹理 alpha 表（二十三）：为什么需要它 ─────────────────────────────
+// 格子图原来按「drawable 的多边形覆盖」上色，后画的盖先画的。问题是这个模型里
+// 有些 mesh 是**一大块方片 + 大部分透明纹理**（比如大腿那几片正好压在裙摆上），
+// 于是裙摆那一圈格子被判成 leg —— 点裙子会去踹腿，量「点裙子」也永远输给腿。
+// 修法：光栅化时按顶点 UV 去查**纹理的 alpha**，一个三角形里 4 个采样点（重心 +
+// 三条边中点）都没料就整块跳过。只影响格子图，不影响渲染。
+struct Atlas { int w = 0, h = 0; std::vector<unsigned char> a; };
+static std::vector<Atlas> gAtlas;
+
+static void loadAtlases() {
+    if (!gAtlas.empty()) return;
+    const std::string jp = std::string(kModelDir) + "大肥鱼.model3.json";
+    std::ifstream jf(jp);
+    if (!jf) { log_("[zones] 读不到 %s（跳过纹理 alpha 过滤）", jp.c_str()); return; }
+    std::string js((std::istreambuf_iterator<char>(jf)), std::istreambuf_iterator<char>());
+    const size_t at = js.find("\"Textures\"");
+    if (at == std::string::npos) return;
+    const size_t lb = js.find('[', at), rb = js.find(']', at);
+    if (lb == std::string::npos || rb == std::string::npos) return;
+    std::vector<std::string> files;
+    for (size_t q = lb; q < rb;) {
+        const size_t a = js.find('"', q);
+        if (a == std::string::npos || a > rb) break;
+        const size_t b = js.find('"', a + 1);
+        if (b == std::string::npos) break;
+        files.push_back(js.substr(a + 1, b - a - 1));
+        q = b + 1;
+    }
+    for (const std::string& f : files) {
+        int w = 0, h = 0, c = 0;
+        unsigned char* d = stbi_load((std::string(kModelDir) + f).c_str(), &w, &h, &c, 4);
+        Atlas A;
+        if (d) {
+            A.w = w; A.h = h;
+            A.a.resize(static_cast<size_t>(w) * static_cast<size_t>(h));
+            for (int i = 0; i < w * h; ++i) A.a[static_cast<size_t>(i)] = d[i * 4 + 3];
+            stbi_image_free(d);
+        }
+        gAtlas.push_back(std::move(A));
+    }
+    size_t tot = 0;
+    for (const Atlas& A : gAtlas) tot += A.a.size();
+    log_("[zones] 纹理 alpha 表 %zu 张 / %zu px（用来把透明的大方片从格子图里剔掉）",
+         gAtlas.size(), tot);
+}
+
+// 一个点不透明吗（UV → 纹理像素；UV 的 v=0 在图片第一行，和 load_tex 的上传顺序一致）
+static bool uvOpaque(const Atlas& A, float u, float v) {
+    if (A.w <= 0 || A.h <= 0) return true;          // 没载入就当它不透明（退回老行为）
+    if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return false;
+    const int x = static_cast<int>(u * (A.w - 1));
+    const int y = static_cast<int>(v * (A.h - 1));
+    return A.a[static_cast<size_t>(y) * static_cast<size_t>(A.w) + static_cast<size_t>(x)] > 40;
+}
+
 static void zoneInit(Csm::CubismModel* model) {
+    loadAtlases();
     const std::map<std::string, std::string> names = loadPartNames();
     const Csm::csmInt32 nd = model->GetDrawableCount();
     gZones.lut.assign(static_cast<size_t>(nd) < 1 ? 1 : static_cast<size_t>(nd), 0);
@@ -1195,9 +1251,24 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
         // 画布坐标（y 向上）→ 窗口归一化（y 向下）
         auto nx = [&](int i) { return 0.5f + vp[idx[i]].X * k / static_cast<float>(W); };
         auto ny = [&](int i) { return 0.5f - vp[idx[i]].Y * k / static_cast<float>(H); };
+        const Csm::csmInt32 ti = model->GetDrawableTextureIndex(d);
+        const auto* uvs = model->GetDrawableVertexUvs(d);
+        const Atlas* atlas = (ti >= 0 && static_cast<size_t>(ti) < gAtlas.size())
+                             ? &gAtlas[static_cast<size_t>(ti)] : nullptr;
         for (Csm::csmInt32 t = 0; t + 2 < ni; t += 3) {
             const int a = idx[t], b2 = idx[t + 1], c2 = idx[t + 2];
             if (a >= nv || b2 >= nv || c2 >= nv) continue;
+            // 二十三：整块透明的三角形别往上涂（大腿那种方片压着裙摆）
+            if (atlas && uvs) {
+                const float u0 = uvs[a].X, v0 = uvs[a].Y, u1 = uvs[b2].X, v1 = uvs[b2].Y,
+                            u2 = uvs[c2].X, v2 = uvs[c2].Y;
+                int hit = 0;
+                if (uvOpaque(*atlas, (u0 + u1 + u2) / 3.0f, (v0 + v1 + v2) / 3.0f)) ++hit;
+                if (uvOpaque(*atlas, (u0 + u1) / 2.0f, (v0 + v1) / 2.0f)) ++hit;
+                if (uvOpaque(*atlas, (u1 + u2) / 2.0f, (v1 + v2) / 2.0f)) ++hit;
+                if (uvOpaque(*atlas, (u2 + u0) / 2.0f, (v2 + v0) / 2.0f)) ++hit;
+                if (hit < 2) continue;
+            }
             zoneTri(gZones.grid, nx(t), ny(t), nx(t + 1), ny(t + 1), nx(t + 2), ny(t + 2), lab);
         }
     }

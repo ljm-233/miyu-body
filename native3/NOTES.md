@@ -2084,3 +2084,167 @@ CubismPhysics 写输出参数时 `weight=1.0` 是**硬覆盖**
    （比如 `ParamChestPoke` → `ChestX*`），这样点胸就真的只动胸。要改模型文件，得他点头。
 2. 或者接受「身体一动尾巴跟着甩」这个物理事实，把判据改成「自己是不是动得最多**的那一档**」。
 3. 尾巴的冲量还可以再大（现在 0.5，5.89× 已经很稳），但别再往上，会甩出画面。
+
+## 二十三、局部输入：给模型加 Poke* 参数，让「点哪儿只动哪儿」真的成立（2026-11-10 12:1x–12:5x）
+
+二十二节卡住的地方说得很清楚：physics3.json 的 131 条 setting 输入**全是整体参数**
+（`AngleX/Y/Z`、`PositionX/Y/Z`、`ParamBodyAngleX`、`HipAngleX`…），所以点胸 0.46×、点手 0.47×、点裙 0.17×。
+这一节把「局部输入」真加进模型里，并把挡路的两个问题（SDK 语义 + 格子图误标）都验过、修掉了。
+
+### 23.1 先读源码：两条 setting 输出同一个 Destination，会打架吗
+
+`Framework/src/Physics/CubismPhysics.cpp`：
+
+- `CubismPhysics::Evaluate()` 按 **JSON 里的顺序**逐条求值（`for settingIndex = 0 .. SubRigCount`）。
+- 每条 setting 的输出走 `UpdateOutputParameterValue(parameterValue, min, max, value, output)`，
+  里面只有一句关键逻辑：
+
+  ```cpp
+  weight = (output->Weight / MaximumWeight);      // MaximumWeight = 100
+  if (weight >= 1.0f) *parameterValue = value;    // 100 → 硬覆盖
+  else value = (*parameterValue * (1 - weight)) + (value * weight);   // 否则按权重插值
+  ```
+
+**结论：能并存，不会互相覆盖到「算不出来」**。后求值的那条读到的是前面刚写进去的值，
+Weight=100 就是整块顶掉，Weight=50 就是「旧的占一半、新的占一半」。
+本文用的是**继承 + 覆盖**：新 setting 把原 setting 的输入**原样抄下来**，再加一条 `Poke*`(Weight 100)，
+输出 Destination 和 Scale 也照抄、Weight 保持 100。于是：
+
+- `Poke* = 0`（默认）时，两条链的输入逐位相同 → 粒子链轨迹相同 → 输出逐位相同 → **原有行为一点没变**；
+- `Poke* = ±1` 时，新链多一份只落在这块的位移，按顺序覆盖上去 → 局部动，别处不动。
+
+（没采用「把 Poke 加进原 setting 的 Input」那条路：原 setting 的输入类型是 X/Position 归一化，
+混进一条不同量纲的输入会改掉整条链的平衡点，回不到「不点的时候和以前一模一样」。）
+
+### 23.2 参数 Id 只能在 moc3 里存在（踩到的坑，别再踩）
+
+第一版偷懒：把 physics3 的 `Input.Source.Id` 直接写成 `PokeChest`，cdi3 里也写了中文名。
+结果**新 setting 是死的**（点胸 0.18×）。原因在 `Framework/src/Model/CubismModel.cpp:172`：
+
+> 找不到的 Id 不返回 −1，而是返回 `模型参数数 + 虚拟序号`（`_notExistParameterId`）。
+
+物理层拿这个序号去读 Core 的 `parameterValues[]` → 越过 509 个参数之后越界读，值恒 0。
+（`[pdbg] PokeChest[509]=0.000` 就是这条。）
+
+真解：moc3 的参数 Id 是**定长 64 字节一格、NUL 补齐**的表（这份模型从 0x38CE8 起 509 格，
+`(249896-232680)/64 = 269.0` 实测对齐）。把六个**没有 key、没有 exp3 引用、没进 physics** 的
+分隔符参数的 Id 原地改名，范围和索引都不动：
+
+| 原 Id（格子） | 现在 | 中文名 | 分组 |
+|---|---|---|---|
+| `Divider18` (269) | `PokeChest` | 胸部戳动 | 戳动 |
+| `Divider9` (225) | `PokeArmL` | 左手戳动 | 戳动 |
+| `Divider10` (247) | `PokeArmR` | 右手戳动 | 戳动 |
+| `Divider14` (354) | `PokeLeg` | 腿戳动 | 戳动 |
+| `Divider19` (50) | `PokeTail` | 尾巴戳动 | 戳动 |
+| `Divider20` (325) | `PokeSkirt` | 裙摆戳动 | 戳动 |
+
+六个都是 `-1..1，默认 0`（正文里 ±1 就是满量程），cdi3 里新增了 `ParamGroupPoke`＝「戳动」组。
+`tools/physics-local.py --apply` 幂等：改名 + 加 setting + 改 cdi3 + 改 `state/param-parts.tsv` 一起做。
+
+### 23.3 新 PhysicsSetting 的写法（6 条，Id 132–137）
+
+以胸为例（其余同构，只是照抄的基准不同）：
+
+```json
+{ "Id": "PhysicsSetting132",
+  "Input": [ {"Source":{"Target":"Parameter","Id":"ParamBodyAngleX"},"Weight":80,"Type":"X","Reflect":false},
+             {"Source":{"Target":"Parameter","Id":"ParamBodyAngleZ"},"Weight":20,"Type":"X","Reflect":true},
+             {"Source":{"Target":"Parameter","Id":"PokeChest"},       "Weight":100,"Type":"X","Reflect":false} ],
+  "Output": [ {"Destination":{"Target":"Parameter","Id":"ChestX1"}, "VertexIndex":1,"Scale":2,   "Weight":100,"Type":"Angle","Reflect":false},
+              {"Destination":{"Target":"Parameter","Id":"ChestX2"}, "VertexIndex":2,"Scale":1.8, "Weight":100,"Type":"Angle","Reflect":false},
+              {"Destination":{"Target":"Parameter","Id":"ChestX3"}, "VertexIndex":3,"Scale":1,   "Weight":100,"Type":"Angle","Reflect":true},
+              {"Destination":{"Target":"Parameter","Id":"ChestXBS"},"VertexIndex":4,"Scale":1,   "Weight":100,"Type":"Angle","Reflect":true} ],
+  "Vertices": [ …照抄 PhysicsSetting64… ],
+  "Normalization": { "Position": {"Minimum":-10,"Default":0,"Maximum":10},
+                     "Angle": {"Minimum":-57.3,"Default":0,"Maximum":57.3} } }
+```
+
+| 新 setting | 基准 | 输出 | Scale 倍率 |
+|---|---|---|---|
+| 132 `PokeChest` | 胸X (64) | `ChestX1/2/3/ChestXBS` | ×2 / ×1.8 / ×1 / ×1 |
+| 133 `PokeArmL` | 左臂 (72) | `LArm/LForearm/LWrist` | ×1.5 |
+| 134 `PokeArmR` | 右臂 (73) | `RArm/RForearm/RWrist` | ×1.5 |
+| 135 `PokeLeg` | 双腿 Z (17) | `LEGAngleZ2` | ×1 |
+| 136 `PokeTail` | 尾巴 (130) | `Param_Angle_Rotation84–89 + Param52` | ×1 |
+| 137 `PokeSkirt` | 裙子X (67) | `SkirtX1..4 + SkirtSpecial/2` | ×1 |
+
+`Meta` 四个计数跟着重算（137 条 / 324 输入 / 316 输出 / 462 顶点）—— 漏改就是物理整段读偏。
+
+### 23.4 部位表：`state/param-parts.tsv` 改成拨 Poke*
+
+```
+P chest PokeChest 90 1.000    P arm PokeArmL 85 1.000   P arm PokeArmR 84 1.000
+P skirt PokeSkirt 80 1.000    P leg PokeLeg   88 1.000   P tail PokeTail 92 1.000
+```
+
+幅度按任务书走：先 ±0.5 量（胸 1655px、手 876px 太小），加到 **±1.0**；R 再不够就把
+本地 setting 的 Output Scale 抬上去（胸 ×2、手 ×1.5），再量 —— 抬 Scale 不动静止姿态，
+因为这条链静止时输出就是 0。
+
+### 23.5 第二个坑：格子图把裙摆标成了「腿」
+
+改完局部输入，裙还是 0.28×。查下去发现不是物理：**格子图错标**。
+`partZoneTick` 原来按「drawable 多边形覆盖、后画的盖先画的」上色，可这个模型里有几片
+**方片 mesh + 大部分透明纹理**（大腿那几片正好压在裙摆上），于是裙摆那一圈格子被判成 leg。
+证据：直接拨 `SkirtX1`（模型里最「裙专用」的参数）也只有 0.37×；换 `SkirtSpecial2/SkirtX3/SkirtY/SkirtLayerY1`
+一圈都是 0.17–0.32×；改动的 leg 像素全挤在 y 400–500（就是裙摆那圈）。
+
+修法（`src/main.cpp`，只动格子图、不动渲染）：光栅化每个三角形前按顶点 UV 去查**纹理 alpha**，
+重心 + 三条边中点 4 个采样点，不透明点 < 2 就整块跳过。5 张 4096 地图，9.7M px 的 alpha 表，
+启动时载一次。改完格子范围立刻对了：
+
+```
+skirt: u 0.475..0.808 → 0.192..0.792   （裙摆回到整圈）
+leg:   u 0.375..0.642 → 0.358..0.658   （只剩腿）
+```
+
+顺手把「点裙摆被判成点腿」这个真 bug 也修了 —— 之前点裙摆下半圈，她会踹腿。
+
+### 23.6 六处倍数（`tools/part-poke-check.py`，同一份格子图、同一个二进制）
+
+| 部位 | 任务书旧值 | 改前（同网格重测） | 改后 | 判据 |
+|---|---:|---:|---:|---|
+| 头 | 6.12× | 6.57× ✓ | **6.47×** ✓ | >2 |
+| 胸 | 0.46× | 0.74× ✗ | **58.9×** ✓ | >2 |
+| 手 | 0.47× | 0.27× ✗ | **3.36×** ✓ | >2 |
+| 裙 | 0.17× | 1.60× ✗ | **2.88×** ✓ | >2 |
+| 腿 | 3.00× | 0.63× ✗ | **22.3×** ✓ | >2 |
+| 尾 | 5.89× | 0.00× ✗ | **40.8×** ✓ | >2 |
+
+账本：`state/poke-check.json`（改后）、`state/poke-check-before.json`（改前，同网格）。
+「改前」这一列和任务书里的旧值不同，是因为旧的数是**旧格子图 + 旧参数表**量的；
+要跟改后比，得用同一份格子图，所以先 `tools/physics-revert.sh` 换回原模型重测了一遍。
+
+胸只有 2154 px 的变化量（别的最多 35 px）—— 倍数很高但**看得见的摆幅是小的**，
+因为胸那块本来就只有 ~190 个格子，Scale 再抬就开始拽变形了。手的 1344 px 同理。
+
+### 23.7 原有功能没坏
+
+- **身体角度带胸**：拨 `ParamBodyAngleX ±12` → 胸 4651 px（改前同条件是 4804 px，97%）。
+  说明新规则是**叠上去**的，不是把 `Setting64` 换掉 —— 因为它抄的就是 64 的输入。
+- **待机**：`[idle] 算 ax=… az=… br=…` 照常，83 帧/秒。
+- **穿透**：`input region: 881 条矩形 / 127912 px / 28.4% / bbox=[109,107..446,837]`，和改前一模一样。
+- **副屏**：`MIYU_OUTPUT=1` → HDMI-A-3，窗口 500x900，服务 `active`（PID 422158）。
+- 设置页那一份 `state/settings.json` 没动，全默认（fps 240、tap true、aa off…）。
+- `cmake --build build --clean-first` 两个 target（miyu / miyu-wayland）**0 警告 0 错误**。
+
+### 23.8 回滚
+
+```
+tools/physics-revert.sh            # 一条命令
+tools/physics-revert.sh --list     # 只看有哪些备份
+```
+
+它换回四样东西：`大肥鱼.physics3.json`、`大肥鱼.cdi3.json`、`大肥鱼.moc3`、`state/param-parts.tsv`。
+备份路径记在 `state/physics-local.manifest` 里（**不是按时间取最新** —— 重复 `--apply` 会把改过的
+文件再备份一遍，按时间取就会「回滚到一个改过的版本」）。换完自检：两个 JSON 能解析、
+`Meta` 四个计数和实际条数一致、`param-parts` 六个部位齐、重起服务后 `active` + 有 `miyu-wayland` 进程。
+回滚实测：胸从 58.9× 回到 **0.74×**（整体晃），再 `python3 tools/physics-local.py --apply` 回到 58.9×（同样条件下重复量，倍数有 ±10% 抖动）。
+
+### 23.9 一句实话
+
+六个 Poke* 都是**借 moc3 里空转的分隔符参数改名**来的，不是 Cubism Editor 里新加的参数
+（moc3 是二进制，Id 只能原地改，加新条目要重排整张表）。所以：
+Cubism Editor 打开这份模型，参数表里看到的是「戳动」组里六个 Poke*，位置在原来那些 ■■■ 分隔符上 —— 分隔符没了。
+要真·新增参数，得在有作者的工程文件（.cmo3）里加，或者接受这个改名做法。
