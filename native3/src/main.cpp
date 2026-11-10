@@ -1484,6 +1484,22 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
                     }
             }
         }
+        // 二十五：头。整个头部（含头发）画一条位置带，**只填空格子**。
+        // 为什么要它：head 的 drawable 光栅化出 763 格，被脸三块、头饰、剪影补洞
+        // 一分只剩 240 上下；而 arm 有 863 格。倍数按「部位格子里变了多少像素」算，
+        // 头的面积先天只有手臂一半，参数怎么调都压在 1.5 以下（实测最好 1.58）。
+        // 这条带把「头部剪影里还没归属的格」全给 head，已经有标签的一律不动。
+        {
+            static const float kHeadV0 = 0.090f, kHeadV1 = 0.275f;
+            static const float kHeadU0 = 0.370f, kHeadU1 = 0.635f;
+            const int gy0 = static_cast<int>(kHeadV0 * GH), gy1 = static_cast<int>(kHeadV1 * GH);
+            const int gx0 = static_cast<int>(kHeadU0 * GW), gx1 = static_cast<int>(kHeadU1 * GW);
+            for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
+                for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
+                    const size_t i = static_cast<size_t>(gy) * GW + gx;
+                    if (gZones.cellOk[i] && !gZones.grid[i]) gZones.grid[i] = 1;   // 1 = head
+                }
+        }
         // 二十四：腰。模型里没有「腰」这个 part —— 只有「腰部衣服」，而且它被围裙和
         // 裙子压着，只剩两三个格子（实测 raw 2 格）。所以腰按**位置**画一条带子：
         // 他给的 v 0.42–0.60 / u 0.30–0.60 是「她本人 bbox」归一化，换成窗口归一化

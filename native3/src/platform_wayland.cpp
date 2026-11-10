@@ -360,7 +360,13 @@ static void tapFire(int lx, int ly) {
             static std::string gLastPart;
             static double gLastPartT = -1e9;
             const bool samePart = (part == gLastPart) && (now - gLastPartT < TAP_SAME_PART_S);
-            if (!part.empty() && partpoke::hasParams(part) && !samePart) {
+            // 二十五：判定条件从「有动作参数」放宽成「有动作**或**配了表情」。
+            // 头整组动作参数已经拿掉（点它不该整块转），但它配了表情「前倾」——
+            // 只判 hasParams 的话它被当成「没有可拨的根」，退回整套反应，
+            // 表情也跟着不播（这正是他点了头没反应的那个）。
+            const auto& pe = web::settings().partExpr;
+            const bool hasExpr = (pe.find(part) != pe.end()) && !pe.at(part).empty();
+            if (!part.empty() && (partpoke::hasParams(part) || hasExpr) && !samePart) {
                 gLastPart = part;
                 gLastPartT = now;
                 std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());

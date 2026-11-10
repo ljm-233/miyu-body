@@ -1,21 +1,21 @@
 {
  "head": {
-  "own": 2799,
+  "own": 7,
   "others": {
-   "head": 2799,
-   "chest": 1243,
-   "arm": 5476,
-   "skirt": 170,
-   "leg": 7,
-   "tail": 25,
-   "eye": 1760,
-   "mouth": 1123,
-   "brow": 993,
-   "ear": 347,
-   "waist": 2,
-   "headwear": 1599
+   "head": 7,
+   "chest": 80,
+   "arm": 60,
+   "skirt": 134,
+   "leg": 8,
+   "tail": 23,
+   "eye": 4,
+   "mouth": 2,
+   "brow": 0,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 1
   },
-  "ratio": 0.51,
-  "hit": "点中部位 head -> 3 个根输入：FrontHairY2(-1.00) ParamAngleY(-9.00) ParamAngleX(-12.00)"
+  "ratio": 0.05,
+  "hit": "部位 head 没有可拨的根"
  }
 }

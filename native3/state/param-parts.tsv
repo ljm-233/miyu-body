@@ -10,12 +10,12 @@
 #     **上一级输入**（Chest* 的 Input.Source 就是 ParamBodyAngleX；
 #     SkirtX* 的 Input.Source 是 HipAngleX）。拨它 = 让物理自己算 Chest*/Skirt*，
 #     不是把结果顶掉。他 02:1x 验过的就是这条（ParamBodyAngleX 0→25，胸部变 86%）。
+# 二十五：head 的动作参数整组拿掉了 —— 他 2026-11-10 20:1x 说「点头部，为什么要动头部？很奇怪的」，
+# 头被点一下应该是脸色变了，不是整块转。现在 head 只由 part-react.tsv 里的表情负责，
+# 顺带把倍数从 0.41 拉起来（转头会带动裙子物理，17k px 全算在「别人」头上）
 # 二十五：AngleX/AngleY 是全身参数，一拨手臂 6358 px、头只 2077，倍数被压到 0.34。
 # head 换成下面两个只动头发的（他点名要修的那个回归）。
-P	head	FrontHairY2	8080	1.000	二十五：前发上下位移，实测头 2426 px / 别的最大 3（808×）；双向，接在这里让「点头」真的带头发
-P	head	ParamAngleX	3250	12.000	二十五：真的转头参数。头 13679 / 别人最大 armR 4207（3.25x）——
 # 之前用 AngleX（不带 Param 的那套）头 8692 / arm 6358，被压到 0.34，就是它害的
-P	head	ParamAngleY	3330	9.000	二十五：点头方向，头 12313 / armR 3696（3.33x）
 P	chest	PokeChest	90	1.000	胸X 的局部版；ChestX1/2/3/BS 同 Destination
 P	arm	PokeArmL	85	1.000	左臂的局部版；LArm/LForearm/LWrist
 P	arm	PokeArmR	84	1.000	右臂的局部版；RArm/RForearm/RWrist
