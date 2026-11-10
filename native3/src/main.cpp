@@ -1622,6 +1622,67 @@ struct PartPokeRig {
 };
 static PartPokeRig gPartPoke;
 
+// ═══════════════════════════════════════════════════════════════════
+// 二十六：**她的状态**。
+//
+// 2026-11-11 00:5x 他说「这个是米鱼在我电脑上的身体，你要好好思考」。
+// 在这之前我一直在往里加功能（双击、连击、心情随机切换），方向是错的：
+// 那些都是「点她会有反应」，但**她自己的状态跟身体没有关系**。
+// 心情在 whale-memory 里明明有四个真实的数（此刻 tired=95、happy=8.9），
+// 身体却一直挺着、一直在笑、被碰就弹 —— 那不像一个人，像个玩具。
+//
+// 所以这一段是「身体的输入」：每 30 秒把她的心情搬进来，然后
+//   · 累了 → 整个人沉下去、被碰也弹不起来、眨眼变慢
+//   · 开心 → 挺起来、反应快、容易脸红
+//   · 难过 → 头低一点、动作更小
+//   · 在乎 → 更愿意看过来
+// 全部是**连续的**，不是开关。她不会「突然切换成累的样子」，而是随着数字慢慢沉。
+struct HerState {
+    float mood = 50, happy = 0, tired = 0, sad = 0, care = 0;
+    double at = 0;
+    bool  valid = false;
+};
+static HerState gHer;
+
+static void parseMoodJson(const std::string& t) {
+    auto num = [&](const char* key) -> float {
+        const std::string k = std::string("\"") + key + "\":";
+        const size_t p = t.find(k);
+        if (p == std::string::npos) return 0.0f;
+        return static_cast<float>(std::atof(t.c_str() + p + k.size()));
+    };
+    gHer.mood  = num("mood");
+    gHer.happy = num("happy");
+    gHer.tired = num("tired");
+    gHer.sad   = num("sad");
+    gHer.care  = num("care");
+    gHer.at    = num("at");
+    gHer.valid = gHer.at > 0;
+}
+
+// 每 30 秒跑一次同步脚本并读回来。脚本只读库、写一个小 json，失败就保持上次的值。
+static void herStateTick(double now) {
+    static double lastTry = -1e9;
+    if (now - lastTry < 30.0) return;
+    lastTry = now;
+    ::system("python3 /home/link/.dsh/miyu/body/native3/tools/mood-sync.py >/dev/null 2>&1 &");
+    std::ifstream f("state/mood.json");
+    if (!f) return;
+    std::string t((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (!t.empty()) parseMoodJson(t);
+}
+
+// 她的状态 → 身体上的几个连续量（都是 0.0–1.0 之间的「程度」）
+static float herTired() { return gHer.valid ? std::min(1.0f, std::max(0.0f, gHer.tired / 100.0f)) : 0.35f; }
+static float herHappy() { return gHer.valid ? std::min(1.0f, std::max(0.0f, gHer.happy / 100.0f)) : 0.20f; }
+static float herSad()   { return gHer.valid ? std::min(1.0f, std::max(0.0f, gHer.sad   / 100.0f)) : 0.10f; }
+
+// 动作幅度的倍率：累的时候被碰也弹不起来，开心的时候反应更大
+static float herReactionScale() {
+    if (!gHer.valid) return 1.0f;
+    return std::max(0.45f, std::min(1.45f, 1.0f - 0.55f * herTired() + 0.45f * herHappy()));
+}
+
 // 二十六：连击时放大冲量（partPokeTick 起手时设，partPokeStart 用）
 static float gPokeBoost = 1.0f;
 
@@ -1820,7 +1881,7 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
                 log_("[tap] 点 %s -> 表情「%s」", part.c_str(), ex);
             }
             // 连击加剧：把这一下的冲量放大（partPokeStart 里按 gPokeBoost 乘）
-            gPokeBoost = (gCombo >= 3) ? 1.6f : 1.0f;
+            gPokeBoost = ((gCombo >= 3) ? 1.6f : 1.0f) * herReactionScale();
             // 二十六：双击 —— 同一个地方连着戳两下，她的反应不一样：
             // 台词换成「啊」这种被打断的短音，冲量再放大 1.4 倍。
             const bool dbl = partpoke::gDoubleTap && web::settings().dblTap;
@@ -3712,6 +3773,32 @@ int main() {
         // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
         probeTick(model, now);
         partPokeTick(model, now);
+        herStateTick(now);
+        // 她的状态 → 姿态。连续量，不是开关：累了整个人往下沉、头低一点；
+        // 开心的时候反过来。这是「身体反映她」最直接的一层。
+        if (gHer.valid) {
+            const float ty = herTired(), hp = herHappy(), sd = herSad();
+            const float sink = (-6.0f * ty + 4.0f * hp);          // PositionY：累→沉，开心→提
+            const float lean = (-4.0f * ty - 5.0f * sd + 3.0f * hp);
+            const Csm::csmInt32 iPos = model->GetParameterIndex(
+                Csm::CubismFramework::GetIdManager()->GetId("PositionY"));
+            const Csm::csmInt32 iAng = model->GetParameterIndex(
+                Csm::CubismFramework::GetIdManager()->GetId("ParamAngleX"));
+            if (iPos >= 0) {
+                const float cur = model->GetParameterValue(iPos);
+                model->SetParameterValue(iPos, cur + sink * 0.35f, 0.35f);
+            }
+            if (iAng >= 0) {
+                const float cur = model->GetParameterValue(iAng);
+                model->SetParameterValue(iAng, cur + lean * 0.25f, 0.25f);
+            }
+            static double lastMoodLog = -1e9;
+            if (now - lastMoodLog > 60.0) {
+                lastMoodLog = now;
+                log_("[her] 心情 %.0f（累 %.0f / 开心 %.0f / 难过 %.0f）→ 姿态下沉 %+.1f 前倾 %+.1f，反应倍率 %.2f",
+                     gHer.mood, gHer.tired, gHer.happy, gHer.sad, sink, lean, herReactionScale());
+            }
+        }
         followTick(model, now, dt);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
