@@ -1622,6 +1622,9 @@ struct PartPokeRig {
 };
 static PartPokeRig gPartPoke;
 
+// 二十六：连击时放大冲量（partPokeTick 起手时设，partPokeStart 用）
+static float gPokeBoost = 1.0f;
+
 static void partPokeStart(Csm::CubismModel* model, const std::string& part, double now) {
     // 二十二：这里拿到的已经是**根输入**（PositionX / ParamBreath / AngleX…），
     // 不是 ChestX1/SkirtY3 那些物理算出来的输出。拨根 → 物理自己把这块带起来。
@@ -1687,6 +1690,10 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
                 if (c.base + amp > hi) amp = hi - c.base;
                 if (c.base + amp < lo) amp = lo - c.base;
             }
+            // 二十六：连击时把峰值放大（gPokeBoost 由 partPokeTick 在起手时设）
+            amp *= gPokeBoost;
+            if (c.base + amp > hi) amp = hi - c.base;
+            if (c.base + amp < lo) amp = lo - c.base;
             c.peak = amp;
             c.dip = -amp * 0.35f;
         }
@@ -1785,8 +1792,22 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
         const std::string part(partpoke::gPart);
         if (!part.empty() && web::settings().tapPart) {
             static unsigned gTapSeed = 0;
+            // 二十六：连击。连着点同一个部位，她会有脾气 ——
+            //   第 3 下起：动作幅度 ×1.6（越点越明显）
+            //   第 5 下起：脸强制换成「黑脸」（不管这个部位原来配了什么）
+            //   松手隔 1.5 秒算断，从头数。
+            // 为什么只到「黑脸」不到「躲开」：躲开要改窗口位置，那会跟拖动打架。
+            static int    gComboPart = 0, gCombo = 0;
+            static double gComboLast = -1e9;
+            const int curId = partapi::indexOf(part);
+            if (curId == gComboPart && now - gComboLast < 1.5) ++gCombo;
+            else gCombo = 1;
+            gComboPart = curId;
+            gComboLast = now;
+            if (gCombo >= 3) log_("[combo] %s 连点第 %d 下", part.c_str(), gCombo);
+
             // ① 表情（有就播；没有就跳过，不影响下面）
-            const char* ex = tapExprFor(part, gTapSeed++);
+            const char* ex = (gCombo >= 5) ? "黑脸" : tapExprFor(part, gTapSeed++);
             if (ex && web::settings().expr) {
                 exprPlay(ex);
                 // 2026-11-10 23:2x：exprPlay 内部会按「全局基准 × 设置里的倍率」设 gExprUntil
@@ -1797,6 +1818,8 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
                 gTapExprOn = true;
                 log_("[tap] 点 %s -> 表情「%s」", part.c_str(), ex);
             }
+            // 连击加剧：把这一下的冲量放大（partPokeStart 里按 gPokeBoost 乘）
+            gPokeBoost = (gCombo >= 3) ? 1.6f : 1.0f;
             // ② 这个部位自己的动作（有根参数就晃）—— **不是二选一**，两个一起播
             partPokeStart(model, part, now);
         }
