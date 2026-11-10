@@ -160,6 +160,10 @@ static struct {
     int                      softRealX = 0, softRealY = 0;         // 软边折完实际走了多少
 } W;
 
+// 把窗口矩形写进 state/window.json（实现在 1400 多行，这里只是先声明）。
+// 位置一变就要写：第二支指针和所有按全局坐标截图/点击的工具都靠这个文件。
+static void writeWindowRect();
+
 /* ---------------- wl_output ---------------- */
 static void out_geometry(void* d, wl_output*, int32_t x, int32_t y, int32_t pw, int32_t ph,
                          int32_t sub, const char* make, const char* model, int32_t tf) {
@@ -257,7 +261,12 @@ static void accum_over(int base, int pend, int lo, int hi, int& acc);
 static constexpr int    TAP_SLOP_PX = 6;      // 单击的位移上限（逻辑 px）
 static constexpr int    TAP_JUMP_PX = 120;    // 单个 motion 事件跳这么远 = 不是手在拖（见下）
 static constexpr double TAP_MAX_S   = 0.400;  // 按住多久以上就不算单击
-static constexpr double TAP_COOL_S  = 0.800;  // 冷却
+// 2026-11-10 20:3x：冷却原来是 0.8 秒、而且不分部位 —— 他连着点胸、点发饰，
+// 第二个就被吞掉了，看到的就是「按了没反应」。现在拆成两层：
+//   全局 0.18s：只防手抖重击
+//   同部位 0.55s：同一个地方连点不叠加（弹簧还没回位就又冲一次会抖）
+static constexpr double TAP_COOL_S  = 0.180;  // 全局防抖
+static constexpr double TAP_SAME_PART_S = 0.550;  // 同一部位的冷却
 
 static bool        gTapOn = true;             // MIYU_NO_TAP=1 关
 static std::string gPlansDir;                 // 计划目录（MIYU_PLANS_DIR 或按 exe 找）
@@ -347,7 +356,13 @@ static void tapFire(int lx, int ly) {
             const float u = float(lx) / float(lw);
             const float v = float(ly) / float(lh);
             const std::string part = partpoke::classify(u, v);
-            if (!part.empty() && partpoke::hasParams(part)) {
+            // 同一部位连点才吃冷却；换部位立刻响应
+            static std::string gLastPart;
+            static double gLastPartT = -1e9;
+            const bool samePart = (part == gLastPart) && (now - gLastPartT < TAP_SAME_PART_S);
+            if (!part.empty() && partpoke::hasParams(part) && !samePart) {
+                gLastPart = part;
+                gLastPartT = now;
                 std::snprintf(partpoke::gPart, sizeof partpoke::gPart, "%s", part.c_str());
                 ++partpoke::gGen;
                 gTapCoolUntil = now + TAP_COOL_S;
@@ -1045,6 +1060,10 @@ static void drag_spring_tick() {
 
     const int bx = W.posX, by = W.posY;
     platSetPosition(wantX, wantY);
+    // 二十五：位置一落地就重写 state/window.json。原来只有吸角和 input region
+    // 重算时才写，拖动之后这个文件一直是旧的 —— 第二支指针拿它算 local 坐标，
+    // 结果她明明在 (100,143)、文件里写着 (682,86)，点哪都错。
+    writeWindowRect();
     const int ax = W.posX - bx, ay = W.posY - by;
     W.inertiaDistX += ax; W.inertiaDistY += ay;
     W.softRealX += ax;    W.softRealY += ay;

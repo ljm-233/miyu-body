@@ -337,6 +337,27 @@ const char* kHtml = R"HTML(<!doctype html>
     root.appendChild(card);
   });
 
+  // 二十五：点击反应 —— 每个部位点下去播哪个表情。
+  // 这一组是**动态的**：部位固定十二个，但表情列表来自 /state 的 exprNames，
+  // 加了新 exp3 文件不用改这一页。空值 = 该部位只放自身动作。
+  var PARTS = [['head','头'],['headwear','头饰'],['ear','兽耳'],['eye','眼'],
+               ['brow','眉'],['mouth','嘴'],['chest','胸'],['waist','腰'],
+               ['arm','手'],['skirt','裙'],['leg','腿'],['tail','尾']];
+  var partCard = null;
+  function buildPartCard(names){
+    if (partCard) return;
+    partCard = document.createElement('div'); partCard.className = 'card';
+    var h = document.createElement('div'); h.className = 'gh'; h.textContent = '点击反应';
+    partCard.appendChild(h);
+    var opts = [['','无（只放自身动作）']];
+    names.forEach(function(n){ opts.push([n, n]); });
+    PARTS.forEach(function(p){
+      addRow(partCard, {k:'pexpr.'+p[0], t:'select', label:p[1], opts:opts,
+        d:'点这个部位时播哪个表情。选「无」就只放它自己的动作。'});
+    });
+    root.appendChild(partCard);
+  }
+
   function statusLine(s){
     var f = (s.fps_now === null || s.fps_now === undefined) ? '—' : Number(s.fps_now).toFixed(1);
     document.getElementById('status').innerHTML =
@@ -354,6 +375,11 @@ const char* kHtml = R"HTML(<!doctype html>
       for (var i = aaSel.options.length - 1; i >= 0; i--)
         if (aaSel.options[i].value === 'smaa') aaSel.remove(i);
     }
+    if (s.exprNames && s.exprNames.length) buildPartCard(s.exprNames);
+    if (s.partExpr) PARTS.forEach(function(p){
+      var e = els['pexpr.'+p[0]];
+      if (e && e.el) { var val = s.partExpr[p[0]] || ''; e.el.value = val; }
+    });
     SCHEMA.forEach(function(sec){
       sec.items.forEach(function(it){
         var e = els[it.k]; if (!e) return;
@@ -563,6 +589,40 @@ constexpr int kMaxConn = 4;
 Conn gConn[kMaxConn];
 
 // ── 落盘 ────────────────────────────────────────────────────────────
+// ── 二十五：部位 → 表情 的配置文件 ────────────────────────────────
+// state/part-react.tsv，一行一个部位：`部位<TAB>表情名`（表情名为空 = 只放动作）。
+// 单独一个文件的原因：这是「逐部位」的键值表，塞进定长的 settings.json 里
+// 每加一个部位都要动结构体、动保存、动读取，得不偿失。
+static const char* kPartReactPath = "state/part-react.tsv";
+
+void loadPartReact() {
+    std::ifstream f(kPartReactPath);
+    if (!f) return;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        const size_t t = line.find('\t');
+        if (t == std::string::npos) continue;
+        std::string part = line.substr(0, t), ex = line.substr(t + 1);
+        while (!ex.empty() && (ex.back() == '\r' || ex.back() == ' ')) ex.pop_back();
+        if (!part.empty()) gSet.partExpr[part] = ex;
+    }
+    if (!gSet.partExpr.empty())
+        logw("部位→表情：读进 %zu 条（%s）", gSet.partExpr.size(), kPartReactPath);
+}
+
+void savePartReact() {
+    const std::string tmp = std::string(kPartReactPath) + ".tmp";
+    {
+        std::ofstream f(tmp, std::ios::trunc);
+        if (!f) { logw("部位→表情存不下来：%s", tmp.c_str()); return; }
+        f << "# 部位\t表情名（空 = 这个部位只放自身动作，不放表情）\n";
+        for (const auto& [part, ex] : gSet.partExpr) f << part << '\t' << ex << '\n';
+    }
+    if (std::rename(tmp.c_str(), kPartReactPath) != 0)
+        logw("部位→表情存不下来（rename）：%s", kPartReactPath);
+}
+
 void saveSettings() {
     const std::string tmp = gPath + ".tmp";
     {
@@ -753,6 +813,23 @@ std::string stateJson() {
     s += ",\"voice\":" + std::string(gSet.voice ? "true" : "false");
     s += ",\"vol\":" + std::to_string(gSet.vol);
     s += ",\"corner\":\"" + gSet.corner + "\"";
+    // 二十五：部位→表情（设置页那一组用它渲染下拉）
+    {
+        s += ",\"partExpr\":{";
+        bool first = true;
+        for (const auto& [part, ex] : gSet.partExpr) {
+            if (!first) s += ",";
+            first = false;
+            s += "\"" + part + "\":\"" + ex + "\"";
+        }
+        s += "}";
+        s += ",\"exprNames\":[";
+        for (size_t i = 0; i < gExprs.size(); ++i) {
+            if (i) s += ",";
+            s += "\"" + gExprs[i] + "\"";
+        }
+        s += "]";
+    }
     s += ",\"hide\":" + std::string(gSet.hide ? "true" : "false");
     s += ",\"aa\":\"" + gSet.aa + "\"";
     // 十九：页面靠它决定「下拉里留不留 smaa 这一项」
@@ -871,6 +948,17 @@ std::string handleSet(const std::string& body, bool logIt) {
         }
         if (k == "expr" && v.t == VBool) {
             if (v.b != gSet.expr) { gSet.expr = v.b; changed.push_back("expr"); }
+            continue;
+        }
+        // 二十五：部位→表情。key 形如 "pexpr.chest"，值是表情名（空串 = 不放表情）
+        if (k.rfind("pexpr.", 0) == 0 && v.t == VStr) {
+            const std::string part = k.substr(6);
+            if (!part.empty() && gSet.partExpr[part] != v.s) {
+                gSet.partExpr[part] = v.s;
+                savePartReact();
+                changed.push_back(k);
+                logw("部位→表情：%s = 「%s」", part.c_str(), v.s.empty() ? "(无)" : v.s.c_str());
+            }
             continue;
         }
         if (k == "hide" && v.t == VBool) {
@@ -1154,6 +1242,8 @@ void setFps(double fps) { gFps = fps; }
 
 void setExprNames(std::vector<std::string> names) { gExprs = std::move(names); }
 
+const std::vector<std::string>& exprNames() { return gExprs; }
+
 const char* statePath() { return gPath.c_str(); }
 int port() { return gPort; }
 
@@ -1161,6 +1251,7 @@ void init(ApplyFn apply) {
     gApply = apply;
     gPath  = resolveStatePath();
     loadSettings();
+    loadPartReact();          // 二十五：部位→表情（和 settings.json 分开存）
 
     // 端口：MIYU_WEB_PORT 覆盖，默认 8200
     int want = 8200;

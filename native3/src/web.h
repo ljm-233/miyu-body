@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,12 @@ struct Settings {
     // ── 二十一：点哪动哪（2026-11-10 02:xx）──────────────────────────
     // 开着：戳她身上的部位 → 只让那一块的参数动（弹一下）。关掉回到整套反应。
     bool        tapPart = true;     // 部位级反应（关掉 = 老的一套 plan 照播）
+
+    // 二十五：每个部位点下去播哪个表情。空串 = 只有动作、不放表情。
+    // 存在 state/part-react.tsv（不是一个字段一个字段塞 settings.json，
+    // 那玩意儿是定长结构，逐部位的东西塞进去只会越来越难维护）。
+    // 网页设置页「点击反应」那一组直接读写它。
+    std::map<std::string, std::string> partExpr;
 };
 
 // 一项设置改完要「真的生效」，重活在各层里（platform 重建 buffer、main 换绘制路径），
@@ -110,6 +117,8 @@ void setFps(double fps);
 
 // 表情清单（main 从 model/Exp3 扫出来给「切个表情」按钮用；空就退回默认）。
 void setExprNames(std::vector<std::string> names);
+// 二十五：给设置页用的「现在有哪几个表情可挑」
+const std::vector<std::string>& exprNames();
 
 // 设置落到哪个文件（日志/文档用）。
 const char* statePath();

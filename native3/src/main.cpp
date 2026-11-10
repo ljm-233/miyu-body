@@ -1809,23 +1809,28 @@ static float mouthPokeAmount(Csm::CubismModel* model) {
 // 功能型的（裙子切换/脱鞋/尾巴开关/竖食指/眼镜/体型）一个都不碰。
 // 头是「被摸头」，所以给随机；其余每个部位固定一种，互不重复。
 static const char* tapExprFor(const std::string& part, unsigned seed) {
-    struct Row { const char* part; const char* e[4]; int n; };
-    static const Row kRows[] = {
-        // 2026-11-10 20:2x：「屑屑眼」从这张表里拿掉了 —— 点它、再回默认之后
-        // 她的眼睛一直闭着，重启才开。那个 exp3 只有 key3/key5/key6 三个 Add 参数，
-        // 回默认只把参数写回一帧就收工，盖不住。宁可用确定干净的三个。
-        {"head",     {"脸红", "兔牙", "＞＜"},            3},   // 被摸头：随机害羞系
-        {"headwear", {"流冷汗"},                         1},   // 碰到蕾丝发饰
-        {"ear",      {"＞＜"},                           1},   // 兽耳敏感
-        {"eye",      {"圈圈眼"},                         1},
-        {"brow",     {"黑脸"},                           1},
-        {"mouth",    {"兔牙"},                           1},
-        {"chest",    {"脸红"},                           1},
-        {"waist",    {"＞＜"},                           1},
-    };
-    for (const Row& r : kRows)
-        if (part == r.part) return r.e[seed % static_cast<unsigned>(r.n)];
-    return nullptr;
+    // 二十五：不再写死表 —— 从设置里读（state/part-react.tsv，网页「点击反应」那一组管它）。
+    // 值是 "脸红" 或 "脸红/兔牙/＞＜"（斜杠分隔 = 每次随机抽一个）。
+    // 空串或没有这一条 = 这个部位只放自身动作，不放表情。
+    const auto& m = web::settings().partExpr;
+    auto it = m.find(part);
+    if (it == m.end() || it->second.empty()) return nullptr;
+    static std::string pick;
+    const std::string& val = it->second;
+    const size_t slash = val.find('/');
+    if (slash == std::string::npos) { pick = val; }
+    else {
+        std::vector<std::string> all;
+        size_t p0 = 0;
+        while (p0 <= val.size()) {
+            const size_t p1 = val.find('/', p0);
+            all.push_back(val.substr(p0, p1 == std::string::npos ? std::string::npos : p1 - p0));
+            if (p1 == std::string::npos) break;
+            p0 = p1 + 1;
+        }
+        pick = all.empty() ? std::string() : all[seed % all.size()];
+    }
+    return pick.empty() ? nullptr : pick.c_str();
 }
 
 static double gTapExprUntil = 0.0;   // 表情留到什么时候
@@ -1838,18 +1843,16 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
         const std::string part(partpoke::gPart);
         if (!part.empty() && web::settings().tapPart) {
             static unsigned gTapSeed = 0;
+            // ① 表情（有就播；没有就跳过，不影响下面）
             const char* ex = tapExprFor(part, gTapSeed++);
-            if (ex) {
-                // 只换脸，不动身体 —— 这就是他说「差不多」的那个效果
-                if (web::settings().expr) {
-                    exprPlay(ex);
-                    gTapExprUntil = now + 2.0;
-                    gTapExprOn = true;
-                    log_("[tap] 点 %s -> 表情「%s」（2 秒后回默认，不写身体参数）", part.c_str(), ex);
-                }
-            } else {
-                partPokeStart(model, part, now);
+            if (ex && web::settings().expr) {
+                exprPlay(ex);
+                gTapExprUntil = now + 2.0;
+                gTapExprOn = true;
+                log_("[tap] 点 %s -> 表情「%s」", part.c_str(), ex);
             }
+            // ② 这个部位自己的动作（有根参数就晃）—— **不是二选一**，两个一起播
+            partPokeStart(model, part, now);
         }
     }
     // 表情到点回默认
