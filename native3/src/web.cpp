@@ -245,6 +245,8 @@ const char* kHtml = R"HTML(<!doctype html>
        d:'拖她的时候整个人会真的歪过去（动的是投影，不是参数——参数她身上看不见）。1 = 拖得越快歪得越多，松手回弹'},
       {k:'swayIdle', t:'bool', label:'静止轻摆',
        d:'不动的时候极慢地歪一点点（15 秒一个来回，0.3°）；只在「活泼」待机风格下生效'},
+      {k:'legSway', t:'range', min:0, max:3, step:0.1, label:'腿晃',
+       d:'点腿时晃多大。0 最轻（干脆利落），3 最大（软、晃得久）'},
       {k:'chestSway', t:'range', min:0, max:3, step:0.1, label:'胸晃',
        d:'点胸口时晃多大。0 最轻（干脆利落），2 最大（软、晃得久）'},
       {k:'dragSpring', t:'range', min:0, max:2, step:0.1, label:'拖动弹簧',
@@ -767,6 +769,7 @@ std::string stateJson() {
     s += ",\"dragSway\":" + std::to_string(gSet.dragSway);
     s += ",\"swayIdle\":" + std::string(gSet.swayIdle ? "true" : "false");
     s += ",\"swayTilt\":" + std::to_string(gSet.swayTilt);
+    s += ",\"legSway\":" + std::to_string(gSet.legSway);
     s += ",\"chestSway\":" + std::to_string(gSet.chestSway);
     s += ",\"dragSpring\":" + std::to_string(gSet.dragSpring);
     s += ",\"tapPart\":" + std::string(gSet.tapPart ? "true" : "false");
@@ -934,6 +937,11 @@ std::string handleSet(const std::string& body, bool logIt) {
         if (k == "swayTilt" && v.t == VNum) {
             const float nv = clampf(float(v.n), 0.0f, 4.5f);
             if (nv != gSet.swayTilt) { gSet.swayTilt = nv; changed.push_back("swayTilt"); }
+            continue;
+        }
+        if (k == "legSway" && v.t == VNum) {
+            const float nv = clampf(float(v.n), 0.0f, 3.0f);
+            if (nv != gSet.legSway) { gSet.legSway = nv; changed.push_back("legSway"); }
             continue;
         }
         if (k == "chestSway" && v.t == VNum) {

@@ -43,13 +43,22 @@ inline int  gGen = 0;          // 0 = 还没点过；每点一次 +1
 inline char gPart[32] = {0};   // 部位名（part-zones.tsv 里的名字）
 
 // ── 格子图 ──────────────────────────────────────────────────────────
-inline int gGridW = 60;
-inline int gGridH = 120;
+// 二十四：60×120 → 120×240。一格从 8.3×7.5 px 变成 4.2×3.75 px，因为脸要拆细：
+// 眉毛（12px 高）、眼睛（22px）、嘴（10px）三个在 60×120 里各自只有 1–2 行格子，
+// 分不开 —— 眉毛一动就整片算到眼睛头上（实测 ParamBrowLY3 154px 里 114px 落进眼睛格子）。
+// 网格放在文件里（#grid 那一行），工具读它，判定也读它，所以改这里 + 删旧文件即可。
+inline int gGridW = 120;
+inline int gGridH = 240;
 
 // 二十二：格子图由**渲染层**每帧刷（main.cpp 用模型自带的 drawable → part 分区
 // 光栅化出来的，见 partZoneTick）。平台层只读。0 = 空白（她身上没东西）。
 
-inline const char* const kZoneNames[8] = {"", "head", "chest", "arm", "skirt", "leg", "tail", "other"};
+// 二十四（2026-11-10）：8 → 14。脸拆成眼睛 / 嘴 / 眉毛，另加兽耳 / 腰 / 头饰。
+// 下标已经写进格子图（grid 里存的就是这些数字），只能往后加，不能插队、不能重排。
+inline const char* const kZoneNames[14] = {
+    "", "head", "chest", "arm", "skirt", "leg", "tail", "other",
+    "eye", "mouth", "brow", "ear", "waist", "headwear"};
+inline const int kZoneCount = 14;
 
 // 40×80 的标签格，值 = kZoneNames 的下标；空 vector = 还没算出来
 inline std::vector<unsigned char> gZoneCells;
@@ -196,7 +205,7 @@ inline std::string classify(float u, float v) {
     if (gv >= gGridH) gv = gGridH - 1;
     if (gZoneCells.size() == static_cast<size_t>(gGridW) * static_cast<size_t>(gGridH)) {
         const unsigned char c = gZoneCells[static_cast<size_t>(gv) * gGridW + gu];
-        if (c == 0 || c >= 8) return std::string();
+        if (c == 0 || c >= kZoneCount) return std::string();
         return std::string(kZoneNames[c]);
     }
     const Table& t = table();

@@ -36,8 +36,12 @@ _spec.loader.exec_module(pp)
 
 STATE = os.path.join(ROOT, "state")
 THR = 14
-PARTS = ["head", "chest", "arm", "skirt", "leg", "tail"]
+# 二十四：六个 → 十二个。脸拆成眼睛 / 嘴 / 眉毛，另加兽耳 / 腰 / 头饰。
+# 顺序就是 shot-parts4.png 里从上到下的顺序。
+PARTS = ["head", "chest", "arm", "skirt", "leg", "tail",
+         "eye", "mouth", "brow", "ear", "waist", "headwear"]
 DIR = "/tmp/pokecheck"
+LOG = "/tmp/miyu-param-probe.log"      # pp.Body 把子进程日志写在这儿
 
 
 def log(*a):
@@ -105,10 +109,19 @@ def main():
 
     results = {}
     chest_frames = []
+    shots = {}
     try:
         for part in args.parts:
             for f in os.listdir(DIR):
                 os.remove(os.path.join(DIR, f))
+            # 二十四：格子图必须**这一轮现写的那一份**。删掉，等新实例写出来再量 ——
+            # 上一轮就是因为读到的是上一次进程留下的文件，量的和判的不是同一份数据。
+            zf = os.path.join(STATE, "part-zones.tsv")
+            try:
+                os.remove(zf)
+            except OSError:
+                pass
+            t_run = time.time()
             os.environ["MIYU_POKE"] = part
             os.environ["MIYU_POKE_DIR"] = DIR
             body = pp.Body(12, no_phys=False)
@@ -132,14 +145,22 @@ def main():
                                 frames.append(img)
                                 break
                         time.sleep(0.03)
+                for _ in range(120):
+                    if os.path.exists(zf) and os.path.getmtime(zf) >= t_run - 1:
+                        break
+                    time.sleep(0.1)
                 if len(frames) < 4:
                     log("[poke] %-6s 帧不够（%d），跳过" % (part, len(frames)))
                     results[part] = None
                     continue
-                base = frames[0][:, :, :3].astype(np.int16)
+                # 基准帧 = 导出序列的第一帧（点之后约 88ms）。试过用「点之前」那一帧
+                # （MIYU_POKE_DIR/poke-pre.raw），量出来反而更小 —— 那一帧实际拿到的是
+                # 点之后的第一帧（离屏 FBO 的时序），所以退回第一帧这个口径。
+                base_img = frames[0]
+                base = base_img[:, :, :3].astype(np.int16)
                 sh, sw = base.shape[:2]
                 masks = zone_masks(sw, sh)
-                sil = pp.dilate(frames[0][:, :, 3] > 8, 1)
+                sil = pp.dilate(base_img[:, :, 3] > 8, 1)
                 peak = {p: 0 for p in PARTS}
                 for img in frames[1:]:
                     d = (np.abs(img[:, :, :3].astype(np.int16) - base).max(axis=2) > THR) & sil
@@ -152,11 +173,27 @@ def main():
                 omax = max(others.values() or [0])
                 oname = max(others, key=others.get) if others else "-"
                 ratio = (own / omax) if omax > 0 else 99.0
-                results[part] = {"own": own, "others": peak, "ratio": round(ratio, 2)}
-                log("[poke] %-6s 自己 %5d px ｜ 别的最大 %-5s %5d px ｜ 倍数 %.2f %s"
-                    % (part, own, oname, omax, ratio, "✓" if ratio > 2 else "✗"))
+                # 二十四：「点中的部位名」必须和倍数一起贴 —— 上一轮报「六处全过」而实际
+                # 点不对，就是只看了倍数、没看日志里到底判成哪一块。这次两条一起打。
+                hitline = ""
+                try:
+                    with open(LOG, "r", encoding="utf-8", errors="replace") as f:
+                        for line in f:
+                            if "[part] 点中部位" in line or "[poke-eval] 部位" in line:
+                                hitline = line.split("] ", 1)[-1].strip()
+                except OSError:
+                    hitline = "（读不到日志）"
+                results[part] = {"own": own, "others": peak, "ratio": round(ratio, 2),
+                                 "hit": hitline}
+                log("[poke] %-8s 自己 %5d px ｜ 别的最大 %-5s %5d px ｜ 倍数 %.2f %s ｜ %s"
+                    % (part, own, oname, omax, ratio, "✓" if ratio > 2 else "✗", hitline))
                 if part == "chest":
                     chest_frames = frames[1:4]
+                # 二十四：每块留 3 帧（间隔 ≈200ms，导出是每 8 帧一帧），拼进
+                # state/shot-parts4.png —— 判「有没有尖角/黑块/撕裂」用这个，不靠嘴说。
+                picks = [frames[i] for i in (1, 6, 11) if i < len(frames)]
+                if len(picks) == 3:
+                    shots[part] = picks
             finally:
                 body.stop()
         if args.no_service:
@@ -171,6 +208,28 @@ def main():
                            capture_output=True)
         except Exception:
             pass
+
+    if shots:
+        # 每块一行、每行 3 帧（间隔约 200ms），裁到她身上那一块再看形状
+        rows = []
+        for part, fr in shots.items():
+            comps = []
+            for img in fr:
+                rgbx = img[:, :, :3].astype(np.float32)
+                a = img[:, :, 3].astype(np.float32) / 255.0
+                comp = rgbx * a[..., None] + np.array([18, 18, 24], np.float32) * (1 - a[..., None])
+                comps.append(Image.fromarray(comp.astype(np.uint8)))
+            rows.append((part, comps))
+        w, h = rows[0][1][0].size
+        cw, ch = int(w * 0.34), int(h * 0.34)      # 上半身：头到腰
+        out = Image.new("RGB", (cw * 3 + 8, ch * len(rows) + 4 * len(rows)), (10, 10, 12))
+        for i, (part, comps) in enumerate(rows):
+            for j, im in enumerate(comps):
+                out.paste(im.crop((int(w * 0.32), int(h * 0.10),
+                                   int(w * 0.32) + cw, int(h * 0.10) + ch)),
+                          (j * (cw + 4), i * (ch + 4)))
+        out.save(os.path.join(STATE, "shot-parts4.png"))
+        log("[poke] 每块三帧 → state/shot-parts4.png（%d 块）" % len(rows))
 
     if chest_frames:
         # 点胸部抓 3 帧（间隔约 65ms），存成一张竖排对比图

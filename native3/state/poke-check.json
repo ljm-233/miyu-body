@@ -1,74 +1,230 @@
 {
  "head": {
-  "own": 7255,
+  "own": 1565,
   "others": {
-   "head": 7255,
-   "chest": 1121,
-   "arm": 364,
-   "skirt": 41,
-   "leg": 2,
-   "tail": 10
+   "head": 1565,
+   "chest": 1193,
+   "arm": 1579,
+   "skirt": 114,
+   "leg": 0,
+   "tail": 31,
+   "eye": 1781,
+   "mouth": 1290,
+   "brow": 1002,
+   "ear": 357,
+   "waist": 6,
+   "headwear": 2834
   },
-  "ratio": 6.47
+  "ratio": 0.55,
+  "hit": "点中部位 head -> 2 个根输入：AngleX(-15.00) AngleY(-12.00)"
  },
  "chest": {
-  "own": 2119,
+  "own": 2488,
   "others": {
-   "head": 12,
-   "chest": 2119,
-   "arm": 36,
-   "skirt": 31,
-   "leg": 3,
-   "tail": 29
+   "head": 6,
+   "chest": 2488,
+   "arm": 69,
+   "skirt": 84,
+   "leg": 0,
+   "tail": 51,
+   "eye": 5,
+   "mouth": 2,
+   "brow": 0,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 2
   },
-  "ratio": 58.86
+  "ratio": 29.62,
+  "hit": "点中部位 chest -> 1 个根输入：PokeChest(-1.00)"
  },
  "arm": {
-  "own": 1441,
+  "own": 2591,
   "others": {
-   "head": 11,
-   "chest": 295,
-   "arm": 1441,
-   "skirt": 429,
-   "leg": 2,
-   "tail": 10
+   "head": 6,
+   "chest": 669,
+   "arm": 2591,
+   "skirt": 1193,
+   "leg": 0,
+   "tail": 12,
+   "eye": 4,
+   "mouth": 2,
+   "brow": 0,
+   "ear": 0,
+   "waist": 200,
+   "headwear": 2
   },
-  "ratio": 3.36
+  "ratio": 2.17,
+  "hit": "点中部位 arm -> 2 个根输入：PokeArmL(-1.00) PokeArmR(-1.00)"
  },
  "skirt": {
-  "own": 9928,
+  "own": 9673,
   "others": {
-   "head": 11,
-   "chest": 82,
-   "arm": 402,
-   "skirt": 9928,
-   "leg": 3444,
-   "tail": 10
+   "head": 6,
+   "chest": 92,
+   "arm": 356,
+   "skirt": 9673,
+   "leg": 978,
+   "tail": 93,
+   "eye": 5,
+   "mouth": 5,
+   "brow": 0,
+   "ear": 0,
+   "waist": 4225,
+   "headwear": 2
   },
-  "ratio": 2.88
+  "ratio": 2.29,
+  "hit": "点中部位 skirt -> 1 个根输入：PokeSkirt(-1.00)"
  },
  "leg": {
-  "own": 3630,
+  "own": 6178,
   "others": {
-   "head": 11,
-   "chest": 87,
-   "arm": 12,
-   "skirt": 163,
-   "leg": 3630,
-   "tail": 27
+   "head": 5,
+   "chest": 80,
+   "arm": 27,
+   "skirt": 199,
+   "leg": 6178,
+   "tail": 12,
+   "eye": 4,
+   "mouth": 1,
+   "brow": 0,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 2
   },
-  "ratio": 22.27
+  "ratio": 31.05,
+  "hit": "点中部位 leg -> 1 个根输入：PokeLeg(-1.00)"
  },
  "tail": {
-  "own": 9717,
+  "own": 12466,
   "others": {
-   "head": 11,
-   "chest": 80,
-   "arm": 10,
-   "skirt": 238,
-   "leg": 134,
-   "tail": 9717
+   "head": 6,
+   "chest": 85,
+   "arm": 31,
+   "skirt": 547,
+   "leg": 886,
+   "tail": 12466,
+   "eye": 5,
+   "mouth": 1,
+   "brow": 0,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 2
   },
-  "ratio": 40.83
+  "ratio": 14.07,
+  "hit": "点中部位 tail -> 1 个根输入：PokeTail(-1.00)"
+ },
+ "eye": {
+  "own": 634,
+  "others": {
+   "head": 386,
+   "chest": 58,
+   "arm": 16,
+   "skirt": 54,
+   "leg": 0,
+   "tail": 13,
+   "eye": 634,
+   "mouth": 1,
+   "brow": 0,
+   "ear": 628,
+   "waist": 0,
+   "headwear": 382
+  },
+  "ratio": 1.01,
+  "hit": "点中部位 eye -> 1 个根输入：PokeEye(-1.00)"
+ },
+ "mouth": {
+  "own": 127,
+  "others": {
+   "head": 12,
+   "chest": 69,
+   "arm": 21,
+   "skirt": 68,
+   "leg": 0,
+   "tail": 9,
+   "eye": 128,
+   "mouth": 127,
+   "brow": 0,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 2
+  },
+  "ratio": 0.99,
+  "hit": "点中部位 mouth -> 1 个根输入：PokeMouth(+1.00)"
+ },
+ "brow": {
+  "own": 13,
+  "others": {
+   "head": 5,
+   "chest": 73,
+   "arm": 23,
+   "skirt": 70,
+   "leg": 0,
+   "tail": 10,
+   "eye": 4,
+   "mouth": 1,
+   "brow": 13,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 2
+  },
+  "ratio": 0.18,
+  "hit": "点中部位 brow -> 1 个根输入：PokeBrow(+1.00)"
+ },
+ "ear": {
+  "own": 541,
+  "others": {
+   "head": 212,
+   "chest": 78,
+   "arm": 27,
+   "skirt": 72,
+   "leg": 0,
+   "tail": 12,
+   "eye": 23,
+   "mouth": 2,
+   "brow": 0,
+   "ear": 541,
+   "waist": 0,
+   "headwear": 147
+  },
+  "ratio": 2.55,
+  "hit": "点中部位 ear -> 2 个根输入：PokeEarL(-1.00) PokeEarR(-1.00)"
+ },
+ "waist": {
+  "own": 3240,
+  "others": {
+   "head": 6,
+   "chest": 87,
+   "arm": 29,
+   "skirt": 1304,
+   "leg": 414,
+   "tail": 48,
+   "eye": 5,
+   "mouth": 1,
+   "brow": 0,
+   "ear": 0,
+   "waist": 3240,
+   "headwear": 2
+  },
+  "ratio": 2.48,
+  "hit": "点中部位 waist -> 1 个根输入：PokeWaist(-1.00)"
+ },
+ "headwear": {
+  "own": 751,
+  "others": {
+   "head": 6,
+   "chest": 78,
+   "arm": 28,
+   "skirt": 76,
+   "leg": 0,
+   "tail": 17,
+   "eye": 4,
+   "mouth": 2,
+   "brow": 0,
+   "ear": 0,
+   "waist": 0,
+   "headwear": 751
+  },
+  "ratio": 9.63,
+  "hit": "点中部位 headwear -> 1 个根输入：PokeHeadWear(-1.00)"
  }
 }

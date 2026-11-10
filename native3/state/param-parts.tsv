@@ -18,3 +18,10 @@ P	arm	PokeArmR	84	1.000	右臂的局部版；RArm/RForearm/RWrist
 P	skirt	PokeSkirt	80	1.000	裙子X 摆动的局部版；SkirtX1..4/SkirtSpecial/2
 P	leg	PokeLeg	88	1.000	双腿 Z 的局部版；LEGAngleZ2（原来拨 HipAngleX 会先拽裙）
 P	tail	PokeTail	92	1.000	尾巴的局部版；Param_Angle_Rotation84..89 + Param52
+P	eye	PokeEye	95	1.000	眼睛：眼珠被物理带走 + 点一下眨一次（0.24s 包络）
+P	mouth	PokeMouth	94	1.000	嘴：ParamMouthOpenY 自己拼的一条链
+P	brow	PokeBrow	93	1.000	眉毛：34/35 两条链，上下 + 角度
+P	ear	PokeEarL	91	1.000	左兽耳：PhysicsSetting83 的局部版
+P	ear	PokeEarR	91	1.000	右兽耳：PhysicsSetting85 的局部版
+P	waist	PokeWaist	90	1.000	腰：腰带那一圈的局部版
+P	headwear	PokeHeadWear	90	1.000	头饰（女仆发饰，不是帽子）：117/118 两条链

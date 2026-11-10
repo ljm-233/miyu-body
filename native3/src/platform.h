@@ -64,6 +64,14 @@ void platGetLogicalSize(int* w, int* h);
 // 鼠标只在她身上才会被算作「在窗口内」，用窗口半宽当分母只能到 ±0.5。
 bool platPersonBox(int* cx, int* cy, int* hw, int* hh);
 
+// 当前 output 的全局原点（逻辑坐标）+ 窗口尺寸。给「第二支指针」换算用：
+// pos.txt 是全局坐标，她的 local = 全局 - (output 原点 + 窗口 margin)。
+bool platWindowOrigin(int* ox, int* oy, int* ww, int* wh);
+
+// 从外部（第二支指针走 ctl.sock）触发一次「点在她身上 local=(lx,ly)」。
+// 和真鼠标点击同一条路：冷却、部位判定、只动那一块全都一致。
+void platTapAt(int lx, int ly);
+
 // 销毁窗口（调用方负责先释放 GL 资源）。
 void platShutdown();
 

@@ -116,6 +116,8 @@ bool platIsDragging() { return false; }
 // X11 版没有指针层（GLFW 只给窗口级回调，没有 surface-local 这套），
 // 视线功能在备胎上就是「不跟」：恒 false → main.cpp 那边目标永远是 0。
 bool platPointer(float*, float*) { return false; }
+bool platWindowOrigin(int*, int*, int*, int*) { return false; }
+void platTapAt(int, int) {}
 
 // 逻辑尺寸 = 窗口尺寸（X11 没有 buffer_scale 那套）。
 void platGetLogicalSize(int* w, int* h) {

@@ -1354,6 +1354,18 @@ bool platPersonBox(int* cx, int* cy, int* hw, int* hh) {
     return true;
 }
 
+void platTapAt(int lx, int ly) { if (gTapOn) tapFire(lx, ly); }
+
+bool platWindowOrigin(int* ox, int* oy, int* ww, int* wh) {
+    if (!W.inited) return false;
+    const OutInfo* oc = (W.curIdx >= 0 && W.curIdx < W.nouts) ? &W.outs[W.curIdx] : nullptr;
+    if (ox) *ox = (oc ? oc->gx : 0) + W.posX;
+    if (oy) *oy = (oc ? oc->gy : 0) + W.posY + 37;   // 顶栏 exclusive zone
+    if (ww) *ww = W.reqW;
+    if (wh) *wh = W.reqH;
+    return true;
+}
+
 void platGetLogicalSize(int* w, int* h) {
     if (w) *w = W.reqW;
     if (h) *h = W.reqH;
@@ -1641,6 +1653,14 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
                 // 昨晚所有截图工具都被这个坑过，现在补上。
                 int barH = 37;
                 if (const char* bh = getenv("MIYU_BAR_H")) barH = atoi(bh);
+                // 2026-11-10 19:3x：给「第二支指针」用的窗口矩形（全局逻辑坐标）。
+                // 它要判断一个全局坐标落没落在她窗口里，只能靠这份，不能猜。
+                if (FILE* fw = std::fopen("state/window.json", "wb")) {
+                    std::fprintf(fw, "{\"ox\":%d,\"oy\":%d,\"w\":%d,\"h\":%d,\"px\":%d,\"py\":%d}\n",
+                                 gx + W.posX, gy + barH + W.posY, W.reqW, W.reqH,
+                                 gx + W.posX + bx0, gy + barH + W.posY + by0);
+                    std::fclose(fw);
+                }
                 LOG("[box] 全局：window=(%d,%d) output=(%+d,%+d) bar=%d 她=[%d,%d .. %d,%d]（%dx%d）",
                     W.posX, W.posY, gx, gy, barH,
                     gx + W.posX + bx0, gy + barH + W.posY + by0,

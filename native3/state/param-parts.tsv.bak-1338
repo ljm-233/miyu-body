@@ -1,0 +1,20 @@
+# 部位级反应的数据表（第二十二节，定稿；量出来的账本在 state/part-roots.json）
+# 格子图在 state/part-zones.tsv（身体按 drawable→part 光栅化、再按 alpha 裁出来的，
+#   窗口归一化，和点击判定用同一份）
+# P<TAB>部位<TAB>驱动参数<TAB>比值×10<TAB>冲量幅度<TAB>备注
+#   幅度 = 给参数的**绝对偏移量**（度 / 比例单位），方向每点一次交替
+#
+# 只拨物理的**输入**，绝不写 ChestX*/ChestY*/SkirtY*/Hair* 这些物理输出：
+#   · AngleX / ParamBreath 是 physics3.json 的根（只被输入，从不被输出）
+#   · ParamAngleX / ParamBodyAngleX / ParamBodyAngleZ / HipAngleX 是那条链上的
+#     **上一级输入**（Chest* 的 Input.Source 就是 ParamBodyAngleX；
+#     SkirtX* 的 Input.Source 是 HipAngleX）。拨它 = 让物理自己算 Chest*/Skirt*，
+#     不是把结果顶掉。他 02:1x 验过的就是这条（ParamBodyAngleX 0→25，胸部变 86%）。
+P	head	AngleX	67	15.000	OX 控制器；实测头 8692 px / 别的最大 1296（6.7×）
+P	head	AngleY	67	12.000	OY 控制器；点头方向，轻一点
+P	chest	PokeChest	90	1.000	胸X 的局部版；ChestX1/2/3/BS 同 Destination
+P	arm	PokeArmL	85	1.000	左臂的局部版；LArm/LForearm/LWrist
+P	arm	PokeArmR	84	1.000	右臂的局部版；RArm/RForearm/RWrist
+P	skirt	PokeSkirt	80	1.000	裙子X 摆动的局部版；SkirtX1..4/SkirtSpecial/2
+P	leg	PokeLeg	88	1.000	双腿 Z 的局部版；LEGAngleZ2（原来拨 HipAngleX 会先拽裙）
+P	tail	PokeTail	92	1.000	尾巴的局部版；Param_Angle_Rotation84..89 + Param52

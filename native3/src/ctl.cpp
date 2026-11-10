@@ -12,6 +12,7 @@
 //     免得两个文件都去碰 Cubism 的类型。
 
 #include "ctl.h"
+#include "platform.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -266,6 +267,25 @@ void handleLine(const std::string& raw, double now) {
             log_("[ctl] say %.1fs（×%.2f -> 嘴动 %.1fs）: %s",
                  dur, gMouthScale, dur * gMouthScale, say.c_str());
             if (gVoiceOn) voicePlay(say);
+        }
+    }
+
+    // tap：外部（第二支指针 / 脚本）按她窗口内的 local 坐标点一下。
+    // 2026-11-10 19:3x：她那层是 layer-shell 自绘，AT-SPI 里没有控件，
+    // 所以外部指针点她只能走这条口子，不能靠合成器的按钮事件。
+    {
+        int tx = 0, ty = 0;
+        const auto* kx = std::strstr(line.c_str(), "\"tap\"");
+        if (kx) {
+            const char* px = std::strstr(kx, "\"x\"");
+            const char* py = std::strstr(kx, "\"y\"");
+            if (px && py) {
+                tx = std::atoi(std::strchr(px, ':') + 1);
+                ty = std::atoi(std::strchr(py, ':') + 1);
+                any = true;
+                log_("[ctl] tap 请求 local=(%d,%d)", tx, ty);
+                platTapAt(tx, ty);
+            }
         }
     }
 

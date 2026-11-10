@@ -102,11 +102,20 @@ rows = [l.rstrip('\n').split('\t') for l in open(parts, encoding='utf-8') if l.s
 named = {r[1] for r in rows if len(r) >= 4}
 need = {'head', 'chest', 'arm', 'skirt', 'leg', 'tail'}
 if not need <= named: bad.append('param-parts 缺部位：%s' % (need - named))
+# 二十四：回滚之后，新加的六个部位必须**一起消失**（这块就是验这个）
+gone = {'eye', 'mouth', 'brow', 'ear', 'waist', 'headwear'}
+left = gone & named
+if left: bad.append('回滚后还留着新部位：%s' % sorted(left))
+pokes = {r[2] for r in rows if len(r) >= 4}
+newp = {p for p in pokes if p.startswith('Poke')} - {'PokeChest', 'PokeArmL', 'PokeArmR',
+                                                  'PokeLeg', 'PokeTail', 'PokeSkirt'}
+if newp: bad.append('回滚后还留着新 Poke 参数：%s' % sorted(newp))
 if bad:
     print('  ✗ ' + '\n  ✗ '.join(bad)); sys.exit(1)
 print('  ① physics3: %d settings / %d inputs / %d outputs / %d vertices，Meta 计数一致'
       % (n, ti, to, tv))
-print('  ② cdi3: %d 参数 / %d 组；param-parts: %d 行 P，部位齐' % (len(c['Parameters']), len(c['ParameterGroups']), len(rows)))
+print('  ② cdi3: %d 参数 / %d 组；param-parts: %d 行 P，原有六块在、新的六块已消失'
+      % (len(c['Parameters']), len(c['ParameterGroups']), len(rows)))
 PY
 
 if [ "${1:-}" = "--no-restart" ]; then

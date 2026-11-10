@@ -536,7 +536,31 @@ static void lookTick(Csm::CubismModel* model, float dt, double now, int lw, int 
 
     float nx = 0.0f, ny = 0.0f;   // 不在窗口内 → 目标就是 0，同一个平滑慢慢回正
     float px = 0.0f, py = 0.0f;
-    const bool in = platPointer(&px, &py) && lw > 0 && lh > 0;
+    bool in = platPointer(&px, &py) && lw > 0 && lh > 0;
+    // 2026-11-10 19:1x：她看不见「第二支指针」——那支是自绘 overlay，不是合成器的真光标，
+    // 所以收不到 wl_pointer 事件（Wayland 一个 seat 只有一份指针焦点，README 第 8 节）。
+    // 但它每次移动都会把全局逻辑坐标写进 pointer/pos.txt，直接读那个文件就行。
+    if (!in) {
+        static double lastPtrFile = 0.0;
+        if (now - lastPtrFile > 0.033) {
+            lastPtrFile = now;
+            if (FILE* f = std::fopen("/home/link/.dsh/miyu/pointer/pos.txt", "r")) {
+                float gx = 0, gy = 0;
+                if (std::fscanf(f, "%f %f", &gx, &gy) == 2) {
+                    // 全局逻辑 → 她自己窗口的 local：减去当前 output 原点 + 窗口 margin
+                    int ox = 0, oy = 0, ww = 0, wh = 0;
+                    platWindowOrigin(&ox, &oy, &ww, &wh);
+                    const float lx = gx - static_cast<float>(ox);
+                    const float ly = gy - static_cast<float>(oy);
+                    if (lx >= -40 && ly >= -40 && lx <= static_cast<float>(ww) + 40 &&
+                        ly <= static_cast<float>(wh) + 40) {
+                        px = lx; py = ly; in = true;
+                    }
+                }
+                std::fclose(f);
+            }
+        }
+    }
     if (in) {
         // 分母优先用「她本人」的半宽（platPersonBox），拿不到才退回整块窗口。
         // 逐像素穿透之后鼠标只在她身上才算「在窗口内」，用窗口半宽只能到 ±0.5，
@@ -1023,11 +1047,23 @@ struct PartZoneRig {
 };
 static PartZoneRig gZones;
 
-// 模型 part 的中文名 → 我们这七个部位。名字是作者写的，按它分最不会错。
+// 模型 part 的中文名 → 我们这十四个部位。名字是作者写的，按它分最不会错。
 static unsigned char zoneOfPartName(const char* nm) {
     if (!nm || !*nm) return 0;
     const std::string n(nm);
     auto has = [&n](const char* k) { return n.find(k) != std::string::npos; };
+    // ── 二十四：新拆出来的六块，**必须排在下面那些 catch-all 前面** ─────────────
+    // 以前「眼/眉/嘴/耳」被 head 那条吃掉、「腰」被 chest 吃掉、「女仆发饰」被
+    // 「发」吃掉 —— 不是没素材，是全被并进大块里了。顺序错了就白改。
+    if (has("眼镜")) return 1;                                        // 眼镜是 head，不是眼睛
+    if (has("女仆发饰") || has("发饰")) return 13;                     // headwear（发饰，不是帽子）
+    if (has("耳朵") || has("兽耳")) return 11;                         // ear
+    if (has("眼眶") || has("眼球") || has("眼白") ||
+        has("左眼") || has("右眼") || has("圈圈眼") || has("爱心眼") ||
+        has("屑屑眼") || has("眼")) return 8;                          // eye
+    if (has("嘴") || has("口内") || has("牙") || has("舌")) return 9;    // mouth
+    if (has("眉毛") || has("眉")) return 10;                           // brow
+    if (has("腰部")) return 12;                                        // waist（腰带那一圈）
     if (has("尾巴") || has("狗尾草")) return 6;                       // tail
     if (has("腿") || has("脚") || has("膝")) return 5;                // leg
     if (has("裙") || has("蝴蝶结") || has("缎带")) return 4;           // skirt
@@ -1235,13 +1271,52 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     const int GW = partpoke::gGridW, GH = partpoke::gGridH;
     gZones.grid.assign(static_cast<size_t>(GW) * GH, 0);
     const Csm::csmInt32 nd = model->GetDrawableCount();
-    // 顺序：drawable 下标顺序就是 SDK 的绘制顺序（Cubism 的 drawable 本来就按
-    // render order 排好，渲染器按 0..n-1 画）。后画的盖先画的 = 取最上层那块皮。
-    for (Csm::csmInt32 d = 0; d < nd && static_cast<size_t>(d) < gZones.lut.size(); ++d) {
+    // 二十四：每 20 帧打一次「每个部位这次画进格子多少、被哪道闸挡掉多少」。
+    // 没有这行就只能看到「eye: 91 个 drawable」却一个格子都没有，猜不出是看不见、
+    // 全透明、还是被后画的盖掉 —— 这一轮就是靠它定位的。
+    int dbgTri[partpoke::kZoneCount] = {0}, dbgHide[partpoke::kZoneCount] = {0},
+        dbgOpa[partpoke::kZoneCount] = {0}, dbgAlpha[partpoke::kZoneCount] = {0};
+    float dbgBB[partpoke::kZoneCount][4];   // u0,v0,u1,v1（顶点坐标范围，验「三角形在不在画里」）
+    for (int i = 0; i < partpoke::kZoneCount; ++i) {
+        dbgBB[i][0] = 9; dbgBB[i][1] = 9; dbgBB[i][2] = -9; dbgBB[i][3] = -9;
+    }
+    // 二十四：**必须按 renderOrder 排，不能按下标**。旧注释说「drawable 下标就是
+    // SDK 的绘制顺序」，在这个模型上是错的：渲染器（CubismRenderer_OpenGLES2::
+    // DrawObjectLoop）是先用 GetRenderOrders() 把下标重排一遍再画的。
+    // 按下标光栅化的后果实测过：眼睛/嘴/眉毛三个部位画进了 397/119/30 个三角形，
+    // 格子却是 0 —— 全被后面画的「脸 / 五官」整片盖掉了。
+    static std::vector<Csm::csmInt32> byOrder;
+    byOrder.clear();
+    {
+        const Csm::csmInt32* order = model->GetRenderOrders();
+        const Csm::csmInt32 total = nd + model->GetOffscreenCount();
+        static std::vector<Csm::csmInt32> idxOf;
+        idxOf.assign(static_cast<size_t>(total > nd ? total : nd), -1);
+        if (order) {
+            for (Csm::csmInt32 d0 = 0; d0 < nd; ++d0) {
+                const Csm::csmInt32 o = order[d0];
+                if (o >= 0 && o < total) idxOf[static_cast<size_t>(o)] = d0;
+            }
+            for (Csm::csmInt32 o = 0; o < total; ++o)
+                if (idxOf[static_cast<size_t>(o)] >= 0) byOrder.push_back(idxOf[static_cast<size_t>(o)]);
+        }
+        if (byOrder.empty())
+            for (Csm::csmInt32 d0 = 0; d0 < nd; ++d0) byOrder.push_back(d0);   // 没有 order 表就按下标
+    }
+    // 二十四：分两遍画。第一遍是老七块（head/chest/arm/skirt/leg/tail），第二遍是
+    // 新拆出来的六块（eye/mouth/brow/ear/waist/headwear）—— 后一遍压在前一遍上面。
+    // 为什么非要两遍：脸上那几个「脸黑/脸红/阴影/五官」也是 head，它们画在眼睛外面，
+    // 单按 renderOrder 一遍画下来，眼睛/嘴/眉毛的格子照样被盖成 head（实测三个都是
+    // 画进了 397/119/30 个三角形、格子 0）。小部位优先，才点得准。
+    auto paintRange = [&](unsigned char lo, unsigned char hi) {
+    for (size_t od = 0; od < byOrder.size(); ++od) {
+        const Csm::csmInt32 d = byOrder[od];
+        if (d < 0 || static_cast<size_t>(d) >= gZones.lut.size()) continue;
         const unsigned char lab = gZones.lut[static_cast<size_t>(d)];
-        if (lab == 0) continue;
-        if (!model->GetDrawableDynamicFlagIsVisible(d)) continue;
-        if (model->GetDrawableOpacity(d) < 0.02f) continue;
+        if (lab == 0 || lab >= partpoke::kZoneCount) continue;
+        if (lab < lo || lab > hi) continue;          // 这一遍只画自己那一段标签
+        if (!model->GetDrawableDynamicFlagIsVisible(d)) { ++dbgHide[lab]; continue; }
+        if (model->GetDrawableOpacity(d) < 0.02f) { ++dbgOpa[lab]; continue; }
         const Csm::csmInt32 nv = model->GetDrawableVertexCount(d);
         const auto* vp = model->GetDrawableVertexPositions(d);
         if (!vp || nv < 3) continue;
@@ -1267,15 +1342,93 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
                 if (uvOpaque(*atlas, (u0 + u1) / 2.0f, (v0 + v1) / 2.0f)) ++hit;
                 if (uvOpaque(*atlas, (u1 + u2) / 2.0f, (v1 + v2) / 2.0f)) ++hit;
                 if (uvOpaque(*atlas, (u2 + u0) / 2.0f, (v2 + v0) / 2.0f)) ++hit;
-                if (hit < 2) continue;
+                if (hit < 2) { ++dbgAlpha[lab]; continue; }
+            }
+            ++dbgTri[lab];
+            {
+                const float vx[3] = {nx(t), nx(t + 1), nx(t + 2)};
+                const float vy[3] = {ny(t), ny(t + 1), ny(t + 2)};
+                for (int q = 0; q < 3; ++q) {
+                    if (vx[q] < dbgBB[lab][0]) dbgBB[lab][0] = vx[q];
+                    if (vy[q] < dbgBB[lab][1]) dbgBB[lab][1] = vy[q];
+                    if (vx[q] > dbgBB[lab][2]) dbgBB[lab][2] = vx[q];
+                    if (vy[q] > dbgBB[lab][3]) dbgBB[lab][3] = vy[q];
+                }
             }
             zoneTri(gZones.grid, nx(t), ny(t), nx(t + 1), ny(t + 1), nx(t + 2), ny(t + 2), lab);
         }
     }
+    };
+    paintRange(1, 7);     // 老七块（下标 1..7，7 = other）
+    paintRange(8, 13);    // 二十四：眼睛 / 嘴 / 眉毛 / 兽耳 / 腰 / 头饰
+    // 二十四：光栅化完、还没被 alpha 白名单和「借标签」动过的那一份，拿来对数
+    static std::vector<unsigned char> dbgRaw;
+    if (gZones.built < 20) dbgRaw = gZones.grid;
     // 只留她身上的格子（alpha 白名单）
     if (gZones.cellOkReady && gZones.cellOk.size() == gZones.grid.size()) {
         for (size_t i = 0; i < gZones.grid.size(); ++i)
             if (!gZones.cellOk[i]) gZones.grid[i] = 0;
+        // 二十四：脸拆三块 —— 按**位置**切三条横带，不靠 drawable 的 bbox 自适应。
+        // 为什么不用 drawable 的范围：眼睛那条缝只有 20 px 高，眼睑（眨下去那层）
+        // 挂在「五官」上被判成 head，嘴唇和眉线也混在 surrounding 的 head 格子里。
+        // 设 bbox 自适应那版量出来是：眨眼 225 px 落在 eye、561 px 落在 head（0.40×）。
+        // 三条带的上下界是拿参数实测出来的：
+        //   眉毛 min..max  u .442..0.562  v .197..0.228
+        //   眼睛（眨）    u .448..0.564  v .208..0.229
+        //   嘴（开）      u .490..0.510  v .240..0.251
+        // 三条带**互不重叠**，都只压在剪影里（cellOk）。眉毛那条只到 0.207 ——
+        // 眉毛抬起来时往上走，留在这条带里；它往下甩才会掉进眼睛那条，所以眉毛的
+        // 方向固定成「往上」（见 partPokeStart 的 upOnly）。
+        {
+            struct Band { unsigned char id; float u0, u1, v0, v1; };
+            static const Band kBands[3] = {
+                {10, 0.430f, 0.575f, 0.186f, 0.208f},   // brow（眉线 + 上下余量）
+                { 8, 0.415f, 0.590f, 0.208f, 0.228f},   // eye（眼睛本体；下巴/脸颊那段留给嘴）
+                { 9, 0.450f, 0.560f, 0.236f, 0.282f},   // mouth（嘴 + 下巴那一小块）
+            };
+            for (int k = 0; k < 3; ++k) {
+                const Band& b = kBands[k];
+                int gx0 = static_cast<int>(b.u0 * GW), gx1 = static_cast<int>(b.u1 * GW);
+                int gy0 = static_cast<int>(b.v0 * GH), gy1 = static_cast<int>(b.v1 * GH);
+                for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
+                    for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
+                        const size_t i = static_cast<size_t>(gy) * GW + gx;
+                        if (gZones.cellOk[i]) gZones.grid[i] = b.id;
+                    }
+            }
+        }
+        // 二十四：头饰（Part161 女仆发饰）也补一条**位置带**。原因和脸一样：
+        // 发饰是那条白色蕾丝边，画得很靠上，而「头/发」那些 drawable 一层层压在上面，
+        // 同一格到底算发饰还是头发，随她一帧一帧的呼吸在变 —— 实测点发饰正中
+        // （u .486 v .162）被判成 head，而格子文件里那一格写的是 headwear。
+        // 位置带把这块钉死：v .118..0.172、u .395..0.610 内一律算头饰。
+        {
+            static const float kHwV0 = 0.118f, kHwV1 = 0.172f;
+            static const float kHwU0 = 0.395f, kHwU1 = 0.610f;
+            const int gy0 = static_cast<int>(kHwV0 * GH), gy1 = static_cast<int>(kHwV1 * GH);
+            const int gx0 = static_cast<int>(kHwU0 * GW), gx1 = static_cast<int>(kHwU1 * GW);
+            for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
+                for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
+                    const size_t i = static_cast<size_t>(gy) * GW + gx;
+                    if (gZones.cellOk[i]) gZones.grid[i] = 13;    // 13 = headwear
+                }
+        }
+        // 二十四：腰。模型里没有「腰」这个 part —— 只有「腰部衣服」，而且它被围裙和
+        // 裙子压着，只剩两三个格子（实测 raw 2 格）。所以腰按**位置**画一条带子：
+        // 他给的 v 0.42–0.60 / u 0.30–0.60 是「她本人 bbox」归一化，换成窗口归一化
+        // （她的 bbox = 窗口里 x 109..446 / y 144..874）就是下面这组数。
+        // 只在她身上（cellOk）上色；下面的「借标签」不会覆盖已经有标签的格子。
+        {
+            static const float kWaistV0 = 0.432f, kWaistV1 = 0.506f;
+            static const float kWaistU0 = 0.358f, kWaistU1 = 0.592f;
+            const int gy0 = static_cast<int>(kWaistV0 * GH), gy1 = static_cast<int>(kWaistV1 * GH);
+            const int gx0 = static_cast<int>(kWaistU0 * GW), gx1 = static_cast<int>(kWaistU1 * GW);
+            for (int gy = gy0; gy <= gy1 && gy < GH; ++gy)
+                for (int gx = gx0; gx <= gx1 && gx < GW; ++gx) {
+                    const size_t i = static_cast<size_t>(gy) * GW + gx;
+                    if (gZones.cellOk[i]) gZones.grid[i] = 12;    // 12 = waist
+                }
+        }
         // 剪影里、但没有任何部位 drawable 盖到的格子（皮肤、缝隙、作者的「组 N」素材）
         // → 从最近的已标格借标签，最多借两圈。不补的话点在她身上却判成「空白」，
         // 走整套反应（实测 17% 的剪影是这样）。借到剪影外也没关系：wl_surface 的
@@ -1307,32 +1460,49 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     ++partpoke::gZoneStamp;
     ++gZones.built;
     if (gZones.built == 20) {   // 二十帧后打一次各部位的实际范围，验「格子贴不贴身体」
-        float bb[8][4];
-        for (int i = 0; i < 8; ++i) { bb[i][0] = 2; bb[i][1] = 2; bb[i][2] = -2; bb[i][3] = -2; }
+        int rawN[partpoke::kZoneCount] = {0}, finN[partpoke::kZoneCount] = {0};
+        if (dbgRaw.size() == gZones.grid.size())
+            for (size_t i = 0; i < dbgRaw.size(); ++i)
+                if (dbgRaw[i] && dbgRaw[i] < partpoke::kZoneCount) ++rawN[dbgRaw[i]];
+        for (size_t i = 0; i < gZones.grid.size(); ++i)
+            if (gZones.grid[i] && gZones.grid[i] < partpoke::kZoneCount) ++finN[gZones.grid[i]];
+        for (int i = 1; i < partpoke::kZoneCount; ++i)
+            if (dbgTri[i] || dbgHide[i] || dbgOpa[i] || dbgAlpha[i])
+                log_("[zones] %-8s 画进 %d 个三角形，挡掉：不可见 %d / 透明 %d / 纹理全透 %d ｜ 格子 %d → %d ｜ 画到 u %.3f..%.3f v %.3f..%.3f",
+                     partpoke::kZoneNames[i], dbgTri[i], dbgHide[i], dbgOpa[i], dbgAlpha[i],
+                     rawN[i], finN[i], dbgBB[i][0], dbgBB[i][2], dbgBB[i][1], dbgBB[i][3]);
+        float bb[partpoke::kZoneCount][4];
+        for (int i = 0; i < partpoke::kZoneCount; ++i) {
+            bb[i][0] = 2; bb[i][1] = 2; bb[i][2] = -2; bb[i][3] = -2;
+        }
         for (int gy = 0; gy < GH; ++gy)
             for (int gx = 0; gx < GW; ++gx) {
                 const unsigned char c = gZones.grid[static_cast<size_t>(gy) * GW + gx];
-                if (!c) continue;
+                if (!c || c >= partpoke::kZoneCount) continue;
                 const float u = (gx + 0.5f) / GW, v = (gy + 0.5f) / GH;
                 if (u < bb[c][0]) bb[c][0] = u;
                 if (v < bb[c][1]) bb[c][1] = v;
                 if (u > bb[c][2]) bb[c][2] = u;
                 if (v > bb[c][3]) bb[c][3] = v;
             }
-        for (int i = 1; i < 7; ++i)
+        for (int i = 1; i < partpoke::kZoneCount; ++i)
             if (bb[i][2] > bb[i][0])
                 log_("[zones] %s: u %.3f..%.3f  v %.3f..%.3f", partpoke::kZoneNames[i],
                      bb[i][0], bb[i][2], bb[i][1], bb[i][3]);
     }
-    if (gZones.built == 1 || now - gZones.lastDump > 8.0) {
+    // 二十四：**先等 alpha 白名单算出来再落盘**（built≥30，约 0.5 秒后）。
+    // 以前第 1 帧就写，那一版没有 cellOk、也没有脸部横带和腰那条带子 —— 工具拿它
+    // 当分区图，量的和判的不是一份数据（这一轮就是被这个坑过一次：文件里嘴只有 1 格）。
+    if (gZones.built >= 30 && now - gZones.lastDump > 3.0) {
         gZones.lastDump = now;
         // 2026-11-10 13:3x：这份文件是给人看/给工具读的**快照**，判定用的是内存里的 grid。
         // 之前它每 8 秒重写一次，把我手工标定的矩形版盖掉了，于是判定又回到那套
         // 列值越界（>60）的坏数据上——点胸口被认成手臂，就是这么来的。
-        // 现在只在文件不存在时写一次，之后不再覆盖。
-        static bool wroteZones = false;
-        if (!wroteZones && gZones.last != gZones.grid) {
-            wroteZones = true;
+        // 二十四：那次之后改成「只写一次」，可那样又会出现相反的问题——工具量倍数时
+        // 读的是很久以前那版；而判「点到哪块」用的是此刻内存里的 grid，两边可能对不上。
+        // 现在折中：内容**变了才写**，最多 8 秒一次 —— 文件始终跟判定用的是同一份，
+        // 又不会像原来那样把任何手工数据无条件盖掉。
+        if (gZones.last != gZones.grid) {
             gZones.last = gZones.grid;
             FILE* fz = std::fopen("state/part-zones.tsv", "wb");
             if (fz) {
@@ -1381,6 +1551,12 @@ struct PartPokeRig {
     struct Ch { Csm::csmInt32 idx; float base, peak, dip; float x, v; };
     Ch     ch[4];
     int    n = 0;
+    // 二十四：点眼睛时额外补一个三角形眨眼包络（见 partPokeTick）。眼珠那条物理链
+    // 只能摆瞳孔，睁眼/闭眼是 ParamEyeLOpen/ROpen 的事，而且那两个不吃物理输出
+    // （每帧硬覆盖会把眨眼动画整段摁掉），只能从这里直接给。
+    bool   eyeOn = false;
+    double eyeT0 = 0.0;
+    Csm::csmInt32 eyeL = -1, eyeR = -1;
 };
 static PartPokeRig gPartPoke;
 
@@ -1391,7 +1567,11 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
     gPartPoke.n = 0;
     std::string names;
     // 每点一次换个方向（+1 / −1 交替）：连点同一个地方不会老是往一边塌。
-    const float dir = (partpoke::gGen & 1) ? -1.0f : 1.0f;
+    // 二十四：嘴和眉毛例外，固定往正方向 —— 嘴只能往上开（ParamMouthOpenY 是 0..1，
+    // 往下压等于闭着，点了没反应）；眉毛那几格只有十几像素高，往下甩会甩进眼睛的
+    // 格子（实测 79px 落眼睛 / 62px 落眉毛），抬起来才是它自己的动作。
+    const bool upOnly = (part == "mouth" || part == "brow");
+    const float dir = upOnly ? 1.0f : ((partpoke::gGen & 1) ? -1.0f : 1.0f);
     for (const partpoke::PartParam& p : ps) {
         const Csm::csmInt32 idx = model->GetParameterIndex(
             Csm::CubismFramework::GetIdManager()->GetId(p.name.c_str()));
@@ -1455,6 +1635,17 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
         std::snprintf(buf, sizeof buf, "%s(%+.2f) ", p.name.c_str(), c.peak);
         names += buf;
     }
+    if (part == "eye") {
+        // 二十四：眼睛这一下 = 瞳孔被物理带着摆（上面那条 PokeEye 链）+ 真的眨一下。
+        auto idOf = [](const char* nm) {
+            return Csm::CubismFramework::GetIdManager()->GetId(nm);
+        };
+        if (gPartPoke.eyeL < 0) gPartPoke.eyeL = model->GetParameterIndex(idOf("ParamEyeLOpen"));
+        if (gPartPoke.eyeR < 0) gPartPoke.eyeR = model->GetParameterIndex(idOf("ParamEyeROpen"));
+        gPartPoke.eyeOn = (gPartPoke.eyeL >= 0 || gPartPoke.eyeR >= 0);
+        gPartPoke.eyeT0 = now;
+        log_("[part] 眼睛：眨一下（%.0fms 包络）", 180.0);
+    }
     if (gPartPoke.n == 0) {
         // 表里这个部位一个活参数都没有 —— 别装作动了，交回整套反应
         log_("[part] 部位 %s 没有可用参数（表是空的？），这次不播", part.c_str());
@@ -1466,6 +1657,40 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
     log_("[part] 点中部位 %s -> %d 个根输入：%s", part.c_str(), gPartPoke.n, names.c_str());
 }
 
+// 二十四：点眼睛那一下的眨眼包络（0.18s 三角形：闭到 0 再睁回 1）。
+// 单独一个函数、在 partPokeTick 最前面调 —— 因为它和弹簧那套没有关系：
+// 弹簧晃完 `gPartPoke.on` 一关，partPokeTick 就提前 return 了，包络会断在半路。
+static void partPokeEyeTick(Csm::CubismModel* model, double now) {
+    if (!gPartPoke.eyeOn) return;
+    const double t = (now - gPartPoke.eyeT0) / 0.18;
+    if (t >= 1.0) {
+        gPartPoke.eyeOn = false;
+        // 睁回去：ParamEyeLOpen/ROpen 的模型默认值就是 1（睁眼）
+        if (gPartPoke.eyeL >= 0) model->SetParameterValue(gPartPoke.eyeL, 1.0f, 1.0f);
+        if (gPartPoke.eyeR >= 0) model->SetParameterValue(gPartPoke.eyeR, 1.0f, 1.0f);
+        log_("[part] 眼睛眨完，睁回 1.000");
+    } else {
+        const float v = static_cast<float>(std::fabs(1.0 - 2.0 * t));
+        if (gPartPoke.eyeL >= 0) model->SetParameterValue(gPartPoke.eyeL, v, 1.0f);
+        if (gPartPoke.eyeR >= 0) model->SetParameterValue(gPartPoke.eyeR, v, 1.0f);
+    }
+}
+
+// 二十四：嘴那一下的幅度（0..1）。PokeMouth 是 -1..1 的弹簧位移，取绝对值再乘 0.85 ——
+// 满量程时嘴巴张到八成，看得见，也不至于把嘴拉破。
+static float mouthPokeAmount(Csm::CubismModel* model) {
+    static Csm::csmInt32 idx = -2;
+    if (idx == -2) {
+        idx = model->GetParameterIndex(
+            Csm::CubismFramework::GetIdManager()->GetId("PokeMouth"));
+        if (idx < 0) log_("[part] 模型里没有 PokeMouth（嘴这一块不会动）");
+    }
+    if (idx < 0) return 0.0f;
+    const float v = model->GetParameterValue(idx);
+    const float a = (v < 0.0f ? -v : v) * 0.85f;
+    return a > 1.0f ? 1.0f : a;
+}
+
 static void partPokeTick(Csm::CubismModel* model, double now) {
     // ① 平台层点了新的部位
     if (partpoke::gGen != gPartPoke.lastGen) {
@@ -1473,6 +1698,7 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
         const std::string part(partpoke::gPart);
         if (!part.empty() && web::settings().tapPart) partPokeStart(model, part, now);
     }
+    partPokeEyeTick(model, now);
     if (!gPartPoke.on) return;
 
     // 弹簧-阻尼积分：a = -k*x - c*v，欠阻尼 → 冲出去、回来时过冲、震两下停。
@@ -1488,6 +1714,12 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
     float swayK = 1.0f;
     // 2026-11-10 13:5x：他说「0 是最大档、2 是最小档」，方向反了——
     // K 越大弹簧越硬、同样冲量下位移越小。所以档位越大 K 越小（越软、晃得越大）。
+    if (gPartPoke.part == "leg") {
+        const float ls = web::settings().legSway;
+        const float lo = ls < 2.0f ? ls : 2.0f;
+        const float hi = ls > 2.0f ? (ls - 2.0f) : 0.0f;
+        swayK = (1.75f - 0.75f * lo) - 0.15f * hi;
+    }
     if (gPartPoke.part == "chest") {
         // 0→2 段：K 从 1.75 平滑降到 0.25（原来那段手感不动）；2→3 段继续往软走，接到 0.10。
         const float cs = web::settings().chestSway;
@@ -3117,8 +3349,15 @@ int main() {
         const bool planDrivesMouth = plan::active() && plan::drives("ParamMouthOpenY");
         if (mouthI >= 0) {
             const float mv = ctl::mouth(now);
+            float mout = mv < 0.0f ? 0.02f : mv;      // 不说时只有一点呼吸
+            // 二十四：点嘴。**这一块不能靠物理** —— 上面这句 Set 每帧无条件写
+            // ParamMouthOpenY，物理的输出（physics 更早跑）当场被盖掉，实测两个
+            // 方向都是 0 px。所以「嘴戳动」的落地就在这儿：读物理弹簧写好的
+            // PokeMouth，取 |v| 叠上去（嘴只能往开的方向走，0..1 是单极的）。
+            const float pk = mouthPokeAmount(model);
+            if (pk > 0.0f && pk > mout) mout = pk;
             if (mv >= 0.0f || !planDrivesMouth)
-                model->SetParameterValue(mouthI, mv < 0.0f ? 0.02f : mv, 1.0f);   // 不说时只有一点呼吸
+                model->SetParameterValue(mouthI, mout, 1.0f);
         }
         // 视线：夹在待机微动之后（叠在它上面，不覆盖）、眨眼之前。
         // 用逻辑尺寸归一化 —— platPointer 给的是 surface-local 逻辑 px，不是物理 px。
@@ -3194,8 +3433,19 @@ int main() {
         if (const char* pk = std::getenv("MIYU_POKE")) {
             static double tPoke = -1.0;
             static int    dumped = 0, sincePoke = -1;
-            static bool   fired = false;
+            static bool   fired = false, preDumped = false;
             if (tPoke < 0.0) tPoke = now + 2.0;
+            // 二十四：点**之前**先导一帧当基准。以前第一帧是点之后第 8 帧（约 88ms），
+            // 那时弹簧已经走出去一截、嘴已经张开一半 —— 拿它当「点之前」量出来的倍数
+            // 天然偏小（尤其是嘴这种变化本来就小的部位）。
+            if (!preDumped && now >= tPoke - 0.12) {
+                if (const char* dp = std::getenv("MIYU_POKE_DIR")) {
+                    char pbuf[512];
+                    std::snprintf(pbuf, sizeof pbuf, "%s/poke-pre.raw", dp);
+                    gPendingDump = pbuf;
+                }
+                preDumped = true;
+            }
             if (!fired && now >= tPoke) {
                 const std::string part(pk);
                 if (partpoke::hasParams(part)) {
