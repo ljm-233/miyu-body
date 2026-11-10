@@ -144,13 +144,16 @@ bool buildTexture(const std::string& text, double lastSeconds) {
                                                    static_cast<float>(kRadius));
             if (covOut <= 0.0f) continue;
             // 外圈：柔和的蓝灰描边（比之前淡一档，不要硬边）
-            putPx(buf, w, fullH, x, y, 0.74f, 0.84f, 1.0f, 0.95f * covOut);
+            // 2026-11-11 03:0x：「颜色应该为 niri 窗口边框颜色」——
+            // 去 ~/.config/niri/dms/colors.kdl 抄的 #b0c6ff，不透明，和窗口边一模一样
+            putPx(buf, w, fullH, x, y, 0.690f, 0.776f, 1.0f, 1.0f * covOut);
             // 内圈：深底（往里缩 2px）
-            // 描边宽度：外扩 7px（之前 4px，他说太细）
-            const float covIn = roundRectCoverage(x + 0.5f - 7.0f, y + 0.5f - 7.0f,
-                                                  static_cast<float>(w) - 14.0f,
-                                                  static_cast<float>(h) - 14.0f,
-                                                  static_cast<float>(kRadius) - 7.0f);
+            // 描边宽度 = 4 物理像素 = **2 逻辑 px**（屏是 2 倍缩放）。
+            // 2026-11-11 03:3x 他说「换 2px 试试」。三个数要同步：偏移 N、宽高减 2N、圆角减 N。
+            const float covIn = roundRectCoverage(x + 0.5f - 4.0f, y + 0.5f - 4.0f,
+                                                  static_cast<float>(w) - 8.0f,
+                                                  static_cast<float>(h) - 8.0f,
+                                                  static_cast<float>(kRadius) - 4.0f);
             if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.07f, 0.09f, 0.14f, 0.94f * covIn);
         }
     }
@@ -162,7 +165,7 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             const int half = static_cast<int>(kTailW * 0.5f * t);
             for (int x = cx - half; x <= cx + half; ++x) {
                 const bool edge = (x <= cx - half + 1 || x >= cx + half - 1 || y == 0 || y == kTailH - 1);
-                if (edge) putPx(buf, w, fullH, x, h + y, 0.74f, 0.84f, 1.0f, 0.95f);
+                if (edge) putPx(buf, w, fullH, x, h + y, 0.690f, 0.776f, 1.0f, 1.0f);
                 else      putPx(buf, w, fullH, x, h + y, 0.07f, 0.09f, 0.14f, 0.94f);
             }
         }
