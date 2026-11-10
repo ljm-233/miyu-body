@@ -148,12 +148,12 @@ bool buildTexture(const std::string& text, double lastSeconds) {
             // 去 ~/.config/niri/dms/colors.kdl 抄的 #b0c6ff，不透明，和窗口边一模一样
             putPx(buf, w, fullH, x, y, 0.690f, 0.776f, 1.0f, 1.0f * covOut);
             // 内圈：深底（往里缩 2px）
-            // 描边宽度 = 4 物理像素 = **2 逻辑 px**（屏是 2 倍缩放）。
-            // 2026-11-11 03:3x 他说「换 2px 试试」。三个数要同步：偏移 N、宽高减 2N、圆角减 N。
-            const float covIn = roundRectCoverage(x + 0.5f - 4.0f, y + 0.5f - 4.0f,
-                                                  static_cast<float>(w) - 8.0f,
-                                                  static_cast<float>(h) - 8.0f,
-                                                  static_cast<float>(kRadius) - 4.0f);
+            // 描边宽度 = 5 物理像素 = **2.5 逻辑 px**（屏是 2 倍缩放）。
+            // 2026-11-11 03:4x 他要 2.5px。三个数要同步：偏移 N、宽高减 2N、圆角减 N。
+            const float covIn = roundRectCoverage(x + 0.5f - 5.0f, y + 0.5f - 5.0f,
+                                                  static_cast<float>(w) - 10.0f,
+                                                  static_cast<float>(h) - 10.0f,
+                                                  static_cast<float>(kRadius) - 5.0f);
             if (covIn > 0.0f) putPx(buf, w, fullH, x, y, 0.07f, 0.09f, 0.14f, 0.94f * covIn);
         }
     }
