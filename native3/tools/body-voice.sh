@@ -39,11 +39,13 @@ fail_bump() {    # $1=文本 $2=原因
 
 # try_synth 文本 key style → 0 成功；失败时原因写进 $REASON
 try_synth() {
-    t="$1"; k="$2"; style="$3"; REASON=""
+    # 注意：sh 的函数没有局部变量，这几个名字不能和 gen_one 里的 t/k 撞，
+    # 否则第三次「加长再合成」会把 t 改掉，index.tsv 就会记错句子
+    _t="$1"; _k="$2"; _style="$3"; REASON=""
     B=$(mktemp -d) || { REASON="mktemp 失败"; return 1; }
     mkdir -p "$B/o"
     # JSON 交给 python 写：文本里带引号/反斜杠时手写 printf 会把 JSON 弄坏
-    if ! python3 - "$t" "$style" "$B/o" "$B/req.json" <<'PY'
+    if ! python3 - "$_t" "$_style" "$B/o" "$B/req.json" <<'PY'
 import json, sys
 t, style, out, req = sys.argv[1:5]
 json.dump({"text": t, "style": style, "output_dir": out},
@@ -52,9 +54,9 @@ PY
     then
         REASON="写 request JSON 失败"; rm -rf "$B"; return 1
     fi
-    if "$PY" "$INFER" --request "$B/req.json" --style "$style" >"$B/out.log" 2>"$B/err.log"; then
+    if "$PY" "$INFER" --request "$B/req.json" --style "$_style" >"$B/out.log" 2>"$B/err.log"; then
         if [ -f "$B/o/speech.wav" ]; then
-            if cp "$B/o/speech.wav" "$VOICE/$k.wav"; then
+            if cp "$B/o/speech.wav" "$VOICE/$_k.wav"; then
                 rm -rf "$B"; return 0
             fi
             REASON="拷 wav 失败"; rm -rf "$B"; return 1
@@ -142,7 +144,8 @@ case "${1:---list}" in
       while IFS= read -r line; do
           [ -z "$line" ] && continue
           case "$line" in \#*) continue ;; esac
-          sh "$0" --gen-one "$line"    # 失败已在 gen_one 里记过，继续下一条
+          # tee 一份进 gen.log：批量跑的时候 stdout 常被重定向走，失败记录不能跟着一起丢
+          sh "$0" --gen-one "$line" 2>&1 | tee -a "$GENLOG"   # 失败已在 gen_one 里记过，继续下一条
       done < "$F"
       echo "=== $(now) 全部完成：$(ls "$VOICE"/*.wav 2>/dev/null | wc -l) 句" ;;
   *)
