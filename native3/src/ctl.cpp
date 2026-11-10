@@ -279,13 +279,9 @@ void voicePlay(const std::string& text) {
         log_("[voice] index 里有 %s 但文件不在（静默）", key.c_str());
         return;
     }
-    // 二十六（第三次修）：常驻流走不通 —— `pw-cat` 不认 stdin（sndfile 要求真文件），
-    // `pw-play -` 又从 stdin 读完整 wav 就退出，没法复用一条流。
-    // 但 `pw-play` 支持**一次念多个文件**，而且共用同一条流。所以每次播放都让它先念
-    // 一段 0.12 秒静音、紧接着念正文 —— 静音那段正好吃掉 pipewire 建流时丢样本的窗口，
-    // 用户听到的第一声就是正片。这样「牺牲品」这个位置就固定由静音来当。
-    const std::string sil = dir + "/silence.wav";
-    const bool useSil = (::access(sil.c_str(), R_OK) == 0);
+    // 二十六（第四次）：`pw-play` 的文件参数是**单数**（用法里写的是 [<文件>|-]），
+    // 传两个只会念第一个 —— 我上一版就是这样，结果每次都只播了静音，他一点声音都没有。
+    // 回到单文件；「第一声被 pipewire 吞掉」这个先如实留着（下一次点就正常）。
     char volbuf[16];
     std::snprintf(volbuf, sizeof volbuf, "%.2f", gVol);
     const pid_t pid = ::fork();
@@ -296,10 +292,7 @@ void voicePlay(const std::string& text) {
         ::freopen("/dev/null", "w", stdout);
         ::freopen("/dev/null", "w", stderr);
         const std::string volarg = std::string("--volume=") + volbuf;
-        if (useSil)
-            ::execlp("pw-play", "pw-play", volarg.c_str(), sil.c_str(), path.c_str(), (char*)nullptr);
-        else
-            ::execlp("pw-play", "pw-play", volarg.c_str(), path.c_str(), (char*)nullptr);
+        ::execlp("pw-play", "pw-play", volarg.c_str(), path.c_str(), (char*)nullptr);
         ::_exit(127);                               // 没有 pw-play 就走这条，什么都不响
     }
     int st = 0;
@@ -681,6 +674,20 @@ const char* sockPath() { return gPath.empty() ? "(未建)" : gPath.c_str(); }
 // 输出节点第一次要唤醒（几十毫秒～几百毫秒），第一声正好丢在这个窗口里。
 // 启动时先播一段 0.12 秒的静音，把流建起来，后面就都正常。
 void voiceWarmUp() {
+    // 二十六（第四修）：根因是 pipewire 的 sink **空闲时会 suspend**，被唤醒的头几百
+    // 毫秒丢样本 —— 所以「第一声没声音」每次换一个牺牲品（先是腿，后来是裙子）。
+    // 单次预热没用（那条流建完就结束）。正解是让 sink **一直醒着**：
+    // 起一个后台循环，极低音量反复播 0.12 秒静音。它占的是一条几乎无声的流，
+    // 但对 sink 来说「有活跃流」= 不 suspend，于是真正说话时第一声就完整。
+    {
+    const char* env = std::getenv("MIYU_VOICE_DIR");
+    const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
+    const std::string sil = dir + "/silence.wav";
+    if (::access(sil.c_str(), R_OK) == 0) {
+        std::string cmd = "while :; do pw-play --volume=0.01 '" + sil + "' 2>/dev/null; done &";
+        if (::system(cmd.c_str()) == 0) log_("[voice] 保温流已起（sink 保持醒着，第一声不再被吞）");
+    }
+    }
     sinkStart();
     if (gSink) return;
     const char* env = std::getenv("MIYU_VOICE_DIR");
