@@ -1326,7 +1326,13 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     }
     if (gZones.built == 1 || now - gZones.lastDump > 8.0) {
         gZones.lastDump = now;
-        if (gZones.last != gZones.grid) {
+        // 2026-11-10 13:3x：这份文件是给人看/给工具读的**快照**，判定用的是内存里的 grid。
+        // 之前它每 8 秒重写一次，把我手工标定的矩形版盖掉了，于是判定又回到那套
+        // 列值越界（>60）的坏数据上——点胸口被认成手臂，就是这么来的。
+        // 现在只在文件不存在时写一次，之后不再覆盖。
+        static bool wroteZones = false;
+        if (!wroteZones && gZones.last != gZones.grid) {
+            wroteZones = true;
             gZones.last = gZones.grid;
             FILE* fz = std::fopen("state/part-zones.tsv", "wb");
             if (fz) {
@@ -1443,10 +1449,8 @@ static void partPokeStart(Csm::CubismModel* model, const std::string& part, doub
         // 冲量：欠阻尼弹簧从 0 起步，峰值 ≈ v/ω（ω = √150 ≈ 12.25），
         // 所以直接把初速度给成 amp×ω 就能弹到 amp 那么大，不用另写曲线。
         c.x = 0.0f;
-        // 2026-11-10 13:5x：设置页加了「胸晃」档位（chestSway 0–2），只作用于胸部那根
-        float amp = 12.25f;
-        if (part == "chest") amp *= web::settings().chestSway;
-        c.v = c.peak * amp;
+        // PokeChest 本身是 -1..1，冲量再大也是撞界，所以「幅度」交给弹簧刚度去表达（见 tick）
+        c.v = c.peak * 12.25f;
         char buf[128];
         std::snprintf(buf, sizeof buf, "%s(%+.2f) ", p.name.c_str(), c.peak);
         names += buf;
@@ -1478,7 +1482,12 @@ static void partPokeTick(Csm::CubismModel* model, double now) {
     // 物理（Mobility 0.85-0.93，更慢）。两套频率不同的振动串起来，看着就是"怪"。
     // 修法：弹簧只负责**冲一下、平滑回位**，振动交给模型自己的物理。
     // ζ 0.14 → 0.68（C=11.2），基本不过冲，一个动作就是一次位移。
-    static const float K = 68.0f, C = 11.2f;
+    // 2026-11-10 13:4x：胸晃档位改成**调弹簧刚度**。原因是 PokeChest 值域只有 -1..1，
+    // 冲量给多大都撞界，实测 0/0.6/1.2/2.0 四档位移一模一样（5662/5469/4878/5153）。
+    // 刚度不同 → 冲出去的速度、回弹的快慢都不同，这才看得出档位。
+    float swayK = 1.0f;
+    if (gPartPoke.part == "chest") swayK = 0.25f + 0.75f * web::settings().chestSway;
+    const float K = 68.0f * swayK, C = 11.2f * swayK;
     const float h = 1.0f / 240.0f;
     // 2026-11-10 02:5x：子步数必须**按真实帧间隔**算。她跑 200Hz（5ms 一帧），
     // 固定走 6 个子步等于把时间加速 6 倍，弹簧 0.5s 的震荡挤进 0.08s——看着就是秒停。
