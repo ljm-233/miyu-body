@@ -1636,10 +1636,15 @@ void platSetInputRegionFromAlpha(const unsigned char* rgba, int w, int h, int th
             {
                 const OutInfo* oc = (W.curIdx >= 0 && W.curIdx < W.nouts) ? &W.outs[W.curIdx] : nullptr;
                 const int gx = oc ? oc->gx : 0, gy = oc ? oc->gy : 0;
-                LOG("[box] 全局：window=(%d,%d) output=(%+d,%+d) 她=[%d,%d .. %d,%d]（%dx%d）",
-                    W.posX, W.posY, gx, gy,
-                    gx + W.posX + bx0, gy + W.posY + by0,
-                    gx + W.posX + bx1, gy + W.posY + by1,
+                // 2026-11-10 11:2x：这里原来漏了顶栏的 exclusive zone —— margin 的 y=0 落在
+                // 可见区上沿（bar 下沿），换算全局要再加 bar 高，否则整条日志比真实位置高 39px。
+                // 昨晚所有截图工具都被这个坑过，现在补上。
+                int barH = 37;
+                if (const char* bh = getenv("MIYU_BAR_H")) barH = atoi(bh);
+                LOG("[box] 全局：window=(%d,%d) output=(%+d,%+d) bar=%d 她=[%d,%d .. %d,%d]（%dx%d）",
+                    W.posX, W.posY, gx, gy, barH,
+                    gx + W.posX + bx0, gy + barH + W.posY + by0,
+                    gx + W.posX + bx1, gy + barH + W.posY + by1,
                     bx1 - bx0, by1 - by0);
             }
             free(rs);

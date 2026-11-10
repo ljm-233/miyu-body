@@ -16,4 +16,4 @@ P	chest	ParamBodyAngleX	20	12.000	胸物理的 X 输入（Setting64 的 Input.So
 P	arm	ParamBodyAngleZ	10	8.750	手臂物理吃身体侧倾（Setting72/73 weight 10）；幅度压小
 P	skirt	HipAngleX	20	10.500	裙 X 物理的输入（Setting67/70 weight 50）；裙 2295 / 腿 11577
 P	leg	HipAngleX	28	12.000	盆骨 X → HipAngleX → 双腿；腿 11577 / 尾 4120（2.8×）
-P	tail	ParamBreath	92	1.000	呼吸；尾 11709 / 别的最大 1266（9.2×）
+P	tail	AngleX	92	16.000	尾巴物理 SetupX 吃 AngleX 权重 100；之前给 ParamBreath 权重只有 5
