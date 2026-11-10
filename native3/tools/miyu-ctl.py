@@ -5,17 +5,17 @@
 答案是：不算。此前要控制她得手写 JSON、记得 socket 路径、还要处理中文转义，
 连播个动作都得背出「默认手切举手.motion3.json」这种全名。那不叫简单。
 
-这个脚本就是把那些全收起来：
+这个脚本就是把那些全收起来。命令叫 `my`（全名 `miyu-ctl`）：
 
-    miyu say 有点累            说一句话（有缓存就出声）
-    miyu say 有点累 点头        说话 + 配一个动作
-    miyu walk 900 200          走过去
-    miyu do 举手               播一个动作（举手/竖手指/狗尾草/伸展…）
-    miyu face 前倾             换表情
-    miyu mood                  看她此刻什么状态
-    miyu list                  看有哪些动作和表情
+    my say 有点累            说一句话（有缓存就出声）
+    my say 有点累 点头        说话 + 配一个动作
+    my walk 900 200          走过去
+    my do 举手               播一个动作（举手/竖手指/狗尾草/伸展…）
+    my face 前倾             换表情
+    my mood                  看她此刻什么状态
+    my list                  看有哪些动作和表情
 
-动作名用简称就行，全名太长记不住。列表见 `miyu list`。
+动作名用简称就行，全名太长记不住。列表见 `my list`。
 """
 import json
 import os
@@ -66,7 +66,7 @@ def cur_mood():
 
 def cmd_say(args):
     if not args:
-        print("说点什么：miyu say 有点累", file=sys.stderr)
+        print("说点什么：my say 有点累", file=sys.stderr)
         return 1
     text = args[0]
     m = cur_mood()
@@ -79,14 +79,14 @@ def cmd_say(args):
 
 def cmd_walk(args):
     if len(args) < 2:
-        print("走到哪：miyu walk 900 200", file=sys.stderr)
+        print("走到哪：my walk 900 200", file=sys.stderr)
         return 1
     return 0 if send({"walkTo": {"x": float(args[0]), "y": float(args[1])}}) else 1
 
 
 def cmd_do(args):
     if not args:
-        print("做什么：miyu do 举手（miyu list 看全部）", file=sys.stderr)
+        print("做什么：my do 举手（my list 看全部）", file=sys.stderr)
         return 1
     name = args[0]
     if name in PLANS:
@@ -102,14 +102,14 @@ def cmd_do(args):
     if not full.endswith(".motion3.json"):
         full += ".motion3.json"
     if not os.path.exists(os.path.join(MOTION_DIR, full)):
-        print("没这个动作：%s（miyu list 看全部）" % name, file=sys.stderr)
+        print("没这个动作：%s（my list 看全部）" % name, file=sys.stderr)
         return 1
     return 0 if send({"motion": full}) else 1
 
 
 def cmd_face(args):
     if not args:
-        print("什么表情：miyu face 前倾", file=sys.stderr)
+        print("什么表情：my face 前倾", file=sys.stderr)
         return 1
     return 0 if send({"expr": args[0]}) else 1
 
@@ -132,12 +132,12 @@ def cmd_mood(_args):
 
 
 def cmd_list(_args):
-    print("动作（miyu do 名字）：")
+    print("动作（my do 名字）：")
     for k in MOTIONS:
         print("  %s" % k)
     for k in sorted(PLANS):
         print("  %s  （自己写的）" % k)
-    print("\n表情（miyu face 名字）：")
+    print("\n表情（my face 名字）：")
     try:
         names = sorted(n[:-len(".exp3.json")] for n in os.listdir(EXPR_DIR)
                        if n.endswith(".exp3.json"))
@@ -159,7 +159,7 @@ def main(argv):
         return 0
     fn = CMDS.get(argv[0])
     if not fn:
-        print("不认识：%s（试试 miyu help）" % argv[0], file=sys.stderr)
+        print("不认识：%s（试试 my help）" % argv[0], file=sys.stderr)
         return 1
     return fn(argv[1:])
 
