@@ -1783,6 +1783,73 @@ static float herReactionScale() {
     return std::max(0.45f, std::min(1.45f, 1.0f - 0.55f * herTired() + 0.45f * herHappy()));
 }
 
+// ── 二十六：她知道外面在发生什么 ──────────────────────────────
+//
+// 2026-11-11 01:2x：他说「二三同时做」，二 = 看得见你在干什么，三 = 记忆接进来。
+// 数据由 tools/world-sync.py 每 40 秒写一次 state/world.json（只读，不碰任何东西）：
+//   focus  你当前在用什么窗口
+//   clock  几点、什么时段
+//   today  今天日记的第一句 + 账本最后一条
+// 身体这边只做两件事：**知道**（打日志、供别处判断），**据此调整自己**。
+struct World {
+    std::string app, title, period, diary, ledger;
+    int hour = -1;
+    bool valid = false;
+};
+static World gWorld;
+
+static std::string jstr(const std::string& t, const char* key) {
+    // 宽松解析：找 "key" 之后跳过空白和冒号，再跳过一个引号，取到下一个引号为止。
+    // 之前写死 `"key":"` 匹配不上 —— python 的 json.dump 默认是 `"key": "value"`（冒号后有空格），
+    // 结果就是全空。这是我这行代码的错，不是文件没写。
+    const std::string k = std::string("\"") + key + "\"";
+    const size_t p = t.find(k);
+    if (p == std::string::npos) return "";
+    size_t i = p + k.size();
+    while (i < t.size() && (t[i] == ' ' || t[i] == ':' || t[i] == '\t')) ++i;
+    if (i >= t.size() || t[i] != '"') return "";
+    ++i;
+    std::string out;
+    while (i < t.size() && t[i] != '"') {
+        if (t[i] == '\\' && i + 1 < t.size()) ++i;
+        out += t[i++];
+    }
+    return out;
+}
+
+static void worldTick(double now) {
+    static double last = -1e9;
+    if (now - last < 40.0) return;
+    last = now;
+    ::system("python3 /home/link/.dsh/miyu/body/native3/tools/world-sync.py >/dev/null 2>&1 &");
+    std::ifstream f("state/world.json");
+    if (!f) return;
+    std::string t((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (t.empty()) return;
+    gWorld.app    = jstr(t, "app");
+    gWorld.title  = jstr(t, "title");
+    gWorld.period = jstr(t, "period");
+    gWorld.diary  = jstr(t, "diary");
+    gWorld.ledger = jstr(t, "ledger");
+    {
+        const size_t p = t.find("\"hour\":");
+        if (p != std::string::npos) gWorld.hour = std::atoi(t.c_str() + p + 7);
+    }
+    gWorld.valid = true;
+    // 2026-11-11 01:3x：主循环的 look/blink 日志太多，journald 会限速丢行 ——
+    // 这条一直被丢，我在 journalctl 里怎么都看不到，白排查半小时。
+    // 所以这一行**直接写文件**，不经过 journald。
+    {
+        FILE* wf = std::fopen("state/world-read.log", "a");
+        if (wf) {
+            std::fprintf(wf, "%s %d点 | 你在 %s | 日记: %s\n",
+                         gWorld.period.c_str(), gWorld.hour, gWorld.app.c_str(),
+                         gWorld.diary.empty() ? "(没有)" : gWorld.diary.substr(0, 40).c_str());
+            std::fclose(wf);
+        }
+    }
+}
+
 // ── 二十六：她自己会动 ────────────────────────────────────────────
 //
 // 2026-11-11 01:2x 他说「都是米鱼，去试试解决」。缺的第一条是：
@@ -1814,6 +1881,8 @@ static void autonomyTick(Csm::CubismModel* model, Csm::CubismMotionManager* mm, 
     // 累了就隔久一点，精神就勤一点
     const float ty = herTired(), hp = herHappy();
     double gap = 420.0 - 260.0 * hp + 300.0 * ty;   // 4.4 分钟（精神）~ 12 分钟（累）
+    // 外面是深夜（0-4 点）就再安静一点 —— 她知道现在几点，这属于「知道外面的事」
+    if (gWorld.valid && (gWorld.hour >= 0 && gWorld.hour < 5)) gap *= 1.8;
     if (gap < 120.0) gap = 120.0;
     if (gap > 900.0) gap = 900.0;
     gAuto.nextAt = now + gap;
@@ -3951,6 +4020,7 @@ int main() {
         probeTick(model, now);
         partPokeTick(model, now);
         herStateTick(now);
+        worldTick(now);
         autonomyTick(model, motionManager, now);
         // 她的状态 → 姿态。连续量，不是开关：累了整个人往下沉、头低一点；
         // 开心的时候反过来。这是「身体反映她」最直接的一层。
