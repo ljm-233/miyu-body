@@ -55,15 +55,37 @@ def load_calib():
         return {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "open": 1.0}
 
 
-def grab(w, h, dev):
-    """ffmpeg 抓一帧 rawvideo。不依赖 cv2。"""
-    raw = subprocess.run(
-        ["ffmpeg", "-loglevel", "quiet", "-f", "v4l2", "-video_size", f"{w}x{h}",
-         "-i", dev, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
-        capture_output=True, timeout=10).stdout
-    if len(raw) != w * h * 3:
-        return None
-    return np.frombuffer(raw, np.uint8).reshape(h, w, 3)
+class Camera:
+    """一个常驻的 ffmpeg 持续吐 rawvideo。
+
+    2026-11-12 00:0x：**卡顿的根因就在这儿**。第一版是每帧起一个 ffmpeg 抓一张
+    （`subprocess.run` + `-frames:v 1`），30fps 就是每秒 fork/exec 三十次子进程 ——
+    身体那边帧率直接掉下来，他一句「动起来好卡」。
+    改成开一次、一直读：进程只起一次，之后就是 read 固定字节数。
+    """
+
+    def __init__(self, w, h, dev, fps):
+        self.w, self.h = w, h
+        self.size = w * h * 3
+        self.proc = subprocess.Popen(
+            ["ffmpeg", "-loglevel", "quiet", "-f", "v4l2",
+             "-video_size", f"{w}x{h}", "-framerate", str(fps),
+             "-i", dev, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=self.size * 2)
+
+    def read(self):
+        """读满一帧。拿不到就返回 None（摄像头掉线 / 被别的程序抢）。"""
+        buf = self.proc.stdout.read(self.size)
+        if not buf or len(buf) != self.size:
+            return None
+        return np.frombuffer(buf, np.uint8).reshape(self.h, self.w, 3)
+
+    def close(self):
+        try:
+            self.proc.terminate()
+            self.proc.wait(timeout=2)
+        except Exception:
+            pass
 
 
 def euler_from_matrix(m):
@@ -122,7 +144,7 @@ def write_state(d, ok=True):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
-    ap.add_argument("--fps", type=int, default=30)
+    ap.add_argument("--fps", type=int, default=20)
     ap.add_argument("--dev", default=DEV)
     ap.add_argument("--w", type=int, default=640)
     ap.add_argument("--h", type=int, default=480)
@@ -145,7 +167,9 @@ def main():
     lm = vision.FaceLandmarker.create_from_options(opts)
 
     if a.once:
-        raw = grab(a.w, a.h, a.dev)
+        cam = Camera(a.w, a.h, a.dev, 30)
+        raw = cam.read()
+        cam.close()
         if raw is None:
             print("抓帧失败", file=sys.stderr)
             return 1
@@ -155,6 +179,7 @@ def main():
         print(json.dumps(d, ensure_ascii=False, indent=1) if d else "没检测到脸")
         return 0 if d else 2
 
+    cam = Camera(a.w, a.h, a.dev, a.fps)
     period = 1.0 / max(1, a.fps)
     lost = 0
     smooth = None
@@ -164,7 +189,7 @@ def main():
     try:
         while True:
             t0 = time.time()
-            raw = grab(a.w, a.h, a.dev)
+            raw = cam.read()
             if raw is None:
                 lost += 1
                 if lost > 5:
@@ -196,6 +221,7 @@ def main():
             if dt < period:
                 time.sleep(period - dt)
     except KeyboardInterrupt:
+        cam.close()
         print("\n停了")
         write_state({"yaw": 0, "pitch": 0, "roll": 0, "eyeL": 1, "eyeR": 1,
                      "mouth": 0, "eyeX": 0, "eyeY": 0}, ok=False)
