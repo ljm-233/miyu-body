@@ -86,6 +86,13 @@ def pick_tags(mood, world):
         return ["happy"]
     if care >= 70:
         return ["miss"]
+    # 2026-11-11 21:1x：加了 watch 组（你忙你的 / 我在这儿看着 / 不打扰你…）。
+    # 你在写代码、写东西的时候说这些才自然。判据是 world.json 里的焦点窗口。
+    app = str(world.get("focus", {}).get("app", "")).lower()
+    busy = any(k in app for k in ("code", "nvim", "vim", "terminal", "kitty", "alacritty", "emacs"))
+    if busy and 9 <= hour <= 23:
+        return ["watch"]
+
     # 2026-11-11 22:1x：第一版默认走 greet/ack，试跑出来是「你问吧」「在的」——
     # 那是**应答**，没人问她的时候说这个很怪。主动开口只用「自言自语」那一类：
     # night / tired / low / happy / miss。greet 要等你真的刚回来才用（还没做检测），
