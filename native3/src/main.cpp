@@ -1715,8 +1715,13 @@ struct FaceRig {
     Csm::csmInt32 iAx = -1, iAy = -1, iAz = -1;
     Csm::csmInt32 iEyeL = -1, iEyeR = -1, iMouth = -1;
     Csm::csmInt32 iEx = -1, iEy = -1;
+    Csm::csmInt32 iBx = -1, iBy = -1, iBz = -1;      // ParamBodyAngleX/Y/Z：身子跟着转
+    Csm::csmInt32 iBrowL = -1, iBrowR = -1;          // 眉毛（笑/皱眉）
+    Csm::csmInt32 iSmile = -1;                        // 嘴角
     // 平滑后的当前值（度 / 0..1 / -1..1）
     float ax = 0, ay = 0, az = 0, eyeL = 1, eyeR = 1, mouth = 0, ex = 0, ey = 0;
+    float bx = 0, bz = 0;            // 身体转
+    float brow = 0, smile = 0;       // 表情：抬头纹 / 嘴角
     bool  ready = false;
     bool  live = false;      // 这一次读到的 face.json 是「有脸」的
     double lastRead = -1e9;
@@ -1736,6 +1741,14 @@ static void faceInit(Csm::CubismModel* model) {
     gFace.iMouth = model->GetParameterIndex(m->GetId("ParamMouthOpenY"));
     gFace.iEx  = model->GetParameterIndex(m->GetId("ParamEyeBallX"));
     gFace.iEy  = model->GetParameterIndex(m->GetId("ParamEyeBallY"));
+    // 2026-11-12 00:4x：他问「身体怎么不会跟着我动」—— 第一版只映了头。
+    // 真人是头转多少、肩和胯跟着转一部分（大约 1/3），脖子才不会扭成 90 度。
+    gFace.iBx  = model->GetParameterIndex(m->GetId("ParamBodyAngleX"));
+    gFace.iBy  = model->GetParameterIndex(m->GetId("ParamBodyAngleY"));
+    gFace.iBz  = model->GetParameterIndex(m->GetId("ParamBodyAngleZ"));
+    gFace.iBrowL = model->GetParameterIndex(m->GetId("ParamBrowLY"));
+    gFace.iBrowR = model->GetParameterIndex(m->GetId("ParamBrowRY"));
+    gFace.iSmile = model->GetParameterIndex(m->GetId("MouthSmile_L"));
     gFace.ready = true;
     log_("[face] 摄像头模式：AngleX=%d AngleY=%d AngleZ=%d 眼=%d/%d 嘴=%d 眼球=%d/%d",
          gFace.iAx, gFace.iAy, gFace.iAz, gFace.iEyeL, gFace.iEyeR, gFace.iMouth, gFace.iEx, gFace.iEy);
@@ -1774,6 +1787,8 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
                 gFace.mouth = jnum(t, "mouth", 0);
                 gFace.ex = jnum(t, "eyeX", 0);
                 gFace.ey = jnum(t, "eyeY", 0);
+                gFace.brow = jnum(t, "brow", 0);
+                gFace.smile = jnum(t, "smile", 0);
             }
         }
     }
@@ -1784,6 +1799,7 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     const float at = gFace.live ? a : (dt * 3.0f > 1.0f ? 1.0f : dt * 3.0f);
 
     static float sax = 0, say = 0, saz = 0, sEyeL = 1, sEyeR = 1, sMouth = 0, sex = 0, sey = 0;
+    static float sbrow = 0, ssmile = 0;
     const float tax = gFace.live ? gFace.ax : 0.0f;
     const float tay = gFace.live ? gFace.ay : 0.0f;
     const float taz = gFace.live ? gFace.az : 0.0f;
@@ -1796,6 +1812,9 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     sEyeL += (tEyeL - sEyeL) * a;    sEyeR += (tEyeR - sEyeR) * a;
     sMouth += (tMouth - sMouth) * a;
     sex += (tex - sex) * a;          sey += (tey - sey) * a;
+    const float tBrow = gFace.live ? gFace.brow : 0.0f;
+    const float tSmile = gFace.live ? gFace.smile : 0.0f;
+    sbrow += (tBrow - sbrow) * a;    ssmile += (tSmile - ssmile) * a;
 
     // 幅度：模型 AngleX 满量程 ±30，但真人转 30° 已经很夸张，压到 0.7 更像活人
     const float kAng = 0.7f;
@@ -1810,6 +1829,16 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     }
     if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, sex, 1.0f);
     if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, sey, 1.0f);
+
+    // 26：身子跟着头转 —— 真人是头转 1、肩胯转 1/3 左右；轴朝下的 Y 不跟，
+    // 因为「探头」那种上下位移靠头就够了，身上再动会像摇晃。
+    if (gFace.iBx >= 0) model->SetParameterValue(gFace.iBx, sax * 0.35f, 1.0f);
+    if (gFace.iBz >= 0) model->SetParameterValue(gFace.iBz, saz * 0.25f, 1.0f);
+
+    // 26：表情 —— 抬眉和嘴角。这两项是「跟着你笑」，跟你说话时的那点表情走。
+    if (gFace.iBrowL >= 0) model->SetParameterValue(gFace.iBrowL, -sbrow * 18.0f, 1.0f);
+    if (gFace.iBrowR >= 0) model->SetParameterValue(gFace.iBrowR, -sbrow * 18.0f, 1.0f);
+    if (gFace.iSmile >= 0) model->SetParameterValue(gFace.iSmile, ssmile, 1.0f);
 
     static double lastLog = -1e9;
     if (now - lastLog > 5.0) {
@@ -4133,6 +4162,11 @@ int main() {
         static int nFrames = 0;
         static double lastProf = 0;
         const double tA = platTime();
+        // 二十六：摄像头模式。**必须在 physics 之前**（2026-11-12 01:0x 改过来的）：
+        // 第一版放在 physics 之后，结果他问「头发这么没有重力」——因为头发是物理链，
+        // 吃的输入是 ParamAngleX，physics 先算完、头后转，头发永远慢一帧、看起来没惯性。
+        // 现在先把头写进去，physics 基于这一帧的新头姿算头发。
+        faceTick(model, dt, now, ws.face);
         if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
         // 二十一：探针和「点哪动哪」必须排在 physics **后面**。
         // CubismPhysics 写输出参数时 weight=1.0 是**硬覆盖**（Framework/src/Physics/
@@ -4197,10 +4231,6 @@ int main() {
         // 它在拖动的每一帧都会把 PokeLeg 写掉 —— 走路写在这之前等于白写，
         // 他看到的「脚和腿根本没动」就是这个。
         walkTick(model, motionManager, now, dt);
-        // 二十六：摄像头模式。放这儿是因为它要当**这一帧最后一个写姿态的人**——
-        // physics 已经算完（4016 行），walkTick 也写过了，后面只剩 Update。
-        // 开着的时候它会盖掉视线跟随和待机微动，这是有意的：姿态由镜头里他决定。
-        faceTick(model, dt, now, ws.face);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。

@@ -117,6 +117,9 @@ def read_face(res):
     eye_l = max(0.0, min(1.0, 1.0 - blink_l))
     eye_r = max(0.0, min(1.0, 1.0 - blink_r))
     mouth = max(0.0, min(1.0, bs.get("jawOpen", 0.0)))
+    brow = (bs.get("browInnerUp", 0.0) + bs.get("browOuterUpLeft", 0.0)
+            + bs.get("browOuterUpRight", 0.0)) / 3.0
+    smile = (bs.get("mouthSmileLeft", 0.0) + bs.get("mouthSmileRight", 0.0)) / 2.0
     # 眼球：右眼的左右上下（左眼那套在镜像下不稳定，取平均）
     ex = (bs.get("eyeLookOutLeft", 0.0) - bs.get("eyeLookInLeft", 0.0)
           + bs.get("eyeLookInRight", 0.0) - bs.get("eyeLookOutRight", 0.0)) * 0.5
@@ -127,7 +130,8 @@ def read_face(res):
         pitch, yaw, roll = euler_from_matrix(res.facial_transformation_matrixes[0])
     return dict(yaw=yaw, pitch=pitch, roll=roll,
                 eyeL=eye_l, eyeR=eye_r, mouth=mouth,
-                eyeX=max(-1.0, min(1.0, ex)), eyeY=max(-1.0, min(1.0, ey)))
+                eyeX=max(-1.0, min(1.0, ex)), eyeY=max(-1.0, min(1.0, ey)),
+                brow=brow, smile=smile)
 
 
 def write_state(d, ok=True):
