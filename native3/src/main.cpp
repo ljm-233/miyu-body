@@ -1861,6 +1861,11 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     // 运动曲线是连续的一点一点走，不再是每 33ms 跳一格。
     // 插值比例超过 1 就停住（数据还没来，不能预测过头，否则会甩）。
     {
+        // 2026-11-12 00:4x：他说「头转动我要流畅」。摄像头硬上限就是 30fps
+        // （v4l2 查过，MJPG/YUYV 所有分辨率都是 30 封顶），采集端提不上去。
+        // 光做线性插值不够 —— 数据点处方向会突变，还是能看出 33ms 一拐。
+        // 所以改成：**线性插值给目标 + 临界阻尼弹簧跟随**。
+        // 弹簧有速度，过数据点时不会急停急拐，曲线是顺的；而且它能"吃掉"抖动。
         const double span = (gFace.tNew > gFace.tPrev) ? (gFace.tNew - gFace.tPrev) : 0.033;
         float k = static_cast<float>((now - gFace.tNew) / span);
         if (k < 0.0f) k = 0.0f;
@@ -1877,16 +1882,30 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
             gFace.pv[8] + (gFace.cv[8] - gFace.pv[8]) * k,
         };
         if (gFace.live) {
-            if (gFace.iAx >= 0) model->SetParameterValue(gFace.iAx, iv[0] * 0.9f, 1.0f);
-            if (gFace.iAy >= 0) model->SetParameterValue(gFace.iAy, iv[1] * 0.9f, 1.0f);
-            if (gFace.iAz >= 0) model->SetParameterValue(gFace.iAz, iv[2] * 0.5f, 1.0f);
-            if (gFace.iEyeL >= 0) model->SetParameterValue(gFace.iEyeL, iv[3], 1.0f);
-            if (gFace.iEyeR >= 0) model->SetParameterValue(gFace.iEyeR, iv[4], 1.0f);
+            // 临界阻尼弹簧：k1 定快慢，k2 = 2*sqrt(k1) 刚好不过冲。
+            // 角度要跟得紧（人转头很快），眼睛和嘴可以慢一点。
+            static float sv2[9] = {0, 0, 0, 1, 1, 0, 0, 0, 0};   // 当前值
+            static float vv2[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};   // 速度
+            const float k1Ang = 900.0f,  k2Ang = 60.0f;    // 角度：约 60ms 到位
+            const float k1Fast = 1400.0f, k2Fast = 75.0f;  // 眼/嘴：更快
+            const float d = (dt > 0.05f) ? 0.05f : dt;
+            for (int i = 0; i < 9; ++i) {
+                const bool isAng = (i <= 2);
+                const float k1 = isAng ? k1Ang : k1Fast;
+                const float k2 = isAng ? k2Ang : k2Fast;
+                vv2[i] += ((iv[i] - sv2[i]) * k1 - vv2[i] * k2) * d;
+                sv2[i] += vv2[i] * d;
+            }
+            if (gFace.iAx >= 0) model->SetParameterValue(gFace.iAx, sv2[0] * 0.9f, 1.0f);
+            if (gFace.iAy >= 0) model->SetParameterValue(gFace.iAy, sv2[1] * 0.9f, 1.0f);
+            if (gFace.iAz >= 0) model->SetParameterValue(gFace.iAz, sv2[2] * 0.5f, 1.0f);
+            if (gFace.iEyeL >= 0) model->SetParameterValue(gFace.iEyeL, sv2[3], 1.0f);
+            if (gFace.iEyeR >= 0) model->SetParameterValue(gFace.iEyeR, sv2[4], 1.0f);
             if (gFace.iMouth >= 0 && ctl::mouth(now) < 0.0f)
-                model->SetParameterValue(gFace.iMouth, iv[5], 1.0f);
-            if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, iv[6], 1.0f);
-            if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, iv[7], 1.0f);
-            if (gFace.iSmile >= 0) model->SetParameterValue(gFace.iSmile, iv[8], 1.0f);
+                model->SetParameterValue(gFace.iMouth, sv2[5], 1.0f);
+            if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, sv2[6], 1.0f);
+            if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, sv2[7], 1.0f);
+            if (gFace.iSmile >= 0) model->SetParameterValue(gFace.iSmile, sv2[8], 1.0f);
         }
     }
 
