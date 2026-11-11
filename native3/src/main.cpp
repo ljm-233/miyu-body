@@ -1779,7 +1779,7 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     if (!on) { gFace.live = false; return; }
 
     // 每 1/30 秒读一次就够（py 那边写的是原子替换，不会读到半个文件）
-    if (now - gFace.lastRead > 0.033) {
+    if (now - gFace.lastRead > 0.010) {   // 2026-11-12 00:1x：33ms 太疏，延迟堆起来像「不动」
         gFace.lastRead = now;
         std::ifstream f("state/face.json");
         if (f) {
@@ -1807,7 +1807,7 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
 
     // 脸丢了就慢慢回默认（硬切会像断电）
     static float idle = 0.0f;
-    const float a = (dt * 12.0f > 1.0f) ? 1.0f : dt * 12.0f;   // 跟手一点，摄像头模式要跟得上
+    const float a = (dt * 22.0f > 1.0f) ? 1.0f : dt * 22.0f;   // 22：延迟每降一点，跟手感都好一截
     const float at = gFace.live ? a : (dt * 3.0f > 1.0f ? 1.0f : dt * 3.0f);
 
     static float sax = 0, say = 0, saz = 0, sEyeL = 1, sEyeR = 1, sMouth = 0, sex = 0, sey = 0;
@@ -1829,7 +1829,7 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     sbrow += (tBrow - sbrow) * a;    ssmile += (tSmile - ssmile) * a;
 
     // 幅度：模型 AngleX 满量程 ±30，但真人转 30° 已经很夸张，压到 0.7 更像活人
-    const float kAng = 0.7f;
+    const float kAng = 0.9f;
     if (gFace.iAx >= 0) model->SetParameterValue(gFace.iAx, sax * kAng, 1.0f);
     if (gFace.iAy >= 0) model->SetParameterValue(gFace.iAy, say * kAng, 1.0f);
     if (gFace.iAz >= 0) model->SetParameterValue(gFace.iAz, saz * 0.5f, 1.0f);
@@ -4185,7 +4185,6 @@ int main() {
         // 2026-11-12 00:2x：兽耳那段掐权重的改动**撤了**。他说「兽耳应该回到默认情况」——
         // 把 LControl/RControl 设 0 之后，耳链整个不跑了，耳朵僵在那里，比跟着甩更假。
         // 默认就是它跟着头一起动，那是美术在设计时就定好的。
-        if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
         // 二十一：探针和「点哪动哪」必须排在 physics **后面**。
         // CubismPhysics 写输出参数时 weight=1.0 是**硬覆盖**（Framework/src/Physics/
         // CubismPhysics.cpp 里 `*parameterValue = value`），而模型里有一大半好看的
