@@ -1799,7 +1799,10 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
             gFace.live = ok;
             if (ok) {
                 gFace.ax = jnum(t, "yaw", 0) * -1.0f;    // 他往右转 → 我也往右（镜像）
-                gFace.ay = jnum(t, "pitch", 0);          // 实测：pitch 正 = 低头，ParamAngleY 正也是低头，直接用
+                // 2026-11-12 01:0x：他说「我的头向上，她的头向下，反过来了」——实测反的，取负。
+                // 之前我在 FORCE_PARAM 上试过 ParamAngleY 正 = 低头，但那是「直接按死输出」；
+                // 走 AngleY（物理输入）这条路时符号是反的，两个通道不是一回事。
+                gFace.ay = jnum(t, "pitch", 0) * -1.0f;
                 gFace.az = jnum(t, "roll", 0);
                 gFace.eyeL = jnum(t, "eyeL", 1);
                 gFace.eyeR = jnum(t, "eyeR", 1);
