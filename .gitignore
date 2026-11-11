@@ -52,3 +52,7 @@ input-probe/input-probe
 
 # 模型源文件（PSD 131MB + 清单），本机用，不进仓
 model-src/
+
+# 台词标签表是数据不是缓存，要进仓（音频缓存那些还是不进）
+!voice/lines.tsv
+!voice/blocks/index.tsv
