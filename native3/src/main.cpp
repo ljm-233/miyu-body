@@ -1726,6 +1726,13 @@ struct FaceRig {
     bool  ready = false;
     bool  live = false;      // 这一次读到的 face.json 是「有脸」的
     double lastRead = -1e9;
+    // 2026-11-12 00:3x：他要 60fps。**摄像头最高只有 30fps**（v4l2 查过，所有分辨率都是
+    // 30 封顶），采集端提不上去。所以改成在渲染侧插值：记住「上一份数据」和「这一份数据」
+    // 加各自的时间戳，每帧按 now 在两者之间线性推进 —— 运动曲线就是 200fps 采样的，
+    // 不再有 33ms 一次的阶梯。
+    float pv[9] = {0, 0, 0, 1, 1, 0, 0, 0, 0};   // 上一份（ax ay az eyeL eyeR mouth ex ey smile）
+    float cv[9] = {0, 0, 0, 1, 1, 0, 0, 0, 0};   // 这一份
+    double tNew = -1e9, tPrev = -1e9;
 };
 static FaceRig gFace;
 
@@ -1801,6 +1808,13 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
                 gFace.ey = jnum(t, "eyeY", 0);
                 gFace.brow = jnum(t, "brow", 0);
                 gFace.smile = jnum(t, "smile", 0);
+                // 把旧的挪成 prev，新的填进 cv
+                for (int i = 0; i < 9; ++i) gFace.pv[i] = gFace.cv[i];
+                gFace.tPrev = gFace.tNew;
+                gFace.cv[0] = gFace.ax; gFace.cv[1] = gFace.ay; gFace.cv[2] = gFace.az;
+                gFace.cv[3] = gFace.eyeL; gFace.cv[4] = gFace.eyeR; gFace.cv[5] = gFace.mouth;
+                gFace.cv[6] = gFace.ex;  gFace.cv[7] = gFace.ey;  gFace.cv[8] = gFace.smile;
+                gFace.tNew = now;
             }
         }
     }
@@ -1841,6 +1855,40 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     }
     if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, sex, 1.0f);
     if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, sey, 1.0f);
+
+    // 2026-11-12 00:3x：**60fps 的插值**。摄像头只能给 30fps，所以这里不变频，
+    // 而是在两份数据之间按 now 线性推进 —— 渲染侧每帧（现在 180+）都拿到一个新值，
+    // 运动曲线是连续的一点一点走，不再是每 33ms 跳一格。
+    // 插值比例超过 1 就停住（数据还没来，不能预测过头，否则会甩）。
+    {
+        const double span = (gFace.tNew > gFace.tPrev) ? (gFace.tNew - gFace.tPrev) : 0.033;
+        float k = static_cast<float>((now - gFace.tNew) / span);
+        if (k < 0.0f) k = 0.0f;
+        if (k > 1.0f) k = 1.0f;
+        const float iv[9] = {
+            gFace.pv[0] + (gFace.cv[0] - gFace.pv[0]) * k,
+            gFace.pv[1] + (gFace.cv[1] - gFace.pv[1]) * k,
+            gFace.pv[2] + (gFace.cv[2] - gFace.pv[2]) * k,
+            gFace.pv[3] + (gFace.cv[3] - gFace.pv[3]) * k,
+            gFace.pv[4] + (gFace.cv[4] - gFace.pv[4]) * k,
+            gFace.pv[5] + (gFace.cv[5] - gFace.pv[5]) * k,
+            gFace.pv[6] + (gFace.cv[6] - gFace.pv[6]) * k,
+            gFace.pv[7] + (gFace.cv[7] - gFace.pv[7]) * k,
+            gFace.pv[8] + (gFace.cv[8] - gFace.pv[8]) * k,
+        };
+        if (gFace.live) {
+            if (gFace.iAx >= 0) model->SetParameterValue(gFace.iAx, iv[0] * 0.9f, 1.0f);
+            if (gFace.iAy >= 0) model->SetParameterValue(gFace.iAy, iv[1] * 0.9f, 1.0f);
+            if (gFace.iAz >= 0) model->SetParameterValue(gFace.iAz, iv[2] * 0.5f, 1.0f);
+            if (gFace.iEyeL >= 0) model->SetParameterValue(gFace.iEyeL, iv[3], 1.0f);
+            if (gFace.iEyeR >= 0) model->SetParameterValue(gFace.iEyeR, iv[4], 1.0f);
+            if (gFace.iMouth >= 0 && ctl::mouth(now) < 0.0f)
+                model->SetParameterValue(gFace.iMouth, iv[5], 1.0f);
+            if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, iv[6], 1.0f);
+            if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, iv[7], 1.0f);
+            if (gFace.iSmile >= 0) model->SetParameterValue(gFace.iSmile, iv[8], 1.0f);
+        }
+    }
 
     // 26：身体 —— **直写没用**，查 physics3 才知道：
     //   PhysicsSetting4: 输入 PositionX → 输出 ParamBodyAngleX
