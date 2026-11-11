@@ -37,8 +37,8 @@ import sys
 VOICE = os.path.expanduser("~/.dsh/miyu/body/voice")
 BLOCKS = os.path.join(VOICE, "blocks")
 BLOCKS_TSV = os.path.join(BLOCKS, "index.tsv")
-NOISE = "-40dB"
-MIND = "0.05"
+NOISE = "-35dB"   # 2026-11-11 17:5x：-40dB 太宽松，把气声当静音，切出来的块头尾带一截空的
+MIND = "0.03"
 
 
 def key_of(text):
@@ -79,7 +79,12 @@ def voiced_range(path):
         segs.append((prev, d))
     if not segs:
         return None
-    return max(0.0, segs[0][0] - 0.02), min(d, segs[-1][1] + 0.05)
+    # 2026-11-11 18:0x：根因找到了。CosyVoice 念单字会出**好几段有声**，中间夹着
+    # 大半秒静音（「我」= 0-0.09 有声、0.09-0.36 静音、0.36-0.79 有声）。
+    # 之前取「第一段到最后一整段」，等于把中间那段静音原样端出来，拼起来就一顿一顿。
+    # 现在只保留**最长的那段**（一般就是主音），前后各留 25/45ms。
+    main = max(segs, key=lambda ab: ab[1] - ab[0])
+    return max(0.0, main[0] - 0.025), min(d, main[1] + 0.045)
 
 
 def load_index():
@@ -110,10 +115,15 @@ def trim(words):
         a, b = vr
         span = b - a
         dst = os.path.join(BLOCKS, key_of(w) + ".wav")
+        # 2026-11-11 17:3x：这里踩了个大坑 —— 之前用 `-ss a -t span` 再叠 afade，
+        # 切出来的文件**全是静音**（-91dB）。他说「听不到」，我量了才发现。
+        # 原因：`-ss` 之后音频 PTS 是从 a 开始的绝对时间，而 afade 的 st= 也按绝对时间算，
+        # `afade=t=out:st=0.494` 落在 1.33 之前 → 整个片段一进来就已经淡完了。
+        # 改成全在滤镜里做：atrim 切 → asetpts 归零 → 再淡入淡出。这样 st 才真是相对起点。
         fade_out = max(0.0, span - 0.006)
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src,
-                        "-ss", f"{a:.3f}", "-t", f"{span:.3f}",
-                        "-af", f"afade=t=in:st=0:d=0.006,afade=t=out:st={fade_out:.3f}:d=0.006",
+                        "-af", f"atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS,"
+                               f"afade=t=in:st=0:d=0.006,afade=t=out:st={fade_out:.3f}:d=0.006",
                         "-ar", "24000", "-ac", "1", dst], check=True)
         idx[w] = os.path.basename(dst)
         ok += 1
@@ -141,15 +151,23 @@ def say(sentence, out="/tmp/voice-blocks-say.wav"):
         seq.append(hit)
         i += len(hit)
     files = [os.path.join(BLOCKS, idx[w]) for w in seq]
+    # 2026-11-11 17:4x：他说「能听出来，但怪怪的」——量了一下拼出来的句子，
+    # 词与词之间有 0.18~0.21 秒的空档（正常连读不到 0.1 秒），听着像报菜名。
+    # 原因是修剪时每块首尾各留了 60/120ms，两块接起来就是 180ms。
+    # 拼接前把每块的静音再收一次：只在词间留 35ms。
     for w, f in zip(seq, files):
         if not os.path.exists(f):
             print(f"词块文件不在：{f}", file=sys.stderr)
             return 1
+    # 每块先收紧首尾（只留 18ms 头、35ms 尾），再拼
     args = []
     for f in files:
         args += ["-i", f]
     n = len(files)
-    graph = "".join(f"[{k}:a]" for k in range(n)) + f"concat=n={n}:v=0:a=1"
+    parts = []
+    for k in range(n):
+        parts.append(f"[{k}:a]atrim=start=0.018,asetpts=PTS-STARTPTS[b{k}]")
+    graph = ";".join(parts) + ";" + "".join(f"[b{k}]" for k in range(n)) + f"concat=n={n}:v=0:a=1"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error"] + args +
                    ["-filter_complex", graph, "-ar", "24000", "-ac", "1", out], check=True)
     print("拼成：" + " / ".join(seq))
