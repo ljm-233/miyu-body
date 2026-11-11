@@ -1870,9 +1870,12 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
         // 所以改成：**线性插值给目标 + 临界阻尼弹簧跟随**。
         // 弹簧有速度，过数据点时不会急停急拐，曲线是顺的；而且它能"吃掉"抖动。
         const double span = (gFace.tNew > gFace.tPrev) ? (gFace.tNew - gFace.tPrev) : 0.033;
-        float k = static_cast<float>((now - gFace.tNew) / span);
-        if (k < 0.0f) k = 0.0f;
-        if (k > 1.0f) k = 1.0f;
+        // 2026-11-12 01:0x：他说「现在延迟好高」。插值那一步是元凶之一 ——
+        // 它按 (now - tNew) 在「上一份」和「这一份」之间推进，等于把画面再往后拖 33ms。
+        // 数据本来就晚 33ms 了，再插一次就 66ms。改成**直接用最新一份**，
+        // 阶梯交给弹簧去抹平（弹簧本来就是低通）。
+        (void)span;
+        const float k = 1.0f;
         const float iv[9] = {
             gFace.pv[0] + (gFace.cv[0] - gFace.pv[0]) * k,
             gFace.pv[1] + (gFace.cv[1] - gFace.pv[1]) * k,
@@ -1889,8 +1892,8 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
             // 角度要跟得紧（人转头很快），眼睛和嘴可以慢一点。
             static float sv2[9] = {0, 0, 0, 1, 1, 0, 0, 0, 0};   // 当前值
             static float vv2[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};   // 速度
-            const float k1Ang = 900.0f,  k2Ang = 60.0f;    // 角度：约 60ms 到位
-            const float k1Fast = 1400.0f, k2Fast = 75.0f;  // 眼/嘴：更快
+            const float k1Ang = 2400.0f, k2Ang = 98.0f;    // 角度：约 40ms 到位（延迟优先）
+            const float k1Fast = 3200.0f, k2Fast = 113.0f; // 眼/嘴：更快
             const float d = (dt > 0.05f) ? 0.05f : dt;
             for (int i = 0; i < 9; ++i) {
                 const bool isAng = (i <= 2);
