@@ -274,7 +274,9 @@ const char* kHtml = R"HTML(<!doctype html>
        d:'2 = 眨得很勤，0 = 一直睁着'},
       {k:'tap', t:'bool', label:'点击',
        d:'戳她一下有反应；关掉只剩拖动'},
-            {k:'bubble', t:'bool', label:'说话气泡',
+            {k:'face', t:'bool', label:'摄像头模式',
+       d:'开着她跟着镜头里的你动：头转、眨眼、张嘴。要另开 tools/face-track.py'},
+      {k:'bubble', t:'bool', label:'说话气泡',
        d:'她说话时头顶浮出一块文字，说完淡出。关掉就只动嘴不出字'},
       {k:'dblTap', t:'bool', label:'双击反应',
        d:'同一处 0.9 秒内点两下，改说一声「啊」。默认关（这句的音频还没做好）'},
@@ -906,6 +908,7 @@ void loadSettings() {
         else if (k == "combo" && v.t == VBool) gSet.combo = v.b;
         else if (k == "dblTap" && v.t == VBool) gSet.dblTap = v.b;
         else if (k == "bubble" && v.t == VBool) gSet.bubble = v.b;
+        else if (k == "face" && v.t == VBool) gSet.face = v.b;
         // 十八：aa 是新主键；ssaa 是旧键（映射过来，读了不炸）。
         // 两个都出现时 aa 赢 —— 所以先记「见过 aa」，旧键只在没见 aa 时生效。
         else if (k == "aa" && v.t == VStr) {
@@ -1076,6 +1079,7 @@ std::string stateJson() {
     s += ",\"combo\":" + std::string(gSet.combo ? "true" : "false");
     s += ",\"dblTap\":" + std::string(gSet.dblTap ? "true" : "false");
     s += ",\"bubble\":" + std::string(gSet.bubble ? "true" : "false");
+    s += ",\"face\":" + std::string(gSet.face ? "true" : "false");
     s += ",\"fps_now\":" + (gFps < 0.0 ? std::string("null") : std::to_string(gFps));
     s += ",\"port\":" + std::to_string(gPort);
     s += ",\"expr_next\":\"" + jsonEsc(gExprs.empty() ? "" : gExprs[gExprIdx % gExprs.size()]) + "\"";
@@ -1237,6 +1241,10 @@ std::string handleSet(const std::string& body, bool logIt) {
         }
         if (k == "timeAware" && v.t == VBool) {
             if (v.b != gSet.timeAware) { gSet.timeAware = v.b; changed.push_back("timeAware"); }
+            continue;
+        }
+        if (k == "face" && v.t == VBool) {
+            if (v.b != gSet.face) { gSet.face = v.b; changed.push_back("face"); }
             continue;
         }
         if (k == "bubble" && v.t == VBool) {

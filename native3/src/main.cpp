@@ -1701,6 +1701,121 @@ static bool postureBusy(Csm::CubismMotionManager* mm) {
 //
 // 到点容差 2px，到了就停，停在原地呼吸。
 static const float kWalkSpeed = 110.0f;     // px/s
+// ── 二十六：摄像头模式 ──────────────────────────────────────────
+//
+// 2026-11-11 23:5x 他提的设计：两套模式。米露模式是现在这样（自己动、自己的状态），
+// 摄像头模式是镜头里他的动作直接映到身上。
+//
+// 分工：`tools/face-track.py` 用 mediapipe 把脸算成几个标量写 `state/face.json`；
+// 这里每帧读它、平滑、写进参数。和 mood.json / world.json 一个套路。
+//
+// **谁是这一帧最后写参数的人**：faceTick 必须在 physics->Evaluate 之后、Update 之前，
+// 而且要**压过**视线跟随、眨眼、待机 —— 摄像头模式开着的时候，姿态由他决定，不由程序猜。
+struct FaceRig {
+    Csm::csmInt32 iAx = -1, iAy = -1, iAz = -1;
+    Csm::csmInt32 iEyeL = -1, iEyeR = -1, iMouth = -1;
+    Csm::csmInt32 iEx = -1, iEy = -1;
+    // 平滑后的当前值（度 / 0..1 / -1..1）
+    float ax = 0, ay = 0, az = 0, eyeL = 1, eyeR = 1, mouth = 0, ex = 0, ey = 0;
+    bool  ready = false;
+    bool  live = false;      // 这一次读到的 face.json 是「有脸」的
+    double lastRead = -1e9;
+};
+static FaceRig gFace;
+
+static void faceInit(Csm::CubismModel* model) {
+    Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
+    gFace.iAx  = model->GetParameterIndex(m->GetId("AngleX"));
+    gFace.iAy  = model->GetParameterIndex(m->GetId("AngleY"));
+    gFace.iAz  = model->GetParameterIndex(m->GetId("AngleZ"));
+    gFace.iEyeL = model->GetParameterIndex(m->GetId("ParamEyeLOpen"));
+    gFace.iEyeR = model->GetParameterIndex(m->GetId("ParamEyeROpen"));
+    gFace.iMouth = model->GetParameterIndex(m->GetId("ParamMouthOpenY"));
+    gFace.iEx  = model->GetParameterIndex(m->GetId("ParamEyeBallX"));
+    gFace.iEy  = model->GetParameterIndex(m->GetId("ParamEyeBallY"));
+    gFace.ready = true;
+    log_("[face] 摄像头模式：AngleX=%d AngleY=%d AngleZ=%d 眼=%d/%d 嘴=%d 眼球=%d/%d",
+         gFace.iAx, gFace.iAy, gFace.iAz, gFace.iEyeL, gFace.iEyeR, gFace.iMouth, gFace.iEx, gFace.iEy);
+}
+
+// 从 face.json 取一个 float 字段（文件很小，不值当上 JSON 库）
+static float jnum(const std::string& t, const char* key, float dflt) {
+    const std::string k = std::string("\"") + key + "\":";
+    const size_t p = t.find(k);
+    if (p == std::string::npos) return dflt;
+    return static_cast<float>(std::atof(t.c_str() + p + k.size()));
+}
+
+static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
+    if (!gFace.ready) faceInit(model);
+    if (!on) { gFace.live = false; return; }
+
+    // 每 1/30 秒读一次就够（py 那边写的是原子替换，不会读到半个文件）
+    if (now - gFace.lastRead > 0.033) {
+        gFace.lastRead = now;
+        std::ifstream f("state/face.json");
+        if (f) {
+            const std::string t((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            // 2026-11-12 00:5x：这里踩了个小坑 —— python 的 json.dump 写出来是
+            // `"ok": true`（冒号后面有空格），我原来只找 `"ok":true`，一个字都不差地
+            // 匹配不上，于是永远判成「没脸」。现在两种写法都认。
+            const bool ok = t.find("\"ok\": true") != std::string::npos
+                         || t.find("\"ok\":true") != std::string::npos;
+            gFace.live = ok;
+            if (ok) {
+                gFace.ax = jnum(t, "yaw", 0) * -1.0f;    // 他往右转 → 我也往右（镜像）
+                gFace.ay = jnum(t, "pitch", 0) * -1.0f;  // 相机 Y 朝上，模型 Y 朝下
+                gFace.az = jnum(t, "roll", 0);
+                gFace.eyeL = jnum(t, "eyeL", 1);
+                gFace.eyeR = jnum(t, "eyeR", 1);
+                gFace.mouth = jnum(t, "mouth", 0);
+                gFace.ex = jnum(t, "eyeX", 0);
+                gFace.ey = jnum(t, "eyeY", 0);
+            }
+        }
+    }
+
+    // 脸丢了就慢慢回默认（硬切会像断电）
+    static float idle = 0.0f;
+    const float a = (dt * 12.0f > 1.0f) ? 1.0f : dt * 12.0f;   // 跟手一点，摄像头模式要跟得上
+    const float at = gFace.live ? a : (dt * 3.0f > 1.0f ? 1.0f : dt * 3.0f);
+
+    static float sax = 0, say = 0, saz = 0, sEyeL = 1, sEyeR = 1, sMouth = 0, sex = 0, sey = 0;
+    const float tax = gFace.live ? gFace.ax : 0.0f;
+    const float tay = gFace.live ? gFace.ay : 0.0f;
+    const float taz = gFace.live ? gFace.az : 0.0f;
+    const float tEyeL = gFace.live ? gFace.eyeL : 1.0f;
+    const float tEyeR = gFace.live ? gFace.eyeR : 1.0f;
+    const float tMouth = gFace.live ? gFace.mouth : 0.0f;
+    const float tex = gFace.live ? gFace.ex : 0.0f;
+    const float tey = gFace.live ? gFace.ey : 0.0f;
+    sax += (tax - sax) * at;         say += (tay - say) * at;       saz += (taz - saz) * at;
+    sEyeL += (tEyeL - sEyeL) * a;    sEyeR += (tEyeR - sEyeR) * a;
+    sMouth += (tMouth - sMouth) * a;
+    sex += (tex - sex) * a;          sey += (tey - sey) * a;
+
+    // 幅度：模型 AngleX 满量程 ±30，但真人转 30° 已经很夸张，压到 0.7 更像活人
+    const float kAng = 0.7f;
+    if (gFace.iAx >= 0) model->SetParameterValue(gFace.iAx, sax * kAng, 1.0f);
+    if (gFace.iAy >= 0) model->SetParameterValue(gFace.iAy, say * kAng, 1.0f);
+    if (gFace.iAz >= 0) model->SetParameterValue(gFace.iAz, saz * 0.5f, 1.0f);
+    if (gFace.iEyeL >= 0) model->SetParameterValue(gFace.iEyeL, sEyeL, 1.0f);
+    if (gFace.iEyeR >= 0) model->SetParameterValue(gFace.iEyeR, sEyeR, 1.0f);
+    // 嘴：他说话时我们的 ctl 也在写嘴，摄像头模式**不抢嘴**（不然她自己说话时嘴会抖）
+    if (gFace.iMouth >= 0 && ctl::mouth(now) < 0.0f) {
+        model->SetParameterValue(gFace.iMouth, sMouth, 1.0f);
+    }
+    if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, sex, 1.0f);
+    if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, sey, 1.0f);
+
+    static double lastLog = -1e9;
+    if (now - lastLog > 20.0) {
+        lastLog = now;
+        log_("[face] %s yaw=%+.1f pitch=%+.1f roll=%+.1f 眼 %.2f/%.2f 嘴 %.2f",
+             gFace.live ? "跟上了" : "没脸（回默认）", sax, say, saz, sEyeL, sEyeR, sMouth);
+    }
+}
+
 static void walkTick(Csm::CubismModel* model, Csm::CubismMotionManager* mm, double now, float dt) {
     static double lastLog = -1e9;
     if (!ctl::gWalkWanted) return;
@@ -4077,6 +4192,10 @@ int main() {
         // 它在拖动的每一帧都会把 PokeLeg 写掉 —— 走路写在这之前等于白写，
         // 他看到的「脚和腿根本没动」就是这个。
         walkTick(model, motionManager, now, dt);
+        // 二十六：摄像头模式。放这儿是因为它要当**这一帧最后一个写姿态的人**——
+        // physics 已经算完（4016 行），walkTick 也写过了，后面只剩 Update。
+        // 开着的时候它会盖掉视线跟随和待机微动，这是有意的：姿态由镜头里他决定。
+        faceTick(model, dt, now, ws.face);
         // 二十二：验收用 —— MIYU_POKE=chest 时，起来 2 秒后**真点一下那个部位**，
         // 然后连拍若干帧导出（窗口坐标、带 alpha）。这样「点一下这块动多少」是量的，
         // 不是嘴上说的；也不用 grim 截图（桌面会动、坐标系还差一个顶栏）。
