@@ -4191,6 +4191,12 @@ int main() {
         // 参数（ParamHipAngleZ / HipAngleX2 / ParamAngleX…）正是 physics 的输出。
         // 放在 physics 之前写 = 同一个参数一帧里被写两遍、physics 赢 —— 点了没反应
         // （实测：点头部位时 ParamAngleX 写 18°，画面 0.13 px 都没动）。
+        // 2026-11-12 00:4x：**这里少了一行 physics->Evaluate**。
+        // 是我今天用 python 批量改代码时，那个删诊断日志的正则把这段一起吞掉了。
+        // 后果是整套物理根本没跑：头发不甩（他说「头发这么没有重力」）、
+        // 兽耳僵在脸两侧（他说「耳朵根本没修」）、身体转不动 —— 三个症状同一个根因。
+        // 位置就在这里：faceTick 写完头（physics 的输入）→ physics 算 → 探针/点点在后面。
+        if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
         probeTick(model, now);
         partPokeTick(model, now);
         herStateTick(now);
