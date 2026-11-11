@@ -1716,6 +1716,7 @@ struct FaceRig {
     Csm::csmInt32 iEyeL = -1, iEyeR = -1, iMouth = -1;
     Csm::csmInt32 iEx = -1, iEy = -1;
     Csm::csmInt32 iBx = -1, iBy = -1, iBz = -1;      // ParamBodyAngleX/Y/Z：身子跟着转
+    Csm::csmInt32 iCtrlL = -1, iCtrlR = -1;          // 耳物理链的权重（0 = 兽耳不跟头）
     Csm::csmInt32 iBrowL = -1, iBrowR = -1;          // 眉毛（笑/皱眉）
     Csm::csmInt32 iSmile = -1;                        // 嘴角
     // 平滑后的当前值（度 / 0..1 / -1..1）
@@ -1730,12 +1731,17 @@ static FaceRig gFace;
 
 static void faceInit(Csm::CubismModel* model) {
     Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
-    // 2026-11-12 01:3x：**实测纠正**。交接条原来写「ParamAngleX 是空壳，AngleX 才是真的」，
-    // 反了。真动手量出来的：`ParamAngleX` 写到 ±25 头明显转，`AngleX` 写到 ±30 只像身子挪了
-    // 一点（它是整体平移那一路，lookTick 用它做「试探性微倾」是对的）。
-    gFace.iAx  = model->GetParameterIndex(m->GetId("ParamAngleX"));
-    gFace.iAy  = model->GetParameterIndex(m->GetId("ParamAngleY"));
-    gFace.iAz  = model->GetParameterIndex(m->GetId("ParamAngleZ"));
+    // 2026-11-12 00:1x：**第三次才对**。查 physics3.json 看明白了整条链——
+    //   PhysicsSetting1: 输入 AngleX  → 输出 ParamAngleX
+    //   PhysicsSetting2: 输入 AngleY  → 输出 ParamAngleY
+    //   PhysicsSetting3: 输入 AngleZ  → 输出 ParamAngleZ
+    // 也就是 **AngleX 是物理输入、ParamAngleX 是物理输出**（带弹性的那一个）。
+    // 写给 ParamAngleX：当帧能动，下一帧被 physics 算回去 → 变成抖。
+    // 写给 AngleX：physics 基于它算出 ParamAngleX → 头动，而且头发/兽耳跟着甩。
+    // 所以这里写 AngleX/Y/Z，并且必须放在 physics->Evaluate 之前。
+    gFace.iAx  = model->GetParameterIndex(m->GetId("AngleX"));
+    gFace.iAy  = model->GetParameterIndex(m->GetId("AngleY"));
+    gFace.iAz  = model->GetParameterIndex(m->GetId("AngleZ"));
     gFace.iEyeL = model->GetParameterIndex(m->GetId("ParamEyeLOpen"));
     gFace.iEyeR = model->GetParameterIndex(m->GetId("ParamEyeROpen"));
     gFace.iMouth = model->GetParameterIndex(m->GetId("ParamMouthOpenY"));
@@ -1746,6 +1752,12 @@ static void faceInit(Csm::CubismModel* model) {
     gFace.iBx  = model->GetParameterIndex(m->GetId("ParamBodyAngleX"));
     gFace.iBy  = model->GetParameterIndex(m->GetId("ParamBodyAngleY"));
     gFace.iBz  = model->GetParameterIndex(m->GetId("ParamBodyAngleZ"));
+    // 2026-11-12 00:1x：他说「兽耳不应该受到影响」。查 physics3 的耳链：
+    //   PhysicsSetting83: 输入 [LControl, AngleX, AngleY, AngleZ, ParamBreath, ParamEyeROpen]
+    // 也就是说兽耳本来就被设计成「跟着头甩」。LControl/RControl 是那条链的权重，
+    // 设成 0 就不跟了 —— 摄像头模式下断开，让她自己的待机物理继续管耳朵。
+    gFace.iCtrlL = model->GetParameterIndex(m->GetId("LControl"));
+    gFace.iCtrlR = model->GetParameterIndex(m->GetId("RControl"));
     gFace.iBrowL = model->GetParameterIndex(m->GetId("ParamBrowLY"));
     gFace.iBrowR = model->GetParameterIndex(m->GetId("ParamBrowRY"));
     gFace.iSmile = model->GetParameterIndex(m->GetId("MouthSmile_L"));
@@ -1830,10 +1842,13 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     if (gFace.iEx >= 0) model->SetParameterValue(gFace.iEx, sex, 1.0f);
     if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, sey, 1.0f);
 
-    // 26：身子跟着头转 —— 真人是头转 1、肩胯转 1/3 左右；轴朝下的 Y 不跟，
-    // 因为「探头」那种上下位移靠头就够了，身上再动会像摇晃。
-    if (gFace.iBx >= 0) model->SetParameterValue(gFace.iBx, sax * 0.35f, 1.0f);
-    if (gFace.iBz >= 0) model->SetParameterValue(gFace.iBz, saz * 0.25f, 1.0f);
+    // 26：身体 —— **直写没用**，查 physics3 才知道：
+    //   PhysicsSetting4: 输入 PositionX → 输出 ParamBodyAngleX
+    //   PhysicsSetting9: 输入 PositionZ + PositionX → 输出 ParamBodyAngleZ
+    // 也就是身体的「转」是从「整人平移」推出来的，没有独立的转向参数。
+    // 他第一次说「身体也没有动」就是这个原因。要么驱动 PositionX（人整个挪），
+    // 要么接受身体不转 —— 先不动，等他想清楚要哪种。
+    (void)0;
 
     // 26：表情 —— 抬眉和嘴角。这两项是「跟着你笑」，跟你说话时的那点表情走。
     if (gFace.iBrowL >= 0) model->SetParameterValue(gFace.iBrowL, -sbrow * 18.0f, 1.0f);
@@ -4167,6 +4182,12 @@ int main() {
         // 吃的输入是 ParamAngleX，physics 先算完、头后转，头发永远慢一帧、看起来没惯性。
         // 现在先把头写进去，physics 基于这一帧的新头姿算头发。
         faceTick(model, dt, now, ws.face);
+        // 摄像头模式下把兽耳的物理权重掐掉：他明确说「兽耳不应该受到影响」。
+        // 设 0 之后耳链不再吃 AngleX，耳朵只受她自己的待机物理管。
+        if (ws.face && gFace.ready) {
+            if (gFace.iCtrlL >= 0) model->SetParameterValue(gFace.iCtrlL, 0.0f, 1.0f);
+            if (gFace.iCtrlR >= 0) model->SetParameterValue(gFace.iCtrlR, 0.0f, 1.0f);
+        }
         if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
         // 二十一：探针和「点哪动哪」必须排在 physics **后面**。
         // CubismPhysics 写输出参数时 weight=1.0 是**硬覆盖**（Framework/src/Physics/
