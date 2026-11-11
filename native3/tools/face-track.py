@@ -116,7 +116,9 @@ def read_face(res):
     # blink 是「闭的程度」，我们要「睁的程度」= 1 - blink
     eye_l = max(0.0, min(1.0, 1.0 - blink_l))
     eye_r = max(0.0, min(1.0, 1.0 - blink_r))
-    mouth = max(0.0, min(1.0, bs.get("jawOpen", 0.0)))
+    # 2026-11-12 00:1x：他说「张嘴幅度大一点」。jawOpen 本身偏保守（说笑时到 0.3 就算大），
+    # 直接用在 Live2D 上嘴几乎不动。乘 1.8 再夹到 1。
+    mouth = max(0.0, min(1.0, bs.get("jawOpen", 0.0) * 1.8))
     brow = (bs.get("browInnerUp", 0.0) + bs.get("browOuterUpLeft", 0.0)
             + bs.get("browOuterUpRight", 0.0)) / 3.0
     smile = (bs.get("mouthSmileLeft", 0.0) + bs.get("mouthSmileRight", 0.0)) / 2.0
@@ -148,7 +150,7 @@ def write_state(d, ok=True):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
-    ap.add_argument("--fps", type=int, default=20)
+    ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--gpu", action="store_true",
                     help="用 GPU 推理（默认 CPU）。要指定独显见文件顶部的说明")
     ap.add_argument("--dev", default=DEV)

@@ -187,7 +187,7 @@ const char* kHtml = R"HTML(<!doctype html>
     </div>
     <div class="btns"><button class="main" id="reset">恢复默认</button></div>
     <div class="hint" id="hint"></div>
-    <div class="foot">改完即时生效 · 设置存在 state/settings.json</div>
+    <div class="foot">改完即时生效 · 设置存在 state/settings.json · 构建 11-12 00:14</div>
   </main>
 </div>
 <script>
