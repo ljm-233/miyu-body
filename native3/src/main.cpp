@@ -1850,18 +1850,28 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     // 要么接受身体不转 —— 先不动，等他想清楚要哪种。
     (void)0;
 
-    // 26：表情 —— 抬眉和嘴角。这两项是「跟着你笑」，跟你说话时的那点表情走。
-    if (gFace.iBrowL >= 0) model->SetParameterValue(gFace.iBrowL, -sbrow * 18.0f, 1.0f);
-    if (gFace.iBrowR >= 0) model->SetParameterValue(gFace.iBrowR, -sbrow * 18.0f, 1.0f);
+    // 26：表情 —— 嘴角。**眉毛那块撤了**（2026-11-12 00:2x）。
+    // 原因：查 physics3 才发现眉毛 Y 是耳物理链的控制量——
+    //   PhysicsSetting82: ParamBrowRY (权重 100) → LControl
+    //   PhysicsSetting84: ParamBrowLY (权重 100) → RControl
+    // 我原来写 `-sbrow * 18`（负值），LControl 直接被打到 -1，耳链整个被压死，
+    // 兽耳平贴在脸两侧。他说「耳朵根本没修」指的就是这个 —— 是我加的表情映射弄塌的。
     if (gFace.iSmile >= 0) model->SetParameterValue(gFace.iSmile, ssmile, 1.0f);
 
     static double lastLog = -1e9;
     if (now - lastLog > 5.0) {
         lastLog = now;
         // 打「我写进去多少」和「模型里现在是多少」——两者不一致就说明有人在我后面覆盖
-        log_("[face] %s yaw=%+.1f pitch=%+.1f roll=%+.1f 眼 %.2f/%.2f 嘴 %.2f（读回 AngleX=%.1f）",
-             gFace.live ? "跟上了" : "没脸（回默认）", sax, say, saz, sEyeL, sEyeR, sMouth,
-             gFace.iAx >= 0 ? model->GetParameterValue(gFace.iAx) : -999.0f);
+        Csm::CubismIdManager* im2 = Csm::CubismFramework::GetIdManager();
+        auto gv = [&](const char* n) {
+            const Csm::csmInt32 i = model->GetParameterIndex(im2->GetId(n));
+            return i >= 0 ? model->GetParameterValue(i) : -999.0f;
+        };
+        log_("[face] %s yaw=%+.1f pitch=%+.1f 眼 %.2f/%.2f（读回 AngleX=%.1f）"
+             " | 耳 LControl=%.2f LEar1=%.1f LEar2=%.1f REar1=%.1f",
+             gFace.live ? "跟上了" : "没脸（回默认）", sax, say, sEyeL, sEyeR,
+             gFace.iAx >= 0 ? model->GetParameterValue(gFace.iAx) : -999.0f,
+             gv("LControl"), gv("LEar1"), gv("LEar2"), gv("REar1"));
     }
 }
 
