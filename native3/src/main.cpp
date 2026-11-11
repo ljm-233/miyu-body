@@ -1725,9 +1725,12 @@ static FaceRig gFace;
 
 static void faceInit(Csm::CubismModel* model) {
     Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
-    gFace.iAx  = model->GetParameterIndex(m->GetId("AngleX"));
-    gFace.iAy  = model->GetParameterIndex(m->GetId("AngleY"));
-    gFace.iAz  = model->GetParameterIndex(m->GetId("AngleZ"));
+    // 2026-11-12 01:3x：**实测纠正**。交接条原来写「ParamAngleX 是空壳，AngleX 才是真的」，
+    // 反了。真动手量出来的：`ParamAngleX` 写到 ±25 头明显转，`AngleX` 写到 ±30 只像身子挪了
+    // 一点（它是整体平移那一路，lookTick 用它做「试探性微倾」是对的）。
+    gFace.iAx  = model->GetParameterIndex(m->GetId("ParamAngleX"));
+    gFace.iAy  = model->GetParameterIndex(m->GetId("ParamAngleY"));
+    gFace.iAz  = model->GetParameterIndex(m->GetId("ParamAngleZ"));
     gFace.iEyeL = model->GetParameterIndex(m->GetId("ParamEyeLOpen"));
     gFace.iEyeR = model->GetParameterIndex(m->GetId("ParamEyeROpen"));
     gFace.iMouth = model->GetParameterIndex(m->GetId("ParamMouthOpenY"));
@@ -1764,7 +1767,7 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
             gFace.live = ok;
             if (ok) {
                 gFace.ax = jnum(t, "yaw", 0) * -1.0f;    // 他往右转 → 我也往右（镜像）
-                gFace.ay = jnum(t, "pitch", 0) * -1.0f;  // 相机 Y 朝上，模型 Y 朝下
+                gFace.ay = jnum(t, "pitch", 0);          // 实测：pitch 正 = 低头，ParamAngleY 正也是低头，直接用
                 gFace.az = jnum(t, "roll", 0);
                 gFace.eyeL = jnum(t, "eyeL", 1);
                 gFace.eyeR = jnum(t, "eyeR", 1);
@@ -1809,10 +1812,12 @@ static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     if (gFace.iEy >= 0) model->SetParameterValue(gFace.iEy, sey, 1.0f);
 
     static double lastLog = -1e9;
-    if (now - lastLog > 20.0) {
+    if (now - lastLog > 5.0) {
         lastLog = now;
-        log_("[face] %s yaw=%+.1f pitch=%+.1f roll=%+.1f 眼 %.2f/%.2f 嘴 %.2f",
-             gFace.live ? "跟上了" : "没脸（回默认）", sax, say, saz, sEyeL, sEyeR, sMouth);
+        // 打「我写进去多少」和「模型里现在是多少」——两者不一致就说明有人在我后面覆盖
+        log_("[face] %s yaw=%+.1f pitch=%+.1f roll=%+.1f 眼 %.2f/%.2f 嘴 %.2f（读回 AngleX=%.1f）",
+             gFace.live ? "跟上了" : "没脸（回默认）", sax, say, saz, sEyeL, sEyeR, sMouth,
+             gFace.iAx >= 0 ? model->GetParameterValue(gFace.iAx) : -999.0f);
     }
 }
 
