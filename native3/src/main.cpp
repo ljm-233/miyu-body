@@ -12,6 +12,7 @@
 //     真的透明、niri 里用 window-rule 设 open-floating 就浮起来了。就是这条。
 
 #include <cstdio>
+#include <signal.h>      // kill/SIGTERM：摄像头跟踪子进程的启停
 #include <map>
 #include <cstdarg>
 #include <cstdlib>
@@ -1736,6 +1737,36 @@ struct FaceRig {
 };
 static FaceRig gFace;
 
+// 2026-11-12 01:3x：他要「不要手动启动，跟着开关来」。
+// 设置里把「摄像头模式」打开 → fork 一个 tools/face-track.sh；关掉 → SIGTERM。
+// PR_SET_PDEATHSIG 保证身体进程死了，它也不会变成孤儿占着摄像头。
+static pid_t gFacePid = -1;
+static bool  gFaceSpawned = false;
+
+static void faceSpawn(bool on) {
+    if (on == gFaceSpawned) return;
+    gFaceSpawned = on;
+    if (on) {
+        const pid_t pid = ::fork();
+        if (pid == 0) {
+            ::setsid();
+            ::execl("/bin/sh", "sh", "tools/face-track.sh", (char*)nullptr);
+            ::_exit(127);                       // execl 失败
+        }
+        gFacePid = pid;
+        log_("[face] 摄像头跟踪已启动（pid %d）", (int)pid);
+    } else {
+        if (gFacePid > 0) {
+            ::kill(gFacePid, SIGTERM);
+            log_("[face] 摄像头跟踪已停（pid %d）", (int)gFacePid);
+            gFacePid = -1;
+        }
+        // 顺手把 face.json 清成「没脸」，免得关掉之后身体还在读残留数据
+        FILE* f = std::fopen("state/face.json", "w");
+        if (f) { std::fputs("{\"ok\": false}", f); std::fclose(f); }
+    }
+}
+
 static void faceInit(Csm::CubismModel* model) {
     Csm::CubismIdManager* m = Csm::CubismFramework::GetIdManager();
     // 2026-11-12 00:1x：**第三次才对**。查 physics3.json 看明白了整条链——
@@ -1783,6 +1814,7 @@ static float jnum(const std::string& t, const char* key, float dflt) {
 
 static void faceTick(Csm::CubismModel* model, float dt, double now, bool on) {
     if (!gFace.ready) faceInit(model);
+    faceSpawn(on);          // 开关一变就起/停跟踪进程，不用手动跑
     if (!on) { gFace.live = false; return; }
 
     // 每 1/30 秒读一次就够（py 那边写的是原子替换，不会读到半个文件）

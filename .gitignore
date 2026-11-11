@@ -56,3 +56,6 @@ model-src/
 # 台词标签表是数据不是缓存，要进仓（音频缓存那些还是不进）
 !voice/lines.tsv
 !voice/blocks/index.tsv
+
+# 摄像头模式的 python 环境（mediapipe，几百兆，不进仓）
+.venv/
