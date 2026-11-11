@@ -1509,10 +1509,11 @@ static void partZoneTick(Csm::CubismModel* model, float k, int W, int H, double 
     // 二十五：落盘/判定之前把内部空洞补上
     {
         const int filled = zoneFillHoles(gZones.grid, GW, GH);
-        // 降噪：这两个数每帧都在小幅变（她的呼吸），只在每 10 秒报一次
-        static double lastFillLog = -1e9;
-        if (now - lastFillLog > 10.0) {
-            lastFillLog = now;
+        // 2026-11-11 20:4x：改成只在**补洞格数真的变了**才报（原来每 10 秒一条，
+        // 一天下来几千行，翻日志时全是它）。呼吸带来的 1~2 格抖动不看。
+        static int lastFilled = -1;
+        if (std::abs(filled - lastFilled) >= 8) {
+            lastFilled = filled;
             log_("[zones] 补洞：封闭块 %d 格 / 剪影内 %d 格", filled, gZones.lastFillIn);
         }
     }

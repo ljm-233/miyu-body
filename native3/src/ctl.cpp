@@ -238,7 +238,7 @@ static double wavSeconds(const std::string& path) {
 static FILE* gSink = nullptr;
 static std::mutex gSinkMu;
 
-static void sinkStart() {
+[[maybe_unused]] static void sinkStart() {
     if (gSink) return;
     gSink = ::popen("pw-cat --playback --format s16 --rate 24000 --channels 1 -", "w");
     if (gSink) log_("[voice] 常驻输出流已建立（pw-cat）");
@@ -246,7 +246,7 @@ static void sinkStart() {
 }
 
 // 读一个 wav，跳过 44 字节头，把数据段写进常驻流。放后台线程，别卡主循环。
-static void sinkPlayFile(const std::string& path) {
+[[maybe_unused]] static void sinkPlayFile(const std::string& path) {
     std::thread([path]() {
         std::ifstream f(path, std::ios::binary);
         if (!f) return;
@@ -738,8 +738,11 @@ void voiceWarmUp() {
         if (::system(cmd.c_str()) == 0) log_("[voice] 保温流已起（sink 保持醒着，第一声不再被吞）");
     }
     }
-    sinkStart();
-    if (gSink) return;
+    // 2026-11-11 20:4x：`sinkStart()` 这条常驻流**已经证死不删**：
+    // pw-cat 读 stdin 会报 `sndfile: failed to open audio file "-"`，
+    // 每次启动都往 journal 里留一条 error。真正让 sink 不睡的是上面那个
+    // 循环播静音的保温流。这里只留一句记录，不再调用。
+    // 想看当时的思路，往下翻到 sinkStart 的定义（保留作废代码）。
     const char* env = std::getenv("MIYU_VOICE_DIR");
     const std::string dir = (env && *env) ? env : "/home/link/.dsh/miyu/body/voice";
     const std::string path = dir + "/silence.wav";

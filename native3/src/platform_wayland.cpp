@@ -427,11 +427,14 @@ static double nowSec() {
 }
 
 static void ptr_enter(void*, wl_pointer*, uint32_t, wl_surface* s, wl_fixed_t sx, wl_fixed_t sy) {    if (!s || s != W.surf) return;
+    const bool wasIn = W.ptrIn;
     W.ptrIn = true;
     gLastPtrT = nowSec();
     W.refSx = wl_fixed_to_int(sx);
     W.refSy = wl_fixed_to_int(sy);
-    LOG("指针进入 surface，local=(%d,%d)", W.refSx, W.refSy);
+    // 2026-11-11 20:5x：这条原来**每次** enter 都打，而输入区一格一格重算的时候
+    // 指针会在内部反复 enter/leave，鼠标划过就刷满几十行。改成只在真从外面进来时打。
+    if (!wasIn) LOG("指针进入 surface，local=(%d,%d)", W.refSx, W.refSy);
 }
 
 static void ptr_leave(void*, wl_pointer*, uint32_t, wl_surface* s) {
