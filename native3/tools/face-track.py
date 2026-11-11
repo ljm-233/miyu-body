@@ -145,6 +145,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--fps", type=int, default=20)
+    ap.add_argument("--gpu", action="store_true",
+                    help="用 GPU 推理（默认 CPU）。要指定独显见文件顶部的说明")
     ap.add_argument("--dev", default=DEV)
     ap.add_argument("--w", type=int, default=640)
     ap.add_argument("--h", type=int, default=480)
@@ -159,8 +161,15 @@ def main():
     if not os.path.exists(MODEL):
         print(f"缺模型：{MODEL}（下载后要 unzip -t 验一下完整性）", file=sys.stderr)
         return 1
+    # 2026-11-12 00:3x：他问「为什么是 CPU，N 卡呢」——问得对。
+    # mediapipe 的 GPU delegate 在 Linux 上是能用的，只是默认挑了系统首选（这里是 Intel 核显）。
+    # CPU 版吃 40%，换成独显后 CPU 几乎不动。指定独显要设 EGL 的 vendor（**不是** GLX 那两个
+    # 环境变量，offload 那套对 EGL 不生效）：
+    #   __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    # 这样启动就是 RTX 5060 在跑。
+    delegate = mpp.BaseOptions.Delegate.GPU if a.gpu else mpp.BaseOptions.Delegate.CPU
     opts = vision.FaceLandmarkerOptions(
-        base_options=mpp.BaseOptions(model_asset_path=MODEL),
+        base_options=mpp.BaseOptions(model_asset_path=MODEL, delegate=delegate),
         running_mode=vision.RunningMode.VIDEO, num_faces=1,
         output_face_blendshapes=True,
         output_facial_transformation_matrixes=True)
