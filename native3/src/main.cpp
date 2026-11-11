@@ -4182,12 +4182,9 @@ int main() {
         // 吃的输入是 ParamAngleX，physics 先算完、头后转，头发永远慢一帧、看起来没惯性。
         // 现在先把头写进去，physics 基于这一帧的新头姿算头发。
         faceTick(model, dt, now, ws.face);
-        // 摄像头模式下把兽耳的物理权重掐掉：他明确说「兽耳不应该受到影响」。
-        // 设 0 之后耳链不再吃 AngleX，耳朵只受她自己的待机物理管。
-        if (ws.face && gFace.ready) {
-            if (gFace.iCtrlL >= 0) model->SetParameterValue(gFace.iCtrlL, 0.0f, 1.0f);
-            if (gFace.iCtrlR >= 0) model->SetParameterValue(gFace.iCtrlR, 0.0f, 1.0f);
-        }
+        // 2026-11-12 00:2x：兽耳那段掐权重的改动**撤了**。他说「兽耳应该回到默认情况」——
+        // 把 LControl/RControl 设 0 之后，耳链整个不跑了，耳朵僵在那里，比跟着甩更假。
+        // 默认就是它跟着头一起动，那是美术在设计时就定好的。
         if (physics && std::getenv("MIYU_NO_PHYS") == nullptr) physics->Evaluate(model, dt);
         // 二十一：探针和「点哪动哪」必须排在 physics **后面**。
         // CubismPhysics 写输出参数时 weight=1.0 是**硬覆盖**（Framework/src/Physics/
