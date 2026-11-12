@@ -30,6 +30,8 @@
 #include <cstring>
 #include <thread>
 #include <mutex>
+#include <atomic>
+#include <deque>
 #include <fstream>
 #include <string>
 
@@ -58,6 +60,18 @@ double gConnT0 = 0.0;
 std::string gPath;
 std::string gBuf;            // 当前连接已经收到、还没成行的字节
 char gWarned[4096] = {0};    // 同一行畸形只警告一次，别刷屏
+
+// 2026-11-12 22:4x：收包挪到独立线程（今晚那次 4 小时半卡死的根因修复）。
+// 原设计是「主循环每帧 accept 一个」，赌的是主循环一直在转。实际上
+// eglSwapBuffers 会等 compositor 的 frame，窗口不可见时那一等能是几个小时，
+// ctl::poll 一次都不跑，连接全堆在 listen 队列（backlog 8）里，
+// 满了之后客户端 connect() 永久挂住 —— her-voice.py 就这么卡了四个半小时。
+// 现在：线程只负责 accept + 收到一整行，塞进队列；主循环 poll(now) 只取队列。
+// handleLine 仍在主线程执行，所有状态不用加锁。
+std::thread gReader;
+std::mutex  gMu;
+std::deque<std::string> gLines;   // 待处理的行，最多留 64 条，超了丢最老的
+std::atomic<bool> gRunning{false};
 
 // 说话状态
 double gSayT0 = -1e9;
@@ -499,6 +513,8 @@ void closeConn() {
 
 }  // namespace
 
+static void readerLoop();   // 定义在 poll() 上面，init() 里要启动它
+
 void init() {
     const char* rt = std::getenv("XDG_RUNTIME_DIR");
     if (rt != nullptr && rt[0] != '\0') gPath = std::string(rt) + "/miyu-body.sock";
@@ -541,60 +557,63 @@ void init() {
     gListen = fd;
     log_("[ctl] socket = %s（一行一条 JSON：{\"say\":\"...\",\"mood\":54,\"expr\":\"前倾\",\"dur\":null}）",
          gPath.c_str());
+    // 收包线程：启动一次就 detached 跑着（2026-11-12 22:4x）
+    gRunning = true;
+    gReader = std::thread(readerLoop);
+    gReader.detach();
 }
 
-void poll(double now) {
-    if (gListen < 0) return;
-
-    if (gConn < 0) {
+// 2026-11-12 22:4x：读线程。只管 accept + 收一行，收完塞队列。
+// 这里可以放心阻塞：它不在渲染路径上，主循环卡在 eglSwapBuffers 里也不影响它。
+static void readerLoop() {
+    while (gRunning.load()) {
         pollfd p{};
         p.fd = gListen;
         p.events = POLLIN;
-        if (::poll(&p, 1, 0) <= 0) return;
+        if (::poll(&p, 1, 300) <= 0) continue;     // 300ms 一轮，顺手看 gRunning
         const int c = ::accept(gListen, nullptr, nullptr);
-        if (c < 0) return;
+        if (c < 0) continue;
+
+        // 每条连接最多等 1 秒收一行（和原来语义一样，只是等的地方从主循环搬到这里）
         const int fl = ::fcntl(c, F_GETFL, 0);
         ::fcntl(c, F_SETFL, fl | O_NONBLOCK);
-        gConn = c;
-        gConnT0 = now;
-        gBuf.clear();
-    }
 
-    char tmp[512];
-    for (;;) {
-        const ssize_t n = ::recv(gConn, tmp, sizeof(tmp), 0);
-        if (n > 0) {
-            gBuf.append(tmp, static_cast<size_t>(n));
-            if (gBuf.find('\n') != std::string::npos) break;   // 成行了，去处理
-            if (gBuf.size() > 128 * 1024) {                    // 超长：当畸形，丢掉
-                log_("[ctl] 警告：一行超过 128KB，丢弃");
-                closeConn();
-                return;
+        std::string buf;
+        bool got = false;
+        for (int spin = 0; spin < 100; ++spin) {
+            char tmp[512];
+            const ssize_t n = ::recv(c, tmp, sizeof(tmp), 0);
+            if (n > 0) {
+                buf.append(tmp, static_cast<size_t>(n));
+                if (buf.find('\n') != std::string::npos) { got = true; break; }
+                if (buf.size() > 128 * 1024) break;      // 畸形，丢
+                continue;
             }
-            continue;
+            if (n == 0) { got = !buf.empty(); break; }   // 对端关了，剩下的算一行
+            if (errno != EAGAIN && errno != EWOULDBLOCK) break;
+            ::usleep(10 * 1000);                         // 10ms 一轮，最多等 1 秒
         }
-        if (n == 0) {            // 对端关了：剩下的就当这一行
-            if (!gBuf.empty()) handleLine(gBuf, now);
-            closeConn();
-            return;
-        }
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // 还没收到换行。客户端可能是先 connect 再慢慢写 —— 最多等 1 秒。
-            if (now - gConnT0 > 1.0) {
-                if (!gBuf.empty()) handleLine(gBuf, now);
-                else log_("[ctl] 警告：连接 1s 没发完整一行，丢弃");
-                closeConn();
-            }
-            return;
-        }
-        log_("[ctl] recv 出错：%s，断开", std::strerror(errno));
-        closeConn();
-        return;
-    }
+        ::close(c);
+        if (!got || buf.empty()) continue;
 
-    const size_t nl = gBuf.find('\n');
-    handleLine(gBuf.substr(0, nl), now);
-    closeConn();
+        std::lock_guard<std::mutex> lk(gMu);
+        gLines.push_back(std::move(buf));
+        while (gLines.size() > 64) gLines.pop_front();   // 主循环再慢也不无限涨
+    }
+}
+
+// 主循环每帧调：只从队列取一行，绝不碰 socket。handleLine 在主线程执行，状态不用锁。
+void poll(double now) {
+    if (gListen < 0) return;
+    std::string line;
+    {
+        std::lock_guard<std::mutex> lk(gMu);
+        if (gLines.empty()) return;
+        line = std::move(gLines.front());
+        gLines.pop_front();
+    }
+    const size_t nl = line.find('\n');
+    handleLine(nl == std::string::npos ? line : line.substr(0, nl), now);
 }
 
 // 二十六：内部调用版「说一句」。逻辑和 socket 收到 {"say":...} 完全一样，
