@@ -46,12 +46,19 @@ PLANS = {"点头", "害羞", "招呼"}
 def send(obj):
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        # 2026-11-12 21:2x 加的两秒超时。原来没有超时，身体那边 listen backlog（8）
+        # 一旦填满，connect() 会永远挂着 —— 今晚 her-voice.py 就因此卡了四个半小时，
+        # 把 miyu-voice.service 占死，那段时间我「自己开口」一次都没跑成。
+        s.settimeout(2.0)
         s.connect(SOCK)
         # 服务端是「收到换行才算一行」；不带 \n 它就等 1 秒超时才处理 ——
         # 表现为「命令发了没反应，过一会儿才动」，我排查时被这个坑了半小时。
         s.sendall(json.dumps(obj, ensure_ascii=False).encode() + b"\n")
         s.close()
         return True
+    except (socket.timeout, BlockingIOError):
+        print("她的身体接不上（%s 队列堵了），这次放弃" % SOCK, file=sys.stderr)
+        return False
     except (FileNotFoundError, ConnectionRefusedError):
         print("她的身体没在跑（%s 连不上）" % SOCK, file=sys.stderr)
         return False

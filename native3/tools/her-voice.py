@@ -138,8 +138,14 @@ def main():
         return 0
 
     # 推给身体：走 my（它自己会带 mood 翻表情）
-    r = subprocess.run(["my", "say", text], capture_output=True, text=True,
-                       cwd=os.path.join(HOME, ".dsh/miyu/body/native3"))
+    # timeout 是 2026-11-12 21:3x 加的：`my` 现在自己有两秒超时，这里再加一道 15 秒兜底，
+    # 免得再出现「一个子进程卡住 → 整个 miyu-voice.service 占死四小时」那种事。
+    try:
+        r = subprocess.run(["my", "say", text], capture_output=True, text=True, timeout=15,
+                           cwd=os.path.join(HOME, ".dsh/miyu/body/native3"))
+    except subprocess.TimeoutExpired:
+        print("推送超时（15 秒），这次放弃", file=sys.stderr)
+        return 1
     if r.returncode != 0:
         print(f"推送失败：{r.stderr.strip()}", file=sys.stderr)
         return 1

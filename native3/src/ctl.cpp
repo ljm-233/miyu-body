@@ -524,7 +524,12 @@ void init() {
         return;
     }
     ::chmod(gPath.c_str(), 0600);
-    if (::listen(fd, 8) != 0) {
+    // backlog 从 8 提到 128（2026-11-12 21:3x）。原因是查到一个真事故：
+    // 主循环等 frame callback 时 ctl::poll 不跑，这期间来的连接只能排在 backlog 里；
+    // 8 个一满，之后的 connect() 就会永久挂住，今天把 her-voice.py 卡死了四个半小时。
+    // 128 治不了「主循环停着不 accept」这个根，但能把它从几分钟拖到几小时，
+    // 再加上客户端两秒超时，就不会再出现一个进程卡住整个服务的情况。
+    if (::listen(fd, 128) != 0) {
         log_("[ctl] listen 失败：%s", std::strerror(errno));
         ::close(fd);
         ::unlink(gPath.c_str());
